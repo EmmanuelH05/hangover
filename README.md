@@ -1,12 +1,18 @@
 # Hangover
 
+![The Hangover icon](docs/readme/icon.png)
+
 Hangover makes the notch on your MacBook useful. It's free and the code is all here.
 
 After NotchNook stopped working for me, I started looking for alternatives. I ended up building my own on top of [Open Island](https://github.com/Octane0411/open-vibe-island), an open source notch app for AI coding agents.
 
+![The Nook page open under the notch, with music, a focus timer and the file tray](docs/readme/nook.png)
+
 ## What's in it
 
 **Your coding agents.** When Claude Code, Codex, Cursor or another agent needs a yes or a no, the request shows up in the notch. You can answer it right there, or press Control-Option-Y or Control-Option-N from whatever app you're in. When an agent finishes, you get one line about what it did.
+
+![The welcome tour's page on agents, with the request card and the two shortcuts](docs/readme/agents.png)
 
 **The Nook.** Open the notch and there's a page of widgets. Turn on the ones you want and drag them around.
 
@@ -19,9 +25,27 @@ After NotchNook stopped working for me, I started looking for alternatives. I en
 - Weather, with a 7 day view
 - A mirror
 
+![The weather tile showing a week](docs/readme/weather.png)
+
+Plug in your charger and the notch shows your battery as a ring.
+
+![The notch with a green bolt on the left and a ring that reads 78 on the right](docs/readme/charging.png)
+
 **The mirror.** It shows your camera only when you turn it on. You can put a frame and stickers on it, turn on a ring light, or run the photo booth. The booth counts down, takes four pictures and saves the strip as a PDF, like one from a real booth.
 
+![Thirty stickers, each in three colors](docs/readme/stickers.png)
+
+![Sixteen frames for the mirror](docs/readme/frames.png)
+
+![Photo booth strips in eight of the sixteen themes](docs/readme/photo-booth.png)
+
 **Your look.** You pick the colors the notch glows in, how wide it opens, and whether its corners are soft or square. A welcome tour walks you through the app the first time you open it.
+
+![Picking a glow style and a color theme](docs/readme/glow.png)
+
+![Picking how wide the notch opens and how its corners look](docs/readme/opened-look.png)
+
+The app's own tests drew these pictures, with sample content.
 
 It comes in English, Simplified Chinese and Traditional Chinese. A native speaker hasn't checked the Chinese yet.
 
