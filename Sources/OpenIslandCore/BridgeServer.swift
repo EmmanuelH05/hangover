@@ -120,12 +120,24 @@ public final class BridgeServer: @unchecked Sendable {
 
         // Also listen on the legacy /tmp path so that older hook binaries
         // (from already-running Claude Code sessions) can still connect.
-        let legacyURL = BridgeSocketLocation.legacyURL
-        if legacyURL != socketURL {
+        if let legacyURL = Self.legacyListenerURL(for: socketURL) {
             if let legacyListener = try? bindListener(at: legacyURL) {
                 listeners.append(legacyListener)
             }
         }
+    }
+
+    /// The legacy path a server also listens on, or nil for a server on a
+    /// path of its own. Binding a path takes it from whoever had it. A test
+    /// or a second copy of the app started on its own path used to take the
+    /// legacy path from the running app this way, which cut that app off
+    /// from its agents until it was restarted.
+    public static func legacyListenerURL(
+        for socketURL: URL,
+        defaultURL: URL = BridgeSocketLocation.defaultURL,
+        legacyURL: URL = BridgeSocketLocation.legacyURL
+    ) -> URL? {
+        socketURL.standardizedFileURL == defaultURL.standardizedFileURL && legacyURL != socketURL ? legacyURL : nil
     }
 
     private func bindListener(at url: URL) throws -> Listener {

@@ -41,6 +41,9 @@ struct OnboardingAgentStatus: Equatable, Sendable {
 /// live window reads it from the app model on every draw, and a test or a
 /// snapshot hands in a fixed one.
 struct OnboardingState: Equatable, Sendable {
+    /// The agents switch. Off, the tour leaves its agents page out and
+    /// says nothing about agents on the others (D41).
+    var agentsEnabled = true
     var openTrigger: IslandOpenTrigger = .hover
     /// True while the real island is open, which is how the tour knows the
     /// user tried it.
@@ -94,6 +97,9 @@ struct OnboardingState: Equatable, Sendable {
 /// tour has no such action to give.
 @MainActor
 struct OnboardingActions {
+    /// The agents switch on the first page. It writes the same preference
+    /// as the one in Settings.
+    var setAgentsEnabled: (Bool) -> Void = { _ in }
     var setOpenTrigger: (IslandOpenTrigger) -> Void = { _ in }
     var connect: (OnboardingAgent) -> Void = { _ in }
     /// Opens Settings on the Setup tab, where every agent is listed.
@@ -141,13 +147,22 @@ final class OnboardingTour {
         actions: OnboardingActions = OnboardingActions(),
         onEnd: @escaping (OnboardingOutcome) -> Void = { _ in }
     ) {
-        flow = OnboardingFlow(startingAt: page)
+        flow = OnboardingFlow(startingAt: page, pages: OnboardingPage.shown(agentsEnabled: state().agentsEnabled))
         readState = state
         appActions = actions
         self.onEnd = onEnd
     }
 
-    var page: OnboardingPage { flow.page }
+    /// The pages this run walks, read from the agents switch as it is now.
+    /// The switch can change under the tour, from its own first page or
+    /// from Settings.
+    var pages: [OnboardingPage] { OnboardingPage.shown(agentsEnabled: readState().agentsEnabled) }
+
+    /// The page that is up. One the switch has just taken out gives way to
+    /// the page before it.
+    var page: OnboardingPage { OnboardingPage.landing(flow.page, in: pages) }
+    var isFirstPage: Bool { page == pages.first }
+    var isLastPage: Bool { page == pages.last }
 
     /// The app's state with this run's picks laid over it. What the state
     /// already says about a pick, a failure or the island having been
@@ -195,6 +210,9 @@ final class OnboardingTour {
 
     private func move(_ change: (inout OnboardingFlow) -> Void) {
         let hadEnded = flow.hasEnded
+        // The flow walks the pages the agents switch leaves in right now.
+        let pages = pages
+        if flow.pages != pages { flow.pages = pages }
         change(&flow)
         if !hadEnded, let outcome = flow.outcome {
             onEnd(outcome)

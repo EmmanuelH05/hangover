@@ -31,6 +31,11 @@ struct PersonalizationTemplate: Identifiable, Equatable, Sendable {
         case artwork
         case visualizer
         case none
+
+        /// True for a glyph that stands for agent sessions.
+        var needsAgents: Bool {
+            self == .bars || self == .count || self == .agents
+        }
     }
 
     let id: ID
@@ -137,6 +142,16 @@ extension PersonalizationTemplate {
 extension PersonalizationTemplate {
     /// In the order the Personalization tab lists them.
     static let all: [PersonalizationTemplate] = [cockpit, nowPlaying, planner, focus, minimal]
+
+    /// True for the template that is all about agents: both sides of the
+    /// closed island and the page it opens on.
+    var needsAgents: Bool { id == .cockpit }
+
+    /// The templates on offer. The agents switch leaves out the one that
+    /// only makes sense with agents (D41).
+    static func offered(agentsEnabled: Bool) -> [PersonalizationTemplate] {
+        agentsEnabled ? all : all.filter { !$0.needsAgents }
+    }
 
     /// Several agents at once. The agents own both sides of the closed
     /// island, the glow is loud, and the island opens on the agent list.

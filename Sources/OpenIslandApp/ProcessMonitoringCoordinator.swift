@@ -105,6 +105,18 @@ final class ProcessMonitoringCoordinator {
 
     // MARK: - Monitoring lifecycle
 
+    /// True while the monitor loop runs.
+    var isMonitoring: Bool { sessionAttachmentMonitorTask != nil }
+
+    /// Ends the monitor loop: no process list, no terminal probe and no
+    /// Codex app check after this. The agents switch calls it (D41).
+    func stopMonitoring() {
+        sessionAttachmentMonitorTask?.cancel()
+        sessionAttachmentMonitorTask = nil
+        wasCodexAppRunning = false
+        isResolvingInitialLiveSessions = false
+    }
+
     func startMonitoringIfNeeded() {
         guard sessionAttachmentMonitorTask == nil else {
             return
@@ -152,6 +164,8 @@ final class ProcessMonitoringCoordinator {
 
                         return (s, g, t, j)
                     }.value
+                    // Stopped while the processes were read.
+                    guard !Task.isCancelled else { return }
                     let isCodexAppRunning = Self.isCodexDesktopAppRunning()
                     self.reconcileSessionAttachments(
                         activeProcesses: snapshots,

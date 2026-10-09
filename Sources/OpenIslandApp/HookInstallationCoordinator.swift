@@ -565,8 +565,12 @@ final class HookInstallationCoordinator {
     /// Attempts to auto-repair repairable issues by re-installing hooks,
     /// for the agents the user asked to have installed.
     /// Returns true if any repairs were attempted.
+    ///
+    /// `isCurrent` is asked again once the health checks are back. False
+    /// ends the repair before anything is installed, which is what keeps a
+    /// repair from landing after the agents were switched off (D41).
     @discardableResult
-    func repairHooksIfNeeded() async -> Bool {
+    func repairHooksIfNeeded(isCurrent: () -> Bool = { true }) async -> Bool {
         var repaired = false
 
         // Re-run health checks first
@@ -577,6 +581,7 @@ final class HookInstallationCoordinator {
             let openCode = HookHealthCheck.checkOpenCode()
             return (claude, codex, openCode)
         }.value
+        guard isCurrent() else { return false }
 
         claudeHealthReport = claudeReport
         codexHealthReport = codexReport
@@ -1338,6 +1343,19 @@ final class HookInstallationCoordinator {
                 try? await Task.sleep(for: .seconds(120))
             }
         }
+    }
+
+    /// True while either usage meter is being read on a timer.
+    var isUsageMonitoring: Bool {
+        claudeUsageMonitorTask != nil || codexUsageMonitorTask != nil
+    }
+
+    /// Stops both usage meters. The agents switch calls this (D41).
+    func stopUsageMonitoring() {
+        claudeUsageMonitorTask?.cancel()
+        claudeUsageMonitorTask = nil
+        codexUsageMonitorTask?.cancel()
+        codexUsageMonitorTask = nil
     }
 
     // MARK: - Internal: readClaudeUsageState

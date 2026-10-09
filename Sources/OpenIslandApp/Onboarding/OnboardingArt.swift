@@ -90,6 +90,9 @@ struct OnboardingBarsArt: View {
 struct OnboardingScreenArt: View {
     var glow: Color? = OnboardingStyle.waiting
     var glowStrength: Double = 0.75
+    /// False draws the island without the activity bars and the count,
+    /// which are an agent's.
+    var showsContent = true
 
     private static let cornerRadius: CGFloat = 22
     private static let menuBarHeight: CGFloat = 38
@@ -119,7 +122,13 @@ struct OnboardingScreenArt: View {
             )
 
             menuBar
-            OnboardingPillArt(width: 250, height: Self.menuBarHeight - 4, glow: glow, glowStrength: glowStrength)
+            OnboardingPillArt(
+                width: 250,
+                height: Self.menuBarHeight - 4,
+                glow: glow,
+                glowStrength: glowStrength,
+                showsContent: showsContent
+            )
         }
         .accessibilityHidden(true)
     }

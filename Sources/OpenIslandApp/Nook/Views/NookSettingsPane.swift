@@ -28,18 +28,22 @@ struct NookSettingsPane: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Working with the agents") {
-                LabeledContent("Per-display options") {
-                    Button("Open Personalization…", action: onOpenPersonalization)
+            // Every row here is about agents, the link to the per-display
+            // rows included.
+            if model.agentsEnabled {
+                Section("Working with the agents") {
+                    LabeledContent("Per-display options") {
+                        Button("Open Personalization…", action: onOpenPersonalization)
+                    }
+                    Text("What the closed island shows while music plays, which page opens first, and the rows that link the agents and the Nook are set per display, for the MacBook notch and for external displays, in Personalization.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Toggle("Focus timer silences completion pop-ups", isOn: $nook.focusSuppressesCompletions)
+                    Toggle("Meetings silence completion pop-ups", isOn: $nook.meetingSuppressesCompletions)
+                    Text("A meeting is a calendar event with a video link that is on right now. Permission requests and questions still come through during a focus session or a meeting. The timer's end sound follows the island's mute switch.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                Text("What the closed island shows while music plays, which page opens first, and the rows that link the agents and the Nook are set per display, for the MacBook notch and for external displays, in Personalization.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Toggle("Focus timer silences completion pop-ups", isOn: $nook.focusSuppressesCompletions)
-                Toggle("Meetings silence completion pop-ups", isOn: $nook.meetingSuppressesCompletions)
-                Text("A meeting is a calendar event with a video link that is on right now. Permission requests and questions still come through during a focus session or a meeting. The timer's end sound follows the island's mute switch.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             Section("Now playing in the notch") {

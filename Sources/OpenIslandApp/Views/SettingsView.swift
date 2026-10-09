@@ -70,6 +70,24 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .about:                                                  .app
         }
     }
+
+    /// True for a tab that is only about agents: connecting them, and the
+    /// phone and watch that take their requests.
+    var isAgentsOnly: Bool {
+        self == .setup || self == .watch
+    }
+
+    /// The tabs the sidebar lists. The agents switch hides the ones that
+    /// are only about agents (D41).
+    static func shown(agentsEnabled: Bool) -> [SettingsTab] {
+        agentsEnabled ? allCases : allCases.filter { !$0.isAgentsOnly }
+    }
+
+    /// The tab to show for this one: itself, or General when the agents
+    /// switch has hidden it.
+    func landing(agentsEnabled: Bool) -> SettingsTab {
+        Self.shown(agentsEnabled: agentsEnabled).contains(self) ? self : .general
+    }
 }
 
 enum SettingsSection: String, CaseIterable {
@@ -87,6 +105,10 @@ enum SettingsSection: String, CaseIterable {
 
     var tabs: [SettingsTab] {
         SettingsTab.allCases.filter { $0.section == self }
+    }
+
+    func tabs(agentsEnabled: Bool) -> [SettingsTab] {
+        SettingsTab.shown(agentsEnabled: agentsEnabled).filter { $0.section == self }
     }
 }
 
@@ -108,7 +130,11 @@ struct SettingsView: View {
         .frame(minWidth: 680, idealWidth: 780, minHeight: 480, idealHeight: 560)
         .preferredColorScheme(.dark)
         .onReceive(NotificationCenter.default.publisher(for: .openIslandSelectSetupTab)) { _ in
-            selectedTab = .setup
+            selectedTab = SettingsTab.setup.landing(agentsEnabled: model.agentsEnabled)
+        }
+        // A tab the agents switch hides gives way to General.
+        .onChange(of: model.agentsEnabled) { _, isOn in
+            selectedTab = selectedTab.landing(agentsEnabled: isOn)
         }
     }
 
@@ -119,7 +145,7 @@ struct SettingsView: View {
         List(selection: $selectedTab) {
             ForEach(SettingsSection.allCases, id: \.self) { section in
                 Section(section.header(lang)) {
-                    ForEach(section.tabs) { tab in
+                    ForEach(section.tabs(agentsEnabled: model.agentsEnabled)) { tab in
                         Label {
                             Text(tab.label(lang))
                         } icon: {
@@ -139,7 +165,7 @@ struct SettingsView: View {
     @ViewBuilder
     private var detailView: some View {
         ZStack(alignment: .topTrailing) {
-            switch selectedTab {
+            switch selectedTab.landing(agentsEnabled: model.agentsEnabled) {
             case .general:
                 GeneralSettingsPane(model: model)
             case .setup:
@@ -182,6 +208,20 @@ struct GeneralSettingsPane: View {
 
     var body: some View {
         Form {
+            // The agents switch (D41). It is first because it decides what
+            // the rest of Settings has to offer.
+            Section(lang.t("settings.general.agents.section")) {
+                Toggle(lang.t("settings.general.agents.toggle"), isOn: Binding(
+                    get: { model.agentsEnabled },
+                    set: { model.agentsEnabled = $0 }
+                ))
+                .accessibilityIdentifier("settings.general.agentsEnabled")
+                Text(lang.t("settings.general.agents.note"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Section(lang.t("settings.section.system")) {
                 Toggle(lang.t("settings.general.launchAtLogin"), isOn: Binding(
                     get: { model.launchAtLoginEnabled },
@@ -214,57 +254,100 @@ struct GeneralSettingsPane: View {
             }
 
             Section(lang.t("settings.general.behavior")) {
-                Toggle(lang.t("settings.general.keepOpenUntilDecision"), isOn: Binding(
-                    get: { model.keepNotchOpenUntilDecision },
-                    set: { model.keepNotchOpenUntilDecision = $0 }
-                ))
-                Toggle(lang.t("settings.general.showDockIcon"), isOn: Binding(
-                    get: { model.showDockIcon },
-                    set: { model.showDockIcon = $0 }
-                ))
-                Toggle(lang.t("settings.general.linksFromOtherApps"), isOn: Binding(
-                    get: { model.allowsLinksFromOtherApps },
-                    set: { model.allowsLinksFromOtherApps = $0 }
-                ))
-                Text(lang.t("settings.general.linksFromOtherApps.note"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Picker(lang.t(IslandOpenTrigger.settingTitleKey), selection: Binding(
-                    get: { model.islandOpenTrigger },
-                    set: { model.islandOpenTrigger = $0 }
-                )) {
-                    ForEach(IslandOpenTrigger.allCases) { trigger in
-                        Text(lang.t(trigger.titleKey)).tag(trigger)
-                    }
+                ForEach(GeneralSettingsRow.shown(agentsEnabled: model.agentsEnabled)) { row in
+                    behaviorRow(row)
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(lang.t(model.islandOpenTrigger.noteKey))
-                    Text(lang.t(IslandOpenTrigger.filesNoteKey))
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                Toggle(lang.t("settings.general.hapticFeedback"), isOn: Binding(
-                    get: { model.hapticFeedbackEnabled },
-                    set: { model.hapticFeedbackEnabled = $0 }
-                ))
-                // The haptic tap marks a hover-open, which click mode never does.
-                .disabled(model.islandOpenTrigger == .click)
-                Toggle(lang.t("settings.general.completionReply"), isOn: Binding(
-                    get: { model.completionReplyEnabled },
-                    set: { model.completionReplyEnabled = $0 }
-                ))
-                Toggle(lang.t("settings.general.suppressFrontmostNotifications"), isOn: Binding(
-                    get: { model.suppressFrontmostNotifications },
-                    set: { model.suppressFrontmostNotifications = $0 }
-                ))
             }
 
-            AgentHotkeySettingsSection(hotkeys: model.agentHotkeys, lang: lang)
+            if model.agentsEnabled {
+                AgentHotkeySettingsSection(hotkeys: model.agentHotkeys, lang: lang)
+            }
         }
         .formStyle(.grouped)
         .navigationTitle(lang.t("settings.tab.general"))
+    }
+
+    @ViewBuilder
+    private func behaviorRow(_ row: GeneralSettingsRow) -> some View {
+        switch row {
+        case .keepOpenUntilDecision:
+            Toggle(lang.t("settings.general.keepOpenUntilDecision"), isOn: Binding(
+                get: { model.keepNotchOpenUntilDecision },
+                set: { model.keepNotchOpenUntilDecision = $0 }
+            ))
+        case .showDockIcon:
+            Toggle(lang.t("settings.general.showDockIcon"), isOn: Binding(
+                get: { model.showDockIcon },
+                set: { model.showDockIcon = $0 }
+            ))
+        case .linksFromOtherApps:
+            Toggle(lang.t("settings.general.linksFromOtherApps"), isOn: Binding(
+                get: { model.allowsLinksFromOtherApps },
+                set: { model.allowsLinksFromOtherApps = $0 }
+            ))
+            Text(lang.t("settings.general.linksFromOtherApps.note"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        case .openTrigger:
+            Picker(lang.t(IslandOpenTrigger.settingTitleKey), selection: Binding(
+                get: { model.islandOpenTrigger },
+                set: { model.islandOpenTrigger = $0 }
+            )) {
+                ForEach(IslandOpenTrigger.allCases) { trigger in
+                    Text(lang.t(trigger.titleKey)).tag(trigger)
+                }
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(lang.t(model.islandOpenTrigger.noteKey))
+                Text(lang.t(IslandOpenTrigger.filesNoteKey))
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        case .hapticFeedback:
+            Toggle(lang.t("settings.general.hapticFeedback"), isOn: Binding(
+                get: { model.hapticFeedbackEnabled },
+                set: { model.hapticFeedbackEnabled = $0 }
+            ))
+            // The haptic tap marks a hover-open, which click mode never does.
+            .disabled(model.islandOpenTrigger == .click)
+        case .completionReply:
+            Toggle(lang.t("settings.general.completionReply"), isOn: Binding(
+                get: { model.completionReplyEnabled },
+                set: { model.completionReplyEnabled = $0 }
+            ))
+        case .suppressFrontmostNotifications:
+            Toggle(lang.t("settings.general.suppressFrontmostNotifications"), isOn: Binding(
+                get: { model.suppressFrontmostNotifications },
+                set: { model.suppressFrontmostNotifications = $0 }
+            ))
+        }
+    }
+}
+
+/// The rows of General's Behavior section, in order. The agents switch
+/// hides the ones that only act on an agent's request or its finish (D41).
+enum GeneralSettingsRow: String, CaseIterable, Identifiable, Sendable {
+    case keepOpenUntilDecision
+    case showDockIcon
+    case linksFromOtherApps
+    case openTrigger
+    case hapticFeedback
+    case completionReply
+    case suppressFrontmostNotifications
+
+    var id: String { rawValue }
+
+    var isAgentsOnly: Bool {
+        switch self {
+        case .keepOpenUntilDecision, .completionReply, .suppressFrontmostNotifications: true
+        case .showDockIcon, .linksFromOtherApps, .openTrigger, .hapticFeedback: false
+        }
+    }
+
+    static func shown(agentsEnabled: Bool) -> [GeneralSettingsRow] {
+        agentsEnabled ? allCases : allCases.filter { !$0.isAgentsOnly }
     }
 }
 
@@ -323,25 +406,29 @@ struct SoundSettingsPane: View {
                 ))
             }
 
-            Section(lang.t("settings.sound.selectSound")) {
-                List(availableSounds, id: \.self) { name in
-                    Button {
-                        model.selectedSoundName = name
-                        NotificationSoundService.play(name)
-                    } label: {
-                        HStack {
-                            Text(name)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            if name == model.selectedSoundName {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.blue)
-                                    .fontWeight(.semibold)
+            // The picked sound is the one an agent's card plays. The Nook
+            // plays sounds of its own, and only the mute reaches those.
+            if model.agentsEnabled {
+                Section(lang.t("settings.sound.selectSound")) {
+                    List(availableSounds, id: \.self) { name in
+                        Button {
+                            model.selectedSoundName = name
+                            NotificationSoundService.play(name)
+                        } label: {
+                            HStack {
+                                Text(name)
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                if name == model.selectedSoundName {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(.blue)
+                                        .fontWeight(.semibold)
+                                }
                             }
+                            .contentShape(Rectangle())
                         }
-                        .contentShape(Rectangle())
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }

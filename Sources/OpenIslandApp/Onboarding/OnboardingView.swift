@@ -58,12 +58,12 @@ struct OnboardingView: View {
 
                 Button(lang.t("onboarding.nav.back")) { tour.back() }
                     .buttonStyle(OnboardingSecondaryButtonStyle())
-                    .disabled(tour.flow.isFirstPage)
-                    .opacity(tour.flow.isFirstPage ? 0.35 : 1)
+                    .disabled(tour.isFirstPage)
+                    .opacity(tour.isFirstPage ? 0.35 : 1)
                     .keyboardShortcut(.leftArrow, modifiers: [])
                     .background(rightArrowKey)
 
-                Button(lang.t(tour.flow.isLastPage ? "onboarding.nav.finish" : "onboarding.nav.next")) { tour.next() }
+                Button(lang.t(tour.isLastPage ? "onboarding.nav.finish" : "onboarding.nav.next")) { tour.next() }
                     .buttonStyle(OnboardingPrimaryButtonStyle())
                     .keyboardShortcut(.defaultAction)
             }
@@ -79,7 +79,7 @@ struct OnboardingView: View {
     /// page's button and Return do that.
     private var rightArrowKey: some View {
         Button("") {
-            if !tour.flow.isLastPage { tour.next() }
+            if !tour.isLastPage { tour.next() }
         }
         .buttonStyle(.plain)
         .keyboardShortcut(.rightArrow, modifiers: [])
@@ -91,8 +91,9 @@ struct OnboardingView: View {
     /// One dot a page. The page that is up is drawn longer, and a dot is a
     /// button to its page.
     private var dots: some View {
-        HStack(spacing: 6) {
-            ForEach(OnboardingPage.allCases) { page in
+        let pages = tour.pages
+        return HStack(spacing: 6) {
+            ForEach(Array(pages.enumerated()), id: \.element) { index, page in
                 Button {
                     tour.go(to: page)
                 } label: {
@@ -103,7 +104,7 @@ struct OnboardingView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(lang.t("onboarding.nav.page", page.rawValue + 1, OnboardingPage.allCases.count))
+                .accessibilityLabel(lang.t("onboarding.nav.page", index + 1, pages.count))
                 .accessibilityAddTraits(page == tour.page ? .isSelected : [])
             }
         }

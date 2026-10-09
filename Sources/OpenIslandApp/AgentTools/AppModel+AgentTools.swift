@@ -95,7 +95,7 @@ extension AppModel {
     /// show: the same list a press reads. `hasWaitingSession` false skips
     /// building that list, which is the usual case.
     func refreshAgentHotkeyArming(hasWaitingSession: Bool) {
-        agentHotkeys.setArmed(hasWaitingSession && !agentHotkeyWaiting().isEmpty)
+        agentHotkeys.setArmed(agentsEnabled && hasWaitingSession && !agentHotkeyWaiting().isEmpty)
     }
 
     /// The requests a press can decide or show: waiting, in the island's
@@ -114,7 +114,8 @@ extension AppModel {
 
     /// The request the island shows as its single card right now.
     var agentHotkeyLiveCard: AgentHotkeyCard? {
-        guard notchStatus == .opened,
+        guard agentsEnabled,
+              notchStatus == .opened,
               notchOpenReason == .notification,
               let sessionID = islandSurface.sessionID,
               let session = state.session(id: sessionID),
@@ -155,6 +156,7 @@ extension AppModel {
     /// where to approve, and no notice is shown: notices live on the closed
     /// island, and this card is open.
     func handleAgentHotkey(_ action: AgentHotkeyAction, now: Date = .now) {
+        guard agentsEnabled else { return }
         // A change of card the app did not see happen starts its time now.
         refreshAgentHotkeyCard(now: now)
 
@@ -219,6 +221,8 @@ extension AppModel {
     /// request goes back on screen when nothing else has happened to the
     /// session since, and the island says that the answer was lost.
     func agentApprovalWasNotDelivered(waiting: AgentSession, resolved: AgentSession?, error: any Error) {
+        // An answer cut off by the agents switch going off is no news.
+        guard agentsEnabled else { return }
         agentToolsLog.error(
             "An approval answer for session \(waiting.id, privacy: .public) did not reach the agent: \(error.localizedDescription, privacy: .public)"
         )
@@ -244,7 +248,7 @@ extension AppModel {
     /// not be sent goes back into it, unless something newer is being
     /// typed there, and the island says that it was not sent.
     func agentReplyWasSent(_ text: String, to session: AgentSession, succeeded: Bool) {
-        guard !succeeded else { return }
+        guard !succeeded, agentsEnabled else { return }
         agentToolsLog.error("A reply to session \(session.id, privacy: .public) could not be sent to its terminal")
         nook.showTransient(
             symbol: "exclamationmark.triangle.fill",

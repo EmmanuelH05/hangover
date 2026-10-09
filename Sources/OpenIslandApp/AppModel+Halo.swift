@@ -31,7 +31,8 @@ extension AppModel {
             policy: SystemMotionMonitor.shared.policy,
             isOpened: notchStatus == .opened,
             waiting: waiting,
-            flashToken: halo.flashToken,
+            // A flash is an agent finishing.
+            flashToken: agentsEnabled ? halo.flashToken : nil,
             noticeTint: noticeTint,
             musicTint: musicTint,
             isRunning: sessions.contains { $0.phase == .running },

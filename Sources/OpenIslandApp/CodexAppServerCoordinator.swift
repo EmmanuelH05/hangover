@@ -65,6 +65,13 @@ final class CodexAppServerCoordinator {
                     }
                 }
                 try await newClient.start()
+                // Disconnected while the server was starting, which the
+                // agents switch does when it goes off (D41). The server
+                // that just came up is not kept.
+                guard !Task.isCancelled else {
+                    newClient.stop()
+                    return
+                }
 
                 self.client = newClient
                 self.isConnected = true
@@ -75,6 +82,9 @@ final class CodexAppServerCoordinator {
                 // Fetch currently loaded threads and create sessions.
                 await self.syncLoadedThreads()
             } catch {
+                // A cancelled attempt no longer owns `connectTask`: a newer
+                // attempt may hold it by now.
+                guard !Task.isCancelled else { return }
                 self.connectTask = nil
                 self.onStatusMessage?("Failed to connect to Codex app-server: \(error.localizedDescription)")
             }

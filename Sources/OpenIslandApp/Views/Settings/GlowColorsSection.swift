@@ -9,6 +9,9 @@ import SwiftUI
 struct GlowColorsSection: View {
     let nook: NookModel
     let profile: IslandAppearanceDisplayProfile
+    /// False leaves out the moments that are an agent's: approval,
+    /// question, finished and working (D41).
+    var showsAgents = true
 
     var body: some View {
         let preferences = nook.displayPreferences(for: profile)
@@ -16,9 +19,25 @@ struct GlowColorsSection: View {
             nook: nook,
             profile: profile,
             colors: preferences.haloColors,
-            isGlowOn: preferences.haloStyle != .off
+            isGlowOn: preferences.haloStyle != .off,
+            showsAgents: showsAgents
         )
         .equatable()
+    }
+}
+
+extension IslandHaloMoment {
+    /// True for a moment only an agent brings about.
+    var needsAgents: Bool {
+        switch self {
+        case .approval, .question, .completed, .running: true
+        case .notice, .music: false
+        }
+    }
+
+    /// The moments Settings lists a color for.
+    static func shown(agentsEnabled: Bool) -> [IslandHaloMoment] {
+        agentsEnabled ? allCases : allCases.filter { !$0.needsAgents }
     }
 }
 
@@ -27,11 +46,13 @@ private struct GlowColorsEditor: View, Equatable {
     let profile: IslandAppearanceDisplayProfile
     let colors: IslandHaloColors
     let isGlowOn: Bool
+    let showsAgents: Bool
 
     private var lang: LanguageManager { .shared }
 
     nonisolated static func == (lhs: GlowColorsEditor, rhs: GlowColorsEditor) -> Bool {
-        lhs.nook === rhs.nook && lhs.profile == rhs.profile && lhs.colors == rhs.colors && lhs.isGlowOn == rhs.isGlowOn
+        lhs.nook === rhs.nook && lhs.profile == rhs.profile && lhs.colors == rhs.colors
+            && lhs.isGlowOn == rhs.isGlowOn && lhs.showsAgents == rhs.showsAgents
     }
 
     var body: some View {
@@ -104,10 +125,11 @@ private struct GlowColorsEditor: View, Equatable {
     // MARK: A color per moment
 
     private var momentRows: some View {
-        GlowRowCard {
+        let moments = IslandHaloMoment.shown(agentsEnabled: showsAgents)
+        return GlowRowCard {
             VStack(spacing: 0) {
-                ForEach(IslandHaloMoment.allCases) { moment in
-                    if moment != IslandHaloMoment.allCases.first {
+                ForEach(moments) { moment in
+                    if moment != moments.first {
                         Rectangle()
                             .fill(Color.white.opacity(0.06))
                             .frame(height: 1)

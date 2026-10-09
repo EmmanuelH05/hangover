@@ -41,6 +41,10 @@ extension AppModel {
         case .openNook:
             return showPage(.nook)
         case .openAgents:
+            guard agentsEnabled else {
+                linkLog.notice("Ignored a link: agents are switched off")
+                return false
+            }
             return showPage(.agents)
         case .startTimer(let minutes):
             if let minutes {

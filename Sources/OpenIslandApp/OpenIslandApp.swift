@@ -81,8 +81,9 @@ final class OpenIslandAppDelegate: NSObject, NSApplicationDelegate {
             harnessRuntimeMonitor.recordMilestone("modelStarted")
 
             // Global shortcuts belong to a real launch, not a harness run.
+            // The model holds them back while the agents are switched off.
             if harnessLaunchConfiguration.scenario == nil {
-                model.agentHotkeys.activate(registrar: CarbonHotkeyRegistrar())
+                model.activateAgentHotkeys(registrar: CarbonHotkeyRegistrar())
             }
 
             if let scenario = harnessLaunchConfiguration.scenario {

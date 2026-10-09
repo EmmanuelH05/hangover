@@ -281,6 +281,35 @@ final class AppModel {
             }
         }
     }
+    /// The agent half of the app (Settings, General). On by default. Off,
+    /// nothing of it runs or shows, and the app is the Nook alone (D41).
+    var agentsEnabled: Bool = true {
+        didSet {
+            guard hasFinishedInit, agentsEnabled != oldValue else { return }
+            AgentsSwitch.save(agentsEnabled, to: agentsDefaults)
+            agentsEnabledDidChange()
+        }
+    }
+    /// Where the agents switch is saved. A test hands in its own store.
+    @ObservationIgnored
+    private let agentsDefaults: UserDefaults
+    /// What this launch asked the agent half to run. Nil until the app has
+    /// started, and kept for the agents switch, which starts the same parts
+    /// when it is switched on later.
+    @ObservationIgnored
+    var agentLaunch: AgentRuntimeParts?
+    /// The parts of the agent half that run right now.
+    private(set) var agentRuntime: AgentRuntimeParts = []
+    /// Goes up each time the agent half stops, which tells work that was
+    /// under way that its results are no longer wanted.
+    @ObservationIgnored
+    private var agentRuntimeGeneration: UInt64 = 0
+    /// Handed over once by the app, never by a harness run or a test.
+    @ObservationIgnored
+    private var agentHotkeyRegistrar: (any AgentHotkeyRegistering)?
+    /// The welcome tour is offered once a launch.
+    @ObservationIgnored
+    private var hasOfferedWelcomeTour = false
     /// Whether `hangover://` links from other apps are carried out
     /// (Settings, General). On by default. Off, every link is ignored.
     var allowsLinksFromOtherApps: Bool = true {
@@ -532,7 +561,8 @@ final class AppModel {
     }
 
     private func startWatchRelay() {
-        guard watchRelay == nil else { return }
+        // The relay sends agent requests to a phone or a watch.
+        guard agentsEnabled, watchRelay == nil else { return }
         let relay = WatchNotificationRelay()
         setupWatchRelayCallbacks(relay)
         relay.start()
@@ -583,7 +613,10 @@ final class AppModel {
     private var hasStarted = false
 
     @ObservationIgnored
-    private let bridgeServer = BridgeServer(claudeAskRules: .live)
+    /// On the path the launch names (`OPEN_ISLAND_SOCKET_PATH`), else the
+    /// app's own. A copy started for a launch check names a path of its
+    /// own, which keeps it off the running app's sockets.
+    private let bridgeServer = BridgeServer(socketURL: BridgeSocketLocation.currentURL(), claudeAskRules: .live)
 
     @ObservationIgnored
     private var bridgeClient = LocalBridgeClient()
@@ -659,10 +692,12 @@ final class AppModel {
         },
         isNotificationSessionAlreadyFrontmost: @escaping @Sendable (AgentSession) async -> Bool = { session in
             await ForegroundTerminalSessionProbe().matches(session: session)
-        }
+        },
+        agentsDefaults: UserDefaults = .standard
     ) {
         self.terminalJumpAction = terminalJumpAction
         self.isNotificationSessionAlreadyFrontmost = isNotificationSessionAlreadyFrontmost
+        self.agentsDefaults = agentsDefaults
         UserDefaults.standard.register(defaults: [
             Self.showDockIconDefaultsKey: true,
             Self.hapticFeedbackEnabledDefaultsKey: false,
@@ -671,6 +706,8 @@ final class AppModel {
             Self.completionReplyEnabledDefaultsKey: false,
             Self.suppressFrontmostNotificationsDefaultsKey: true,
         ])
+        // Read first: the watch relay below belongs to the agent half.
+        agentsEnabled = AgentsSwitch.load(from: agentsDefaults)
         isSoundMuted = UserDefaults.standard.bool(forKey: Self.soundMutedDefaultsKey)
         selectedSoundName = NotificationSoundService.selectedSoundName
         showDockIcon = UserDefaults.standard.bool(forKey: Self.showDockIconDefaultsKey)
@@ -724,7 +761,8 @@ final class AppModel {
             self?.lastActionMessage = message
         }
         discovery.stateAccessor = { [weak self] in self?.state ?? SessionState() }
-        discovery.stateUpdater = { [weak self] in self?.state = $0 }
+        discovery.stateUpdater = { [weak self] in self?.takeAgentState($0) }
+        discovery.isActive = { [weak self] in self?.agentsEnabled ?? false }
         discovery.onStateChanged = { [weak self] in
             self?.synchronizeSelection()
             self?.refreshOverlayPlacementIfVisible()
@@ -760,7 +798,7 @@ final class AppModel {
 
         monitoring.syntheticClaudeSessionPrefix = Self.syntheticClaudeSessionPrefix
         monitoring.stateAccessor = { [weak self] in self?.state ?? SessionState() }
-        monitoring.stateUpdater = { [weak self] in self?.state = $0 }
+        monitoring.stateUpdater = { [weak self] in self?.takeAgentState($0) }
         monitoring.onSessionsReconciled = { [weak self] in
             self?.synchronizeSelection()
             self?.refreshOverlayPlacementIfVisible()
@@ -788,12 +826,13 @@ final class AppModel {
         hasFinishedInit = true
     }
 
+    /// Empty while the agents switch is off, like every list below.
     var sessions: [AgentSession] {
-        state.sessions
+        agentsEnabled ? state.sessions : []
     }
 
     var allSessions: [AgentSession] {
-        state.sessions
+        sessions
     }
 
     /// Measured by SwiftUI GeometryReader in notification mode. Used by panel controller for sizing.
@@ -1051,15 +1090,16 @@ final class AppModel {
     var shouldShowSessionBootstrapPlaceholder: Bool {
         isResolvingInitialLiveSessions
             && liveSessionCount == 0
-            && state.sessions.contains(where: \.isTrackedLiveSession)
+            && sessions.contains(where: \.isTrackedLiveSession)
     }
 
     var focusedSession: AgentSession? {
-        state.session(id: selectedSessionID) ?? surfacedSessions.first ?? state.activeActionableSession ?? state.sessions.first
+        guard agentsEnabled else { return nil }
+        return state.session(id: selectedSessionID) ?? surfacedSessions.first ?? state.activeActionableSession ?? state.sessions.first
     }
 
     var activeIslandCardSession: AgentSession? {
-        guard let sessionID = islandSurface.sessionID else {
+        guard agentsEnabled, let sessionID = islandSurface.sessionID else {
             return nil
         }
 
@@ -1159,35 +1199,24 @@ final class AppModel {
         }
         hasStarted = true
 
+        // Kept for the agents switch, which starts the same parts when it
+        // is switched on after launch.
+        let launch = AgentRuntimeParts.launch(startBridge: startBridge, loadRuntimeState: loadRuntimeState)
+        agentLaunch = launch
+        let startsAgents = !launch.allowed(agentsEnabled: agentsEnabled).isEmpty
+
+        isResolvingInitialLiveSessions = false
+        if startsAgents, launch.contains(.sessions) {
+            startAgentSessions()
+        }
         if loadRuntimeState {
-            isResolvingInitialLiveSessions = true
-
-            Task.detached(priority: .userInitiated) { [weak self] in
-                guard let self else { return }
-                let payload = self.discovery.loadStartupDiscoveryPayload()
-                await MainActor.run {
-                    self.applyStartupDiscoveryPayload(payload)
-                }
-            }
-
-            // These are already async or lightweight — safe to start immediately.
-            hooks.refreshCodexHookStatus()
-            hooks.refreshClaudeHookStatus()
-            hooks.refreshCCForkHookStatuses()
-            hooks.refreshOpenCodePluginStatus()
-            hooks.refreshPiExtensionStatuses()
-            hooks.refreshCursorHookStatus()
-            hooks.refreshGrokHookStatus()
-            hooks.refreshClaudeUsageState()
-            hooks.startClaudeUsageMonitoringIfNeeded()
-            if showCodexUsage {
-                hooks.refreshCodexUsageState()
-                hooks.startCodexUsageMonitoringIfNeeded()
-            }
             updateChecker.startIfNeeded()
-
-        } else {
-            isResolvingInitialLiveSessions = false
+            if !startsAgents {
+                // The agent half offers the welcome tour once it has read
+                // the hook status. With that half off the tour is offered
+                // here, after the launch has put its windows away.
+                Task { @MainActor [weak self] in self?.offerWelcomeTourOnce() }
+            }
         }
         // Nook widgets run in harness launches too, so screenshots show live data.
         nook.onTransient = { [weak self] in
@@ -1230,14 +1259,151 @@ final class AppModel {
             return
         }
 
+        guard startsAgents else {
+            isBridgeReady = false
+            lastActionMessage = Self.agentsOffMessage
+            harnessRuntimeMonitor?.recordMilestone("bridgeSkipped", message: lastActionMessage)
+            return
+        }
+        startAgentBridge()
+    }
+
+    // MARK: - The agents switch (D41)
+
+    private static let agentsOffMessage = "Agents are switched off. Nothing of the agent half is running."
+
+    /// Starts the parts of the agent half this launch asked for and that
+    /// are not running yet. Nothing while the agents switch is off, and
+    /// nothing before the app has started.
+    func startAgentRuntime() {
+        guard agentsEnabled, let launch = agentLaunch else { return }
+        let missing = launch.subtracting(agentRuntime)
+        if missing.contains(.sessions) { startAgentSessions() }
+        if missing.contains(.bridge) { startAgentBridge() }
+    }
+
+    /// Session discovery, the hook status reads and the usage meters. The
+    /// discovery's result starts hook repair and process monitoring.
+    private func startAgentSessions() {
+        agentRuntime.insert(.sessions)
+        isResolvingInitialLiveSessions = true
+
+        let generation = agentRuntimeGeneration
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self else { return }
+            let payload = self.discovery.loadStartupDiscoveryPayload()
+            await MainActor.run {
+                // The agents were switched off while the files were read.
+                guard self.isAgentRuntimeCurrent(generation) else { return }
+                self.applyStartupDiscoveryPayload(payload, generation: generation)
+            }
+        }
+
+        // These are already async or lightweight, and safe to start at once.
+        hooks.refreshCodexHookStatus()
+        hooks.refreshClaudeHookStatus()
+        hooks.refreshCCForkHookStatuses()
+        hooks.refreshOpenCodePluginStatus()
+        hooks.refreshPiExtensionStatuses()
+        hooks.refreshCursorHookStatus()
+        hooks.refreshGrokHookStatus()
+        hooks.refreshClaudeUsageState()
+        hooks.startClaudeUsageMonitoringIfNeeded()
+        if showCodexUsage {
+            hooks.refreshCodexUsageState()
+            hooks.startCodexUsageMonitoringIfNeeded()
+        }
+    }
+
+    /// The socket server the hooks talk to, and the app's connection to it.
+    private func startAgentBridge() {
         do {
             try bridgeServer.start()
+            agentRuntime.insert(.bridge)
             connectBridgeObserver()
         } catch {
             isBridgeReady = false
             lastActionMessage = "Failed to start local bridge: \(error.localizedDescription)"
             harnessRuntimeMonitor?.recordMilestone("bridgeStartFailed", message: lastActionMessage)
         }
+    }
+
+    /// True while the agent half that started with `generation` is still
+    /// the one running.
+    private func isAgentRuntimeCurrent(_ generation: UInt64) -> Bool {
+        agentsEnabled && generation == agentRuntimeGeneration && agentRuntime.contains(.sessions)
+    }
+
+    /// Stops everything of the agent half that runs and takes what it
+    /// showed off the screen. No agent's own files are touched: installed
+    /// hooks stay where they are and find no bridge to talk to.
+    private func stopAgentRuntime() {
+        agentRuntimeGeneration &+= 1
+        agentRuntime = []
+
+        bridgeTask?.cancel()
+        bridgeTask = nil
+        bridgeReconnectTask?.cancel()
+        bridgeReconnectTask = nil
+        bridgeClient.disconnect()
+        // Closing the server ends every hook that waits on an answer, and
+        // each agent then asks in its own terminal.
+        bridgeServer.stop()
+        isBridgeReady = false
+
+        monitoring.stopMonitoring()
+        hooks.stopUsageMonitoring()
+        codexAppServer.disconnect()
+        discovery.codexRolloutWatcher.stop()
+        notificationPresentationTask?.cancel()
+        notificationPresentationTask = nil
+        jumpTask?.cancel()
+        jumpTask = nil
+        stopWatchRelay()
+        agentHotkeys.deactivate()
+        isResolvingInitialLiveSessions = false
+
+        // The session files on disk are left as they are, which lets the
+        // same sessions come back when the switch does.
+        state = SessionState()
+        selectedSessionID = nil
+        reconcileIslandSurfaceAfterStateChange()
+        lastActionMessage = Self.agentsOffMessage
+    }
+
+    /// Runs when the agents switch changes, at launch or long after.
+    private func agentsEnabledDidChange() {
+        _cachedSessionBuckets = nil
+        if agentsEnabled {
+            if watchNotificationEnabled { startWatchRelay() }
+            if let agentHotkeyRegistrar { agentHotkeys.activate(registrar: agentHotkeyRegistrar) }
+            startAgentRuntime()
+        } else {
+            stopAgentRuntime()
+        }
+        refreshOverlayPlacementIfVisible()
+    }
+
+    /// Hands the agent shortcuts the system registrar. While the agents
+    /// switch is off it is only kept, and nothing is registered with macOS.
+    func activateAgentHotkeys(registrar: any AgentHotkeyRegistering) {
+        agentHotkeyRegistrar = registrar
+        guard agentsEnabled else { return }
+        agentHotkeys.activate(registrar: registrar)
+    }
+
+    /// Session state from discovery or the process monitor. A result that
+    /// was on its way when the agents were switched off is dropped.
+    private func takeAgentState(_ newState: SessionState) {
+        guard agentsEnabled else { return }
+        state = newState
+    }
+
+    /// Shows the welcome tour by itself at most once a launch.
+    private func offerWelcomeTourOnce() {
+        guard !hasOfferedWelcomeTour else { return }
+        hasOfferedWelcomeTour = true
+        offerWelcomeTour()
     }
 
     // MARK: - Bridge observer connection
@@ -1255,7 +1421,8 @@ final class AppModel {
 
         // Create a fresh client for each connection attempt so we don't
         // have to worry about stale file-descriptor state.
-        let client = LocalBridgeClient()
+        // The same path the server listens on.
+        let client = LocalBridgeClient(socketURL: BridgeSocketLocation.currentURL())
         bridgeClient = client
 
         let stream: AsyncThrowingStream<AgentEvent, Error>
@@ -1275,6 +1442,8 @@ final class AppModel {
 
             do {
                 try await client.send(.registerClient(role: .observer))
+                // The agents were switched off while this was sent.
+                guard !Task.isCancelled else { return }
                 self.isBridgeReady = true
                 self.lastActionMessage = "Bridge ready. Waiting for Claude and Codex hook events."
                 self.harnessRuntimeMonitor?.recordMilestone("bridgeReady", message: self.lastActionMessage)
@@ -1409,7 +1578,13 @@ final class AppModel {
     /// means the agent bars, either by choice or because the chosen item
     /// has nothing to show (no battery, no event ahead).
     var nookLeftSlotContent: NookSideSlotContent? {
-        let slot = nookDisplay.leftSlot
+        nookLeftSlotContent(for: nookDisplay.leftSlot)
+    }
+
+    /// The left side for one choice. With the agents switched off there
+    /// are no bars to fall back to, and the side is left empty.
+    func nookLeftSlotContent(for slot: NookSideSlot) -> NookSideSlotContent? {
+        guard agentsEnabled else { return nookSideSlotContent(for: slot) ?? .hidden }
         return slot == .agents ? nil : nookSideSlotContent(for: slot)
     }
 
@@ -1419,7 +1594,11 @@ final class AppModel {
         nookDisplay.rightSlot.flatMap(nookSideSlotContent(for:))
     }
 
-    private func nookSideSlotContent(for slot: NookSideSlot) -> NookSideSlotContent? {
+    /// What one side shows for a choice, nil when the choice has nothing
+    /// to show. A choice that shows agents has nothing while they are
+    /// switched off.
+    func nookSideSlotContent(for slot: NookSideSlot) -> NookSideSlotContent? {
+        if !agentsEnabled, slot.needsAgents { return nil }
         switch slot {
         case .agents:
             return .bars(islandClosedMode)
@@ -1530,6 +1709,8 @@ final class AppModel {
     /// where Auto means agents while any session is running or waiting and
     /// the Nook the rest of the time.
     var showsNookPage: Bool {
+        // The Nook is the only page while the agents switch is off.
+        guard agentsEnabled else { return true }
         if isShowingNotificationCard { return false }
         switch nook.pageOverride ?? nook.forcedPage ?? nookDisplay.openedPage {
         case .agents:
@@ -1558,7 +1739,11 @@ final class AppModel {
         refreshOverlayPlacementIfVisible()
     }
 
+    /// Whether the opened island offers a second page to turn to.
+    var showsPageSwitch: Bool { agentsEnabled }
+
     func showAgentsPage() {
+        guard agentsEnabled else { return }
         nook.isEditingLayout = false
         nook.isMirrorOn = false
         nook.closeEventEditor(keepingDraft: true)
@@ -1601,7 +1786,7 @@ final class AppModel {
             showsNookCompactBar: showsNookCompactBar,
             // A copy of the card's session, so the close fade keeps drawing
             // the card as it was even after the session changes or goes.
-            session: state.session(id: islandSurface.sessionID)
+            session: agentsEnabled ? state.session(id: islandSurface.sessionID) : nil
         )
     }
 
@@ -1670,7 +1855,7 @@ final class AppModel {
     /// installed. Used by every "Set up agents" CTA in the empty-state UI.
     /// The Setup tab stays one click away from that page.
     func showOnboarding() {
-        showWelcomeTour(startingAt: .agents)
+        showWelcomeTour(startingAt: agentsEnabled ? .agents : .welcome)
     }
 
     func toggleSoundMuted() {
@@ -1916,6 +2101,9 @@ final class AppModel {
         updateLastActionMessage: Bool = true,
         ingress: TrackedEventIngress = .bridge
     ) {
+        // An event that was on its way when the agents were switched off.
+        guard agentsEnabled else { return }
+
         if case .sessionHeartbeat = event {
             state.apply(event)
             return
@@ -2068,7 +2256,13 @@ final class AppModel {
     }
 
     /// Applies startup discovery results on the main thread after background I/O completes.
-    private func applyStartupDiscoveryPayload(_ payload: SessionDiscoveryCoordinator.StartupDiscoveryPayload) {
+    /// `generation` names the start this payload belongs to. Each step
+    /// that waits checks it again, which keeps a switch to off from being
+    /// followed by a hook install or a repair.
+    private func applyStartupDiscoveryPayload(
+        _ payload: SessionDiscoveryCoordinator.StartupDiscoveryPayload,
+        generation: UInt64
+    ) {
         discovery.applyStartupDiscoveryPayload(payload)
 
         // Apply hooks binary URL and update the installed copy if the app ships a newer version.
@@ -2082,6 +2276,7 @@ final class AppModel {
 
             // Wait for all status reads to complete before checking install state.
             await self.hooks.refreshAllHookStatusAndWait()
+            guard self.isAgentRuntimeCurrent(generation) else { return }
 
             // Reconcile persisted intent with what is actually on disk. For
             // legacy users this records existing hooks as `.installed` and
@@ -2091,7 +2286,7 @@ final class AppModel {
             self.hooks.migrateIntentStoreIfNeeded()
             // Every install gets the welcome tour once, whether or not it
             // had agents connected before.
-            self.offerWelcomeTour()
+            self.offerWelcomeTourOnce()
 
             // Pi and Oh My Pi load a runtime extension that talks to the
             // bridge socket directly, so they do not depend on the hooks
@@ -2122,7 +2317,10 @@ final class AppModel {
 
             // Run health checks after install to detect stale paths, conflicts, etc.
             try? await Task.sleep(for: .milliseconds(500))
-            await self.hooks.repairHooksIfNeeded()
+            guard self.isAgentRuntimeCurrent(generation) else { return }
+            await self.hooks.repairHooksIfNeeded { [weak self] in
+                self?.isAgentRuntimeCurrent(generation) ?? false
+            }
         }
 
         // Reconcile attachments and start monitoring (requires sessions to be loaded).
@@ -2131,7 +2329,11 @@ final class AppModel {
     }
 
 
+    /// The one gate for what the island shows of the agents: the closed
+    /// pill, the list, the glow, the bars and the shortcuts all read from
+    /// here, and all of them get nothing while the agents switch is off.
     private var sessionBuckets: (primary: [AgentSession], overflow: [AgentSession]) {
+        guard agentsEnabled else { return ([], []) }
         if let cached = _cachedSessionBuckets {
             return cached
         }

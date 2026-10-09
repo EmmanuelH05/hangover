@@ -261,7 +261,7 @@ To publish an update:
 1. Build it with the new version number.
 
    ```bash
-   OPEN_ISLAND_VERSION=1.0.3 zsh scripts/package-app.sh
+   OPEN_ISLAND_VERSION=1.0.4 zsh scripts/package-app.sh
    ```
 
 2. Sign the zip. This prints the signature and the length.

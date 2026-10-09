@@ -41,6 +41,11 @@ struct ClosedPreviewSection: View {
     private static let fallbackMusicHex = "FF2D55"
 
     private var lang: LanguageManager { model.lang }
+    /// The agents switch. Off, the preview shows what the closed island
+    /// shows then: nothing of the agents, and the Nook's music (D41).
+    private var showsAgents: Bool { model.agentsEnabled }
+    /// The state the pill is drawn in. Off, no agent works or waits.
+    private var shownMode: UnifiedBars.Mode { showsAgents ? previewMode : .idle }
     private var nookPreferences: NookDisplayPreferences { model.nook.displayPreferences(for: profile) }
     private var layout: V6ClosedLayout { profile == .notch ? .macbook : .external }
 
@@ -49,13 +54,16 @@ struct ClosedPreviewSection: View {
             HStack(alignment: .center, spacing: 8) {
                 PersonalizationSectionHeader(title: lang.t("settings.appearance.preview"), note: nil)
                 Spacer(minLength: 8)
-                Button {
-                    isShowingStage = true
-                } label: {
-                    PreviewPlayLabel(title: lang.t("settings.appearance.stage.seeInAction"))
-                        .contentShape(Capsule())
+                // The stage plays an agent working, asking and finishing.
+                if showsAgents {
+                    Button {
+                        isShowingStage = true
+                    } label: {
+                        PreviewPlayLabel(title: lang.t("settings.appearance.stage.seeInAction"))
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(PressableButtonStyle())
                 }
-                .buttonStyle(PressableButtonStyle())
             }
 
             SettingsPreviewStage(contentTopPadding: 16, contentBottomPadding: 18) {
@@ -76,7 +84,7 @@ struct ClosedPreviewSection: View {
                 onClose: { isShowingStage = false }
             )
         }
-        .task(id: previewAutoCycle) {
+        .task(id: AutoCycleRun(isOn: previewAutoCycle, showsAgents: showsAgents)) {
             await runAutoCycle()
         }
         .task(id: flashToken) {
@@ -100,18 +108,16 @@ struct ClosedPreviewSection: View {
             }
 
             IslandPreviewPill(
-                mode: previewMode,
+                mode: shownMode,
                 label: previewNookLabel(activity: activity) ?? previewLabel,
                 rightSlot: previewRightContent,
                 layout: layout,
                 physicalNotchWidth: Self.physicalNotchWidth,
                 activity: activity,
-                agentsNeedAttention: previewMode == .waiting,
+                agentsNeedAttention: shownMode == .waiting,
                 agentStatusTint: previewNookStatusTint,
                 leftSlot: previewNookSideSlot,
-                rightExtra: nookPreferences.rightSlot.flatMap {
-                    AppearanceSettingsPane.sampleSideSlot($0, mode: previewMode)
-                }
+                rightExtra: nookPreferences.rightSlot.flatMap(sampleSideSlot)
             )
             .equatable()
             // `IslandPreviewPill` fills the width, so size it to the pill
@@ -144,11 +150,11 @@ struct ClosedPreviewSection: View {
             style: preferences.haloStyle,
             policy: SystemMotionMonitor.shared.policy,
             isOpened: false,
-            waiting: previewMode == .waiting ? .approval : nil,
-            flashToken: flashToken,
+            waiting: shownMode == .waiting ? .approval : nil,
+            flashToken: showsAgents ? flashToken : nil,
             noticeTint: nil,
             musicTint: musicTint,
-            isRunning: previewMode == .running,
+            isRunning: shownMode == .running,
             palette: preferences.haloColors.effectivePalette,
             isMusicPlaying: followsMusic
         ))
@@ -158,28 +164,31 @@ struct ClosedPreviewSection: View {
 
     private var controls: some View {
         HStack(spacing: 10) {
-            // Auto-cycle toggle (default on, drives the state chips).
-            MonoChip(
-                title: previewAutoCycle
-                    ? lang.t("settings.appearance.state.auto.on")
-                    : lang.t("settings.appearance.state.auto.off"),
-                selected: previewAutoCycle
-            ) {
-                withMotion(Motion.contentSwap) { previewAutoCycle.toggle() }
-            }
+            // Every chip but Music picks what an agent is doing.
+            if showsAgents {
+                // Auto-cycle toggle (default on, drives the state chips).
+                MonoChip(
+                    title: previewAutoCycle
+                        ? lang.t("settings.appearance.state.auto.on")
+                        : lang.t("settings.appearance.state.auto.off"),
+                    selected: previewAutoCycle
+                ) {
+                    withMotion(Motion.contentSwap) { previewAutoCycle.toggle() }
+                }
 
-            // Manual state chips; selecting one turns off auto-cycle.
-            ForEach(Self.autoCycleOrder, id: \.self) { mode in
-                MonoChip(title: title(for: mode), selected: !previewAutoCycle && previewMode == mode) {
-                    withMotion(Motion.contentSwap) {
-                        previewAutoCycle = false
-                        previewMode = mode
+                // Manual state chips; selecting one turns off auto-cycle.
+                ForEach(Self.autoCycleOrder, id: \.self) { mode in
+                    MonoChip(title: title(for: mode), selected: !previewAutoCycle && previewMode == mode) {
+                        withMotion(Motion.contentSwap) {
+                            previewAutoCycle = false
+                            previewMode = mode
+                        }
                     }
                 }
-            }
 
-            MonoChip(title: lang.t("settings.appearance.nook.preview.done"), selected: flashToken != nil) {
-                playDoneFlash()
+                MonoChip(title: lang.t("settings.appearance.nook.preview.done"), selected: flashToken != nil) {
+                    playDoneFlash()
+                }
             }
 
             MonoChip(title: lang.t("settings.appearance.nook.preview.music"), selected: previewMusic) {
@@ -202,7 +211,8 @@ struct ClosedPreviewSection: View {
     }
 
     private func runAutoCycle() async {
-        guard previewAutoCycle else { return }
+        // There is nothing to cycle through with the agents switched off.
+        guard previewAutoCycle, showsAgents else { return }
 
         for _ in 0..<Self.autoCycleSteps {
             try? await Task.sleep(for: Self.autoCycleInterval)
@@ -255,7 +265,7 @@ struct ClosedPreviewSection: View {
     }
 
     private var previewLabel: String? {
-        guard layout == .external, centerLabel != .off else { return nil }
+        guard showsAgents, layout == .external, centerLabel != .off else { return nil }
         switch (previewMode, centerLabel) {
         case (.idle, _):               return nil
         case (.waiting, _):            return lang.t("settings.appearance.preview.permissionNeeded")
@@ -276,25 +286,35 @@ struct ClosedPreviewSection: View {
         guard layout == .external else { return nil }
         let preferences = nookPreferences
         if preferences.centerLabelShowsTrack,
-           previewMode != .waiting,
+           shownMode != .waiting,
            activity?.showsArtwork == true {
             let title = model.nook.nowPlaying?.title ?? lang.t("settings.appearance.nook.preview.track")
             return AppModel.truncatedLabel(title, limit: AppModel.nookTrackLabelLimit)
         }
         // The agents have nothing to say while idle; the next event may.
-        if preferences.centerLabelShowsNextEvent, previewMode == .idle {
+        if preferences.centerLabelShowsNextEvent, shownMode == .idle {
             return lang.t("settings.appearance.nook.preview.event")
         }
         return nil
     }
 
+    /// The left side as the live island fills it: nil for the agent bars,
+    /// and an empty side for a slot that shows agents while they are off.
     private var previewNookSideSlot: NookSideSlotContent? {
         let slot = nookPreferences.leftSlot
-        return slot == .agents ? nil : AppearanceSettingsPane.sampleSideSlot(slot, mode: previewMode)
+        guard showsAgents else { return sampleSideSlot(slot) ?? .hidden }
+        return slot == .agents ? nil : sampleSideSlot(slot)
+    }
+
+    /// The sample for one side slot, nil for one that shows agents while
+    /// the agents are switched off.
+    private func sampleSideSlot(_ slot: NookSideSlot) -> NookSideSlotContent? {
+        if !showsAgents, slot.needsAgents { return nil }
+        return AppearanceSettingsPane.sampleSideSlot(slot, mode: shownMode)
     }
 
     private var previewNookStatusTint: Color? {
-        guard nookPreferences.showsAgentDotOnArt else { return nil }
+        guard showsAgents, nookPreferences.showsAgentDotOnArt else { return nil }
         switch previewMode {
         case .waiting: return IslandDesignPalette.Status.waitingAggregate
         case .running: return IslandDesignPalette.Status.running
@@ -303,10 +323,18 @@ struct ClosedPreviewSection: View {
     }
 
     private var previewRightContent: IslandRightSlotContent? {
+        guard showsAgents else { return nil }
         switch rightSlot {
         case .none: return nil
         case .count: return .count(3)
         case .agents: return .agents(previewAgentCells)
         }
     }
+}
+
+/// What restarts the preview's own cycle: the Auto chip and the agents
+/// switch.
+private struct AutoCycleRun: Hashable {
+    var isOn: Bool
+    var showsAgents: Bool
 }

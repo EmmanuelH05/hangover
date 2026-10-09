@@ -32,17 +32,53 @@ struct OnboardingPageView: View {
 
     private var welcome: some View {
         VStack(spacing: 0) {
-            OnboardingScreenArt()
-                .frame(width: 640, height: 200)
+            OnboardingScreenArt(showsContent: state.agentsEnabled)
+                .frame(width: 640, height: 170)
                 .padding(.top, 14)
-            Spacer(minLength: 16)
+            Spacer(minLength: 12)
             OnboardingHeading(
                 title: lang.t("onboarding.welcome.title"),
-                text: lang.t("onboarding.welcome.body"),
+                text: lang.t(state.agentsEnabled ? "onboarding.welcome.body" : "onboarding.welcome.body.nookOnly"),
                 titleSize: 30
             )
-            Spacer(minLength: 16)
+            Spacer(minLength: 12)
+            agentsSwitch
+            Spacer(minLength: 12)
         }
+    }
+
+    /// The agents switch (D41), the same preference as the one in Settings.
+    /// It is drawn in SwiftUI alone, like every control in the tour: a
+    /// system switch would come out blank in a snapshot.
+    private var agentsSwitch: some View {
+        let isOn = state.agentsEnabled
+        let title = lang.t("onboarding.welcome.agents.title")
+        return Button {
+            actions.setAgentsEnabled(!isOn)
+        } label: {
+            HStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(OnboardingStyle.primaryText)
+                    Text(lang.t(isOn ? "onboarding.welcome.agents.note.on" : "onboarding.welcome.agents.note.off"))
+                        .font(.system(size: 12))
+                        .foregroundStyle(OnboardingStyle.secondaryText)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                OnboardingSwitchArt(isOn: isOn)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background(card)
+            .contentShape(RoundedRectangle(cornerRadius: OnboardingStyle.cardCornerRadius, style: .continuous))
+        }
+        .buttonStyle(PressableButtonStyle())
+        .frame(width: 560)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
     // MARK: - 2. Opening the island
@@ -299,7 +335,10 @@ struct OnboardingPageView: View {
 
     private var nook: some View {
         VStack(spacing: 12) {
-            OnboardingHeading(title: lang.t("onboarding.nook.title"), text: lang.t("onboarding.nook.body"))
+            OnboardingHeading(
+                title: lang.t("onboarding.nook.title"),
+                text: lang.t(state.agentsEnabled ? "onboarding.nook.body" : "onboarding.nook.body.nookOnly")
+            )
 
             HStack(spacing: 6) {
                 ForEach(NookWidgetKind.allCases) { kind in
@@ -311,7 +350,7 @@ struct OnboardingPageView: View {
                 .multilineTextAlignment(.center)
 
             HStack(spacing: 5) {
-                ForEach(PersonalizationTemplate.all) { template in
+                ForEach(PersonalizationTemplate.offered(agentsEnabled: state.agentsEnabled)) { template in
                     templateCard(template)
                 }
             }
@@ -352,12 +391,12 @@ struct OnboardingPageView: View {
     }
 
     private func templateCard(_ template: PersonalizationTemplate) -> some View {
-        let text = TemplateText(template.id, lang: lang)
+        let text = TemplateText(template.id, lang: lang, showsAgents: state.agentsEnabled)
         return OnboardingChoiceCard(isSelected: state.shownTemplate == template.id) {
             actions.applyTemplate(template)
         } content: {
             VStack(alignment: .leading, spacing: 7) {
-                TemplateThumbnail(template: template)
+                TemplateThumbnail(template: template, showsAgents: state.agentsEnabled)
                 Text(text.title)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(OnboardingStyle.primaryText)
@@ -379,7 +418,10 @@ struct OnboardingPageView: View {
 
     private var look: some View {
         VStack(spacing: 12) {
-            OnboardingHeading(title: lang.t("onboarding.look.title"), text: lang.t("onboarding.look.body"))
+            OnboardingHeading(
+                title: lang.t("onboarding.look.title"),
+                text: lang.t(state.agentsEnabled ? "onboarding.look.body" : "onboarding.look.body.nookOnly")
+            )
 
             HStack(spacing: 14) {
                 ForEach(IslandHaloStyle.allCases) { style in
@@ -391,7 +433,8 @@ struct OnboardingPageView: View {
                                 width: 170,
                                 height: 28,
                                 glow: style == .off ? nil : glowSampleColor,
-                                glowStrength: style == .vivid ? 1 : 0.45
+                                glowStrength: style == .vivid ? 1 : 0.45,
+                                showsContent: state.agentsEnabled
                             )
                             .frame(maxWidth: .infinity)
                             .frame(height: 76)
@@ -423,19 +466,15 @@ struct OnboardingPageView: View {
     }
 
     /// The color the three sample pills glow in: the chosen theme's color
-    /// for an agent that waits for approval.
+    /// for an agent that waits for approval, or its color for a notice
+    /// while the agents are switched off.
     private var glowSampleColor: Color {
-        state.glowThemeID.flatMap(IslandHaloTheme.theme(id:))?.palette.approval.color ?? OnboardingStyle.waiting
+        let palette = state.glowThemeID.flatMap(IslandHaloTheme.theme(id:))?.palette
+        let color = state.agentsEnabled ? palette?.approval : palette?.notice
+        return color?.color ?? OnboardingStyle.waiting
     }
 
     // MARK: - 6. Permissions
-
-    private static let grants: [(symbol: String, name: String)] = [
-        ("camera.fill", "camera"),
-        ("accessibility", "accessibility"),
-        ("calendar", "calendar"),
-        ("terminal.fill", "automation"),
-    ]
 
     /// Says in plain words what asks macOS for access and when. Nothing on
     /// this page asks for anything: it has no button at all.
@@ -444,7 +483,8 @@ struct OnboardingPageView: View {
             OnboardingHeading(title: lang.t("onboarding.permissions.title"), text: lang.t("onboarding.permissions.body"))
 
             VStack(spacing: 0) {
-                ForEach(Array(Self.grants.enumerated()), id: \.element.name) { index, grant in
+                let grants = OnboardingGrant.shown(agentsEnabled: state.agentsEnabled)
+                ForEach(Array(grants.enumerated()), id: \.element) { index, grant in
                     if index > 0 { divider }
                     HStack(alignment: .top, spacing: 12) {
                         Image(systemName: grant.symbol)
@@ -455,10 +495,10 @@ struct OnboardingPageView: View {
                                 RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.09))
                             )
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(lang.t("onboarding.permissions.\(grant.name).title"))
+                            Text(lang.t("onboarding.permissions.\(grant.rawValue).title"))
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(OnboardingStyle.primaryText)
-                            Text(lang.t("onboarding.permissions.\(grant.name).note"))
+                            Text(lang.t("onboarding.permissions.\(grant.rawValue).note"))
                                 .font(.system(size: 12))
                                 .foregroundStyle(OnboardingStyle.secondaryText)
                                 .multilineTextAlignment(.leading)
@@ -482,8 +522,14 @@ struct OnboardingPageView: View {
 
     private var done: some View {
         VStack(spacing: 0) {
-            OnboardingPillArt(width: 230, height: 34, glow: OnboardingStyle.finished, glowStrength: 0.85)
-                .frame(height: 74)
+            OnboardingPillArt(
+                width: 230,
+                height: 34,
+                glow: OnboardingStyle.finished,
+                glowStrength: 0.85,
+                showsContent: state.agentsEnabled
+            )
+            .frame(height: 74)
                 .padding(.top, 2)
 
             OnboardingHeading(
@@ -494,19 +540,11 @@ struct OnboardingPageView: View {
             .padding(.bottom, 12)
 
             VStack(spacing: 0) {
-                recapRow("onboarding.done.recap.opens") { recapValue(lang.t(state.openTrigger.titleKey)) }
-                divider
-                recapRow("onboarding.done.recap.agents") { recapValue(connectedAgentsText) }
-                divider
-                recapRow("onboarding.done.recap.approve") { recapKeys(state.approveKeys) }
-                divider
-                recapRow("onboarding.done.recap.deny") { recapKeys(state.denyKeys) }
-                divider
-                recapRow("onboarding.done.recap.glow") { recapValue(glowText) }
-                divider
-                recapRow("onboarding.done.recap.layout") { recapValue(layoutText) }
-                divider
-                recapRow("onboarding.done.recap.opened") { recapValue(openedLookText) }
+                let rows = OnboardingRecapRow.shown(agentsEnabled: state.agentsEnabled)
+                ForEach(Array(rows.enumerated()), id: \.element) { index, row in
+                    if index > 0 { divider }
+                    recapRow("onboarding.done.recap.\(row.rawValue)") { recapContent(row) }
+                }
             }
             .background(card)
             .frame(width: 520)
@@ -517,6 +555,19 @@ struct OnboardingPageView: View {
                 .padding(.top, 10)
 
             Spacer(minLength: 0)
+        }
+    }
+
+    @ViewBuilder
+    private func recapContent(_ row: OnboardingRecapRow) -> some View {
+        switch row {
+        case .opens: recapValue(lang.t(state.openTrigger.titleKey))
+        case .agents: recapValue(connectedAgentsText)
+        case .approve: recapKeys(state.approveKeys)
+        case .deny: recapKeys(state.denyKeys)
+        case .glow: recapValue(glowText)
+        case .layout: recapValue(layoutText)
+        case .opened: recapValue(openedLookText)
         }
     }
 
@@ -605,6 +656,72 @@ struct OnboardingPageView: View {
             .font(.system(size: 11.5))
             .foregroundStyle(OnboardingStyle.faintText)
             .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// What the permissions page lists, in order. The raw value is the name in
+/// the page's string keys.
+enum OnboardingGrant: String, CaseIterable, Sendable {
+    case camera
+    case accessibility
+    case calendar
+    /// Asked for by the session monitor, a terminal jump and a reply, all
+    /// of which belong to the agent half.
+    case automation
+
+    var symbol: String {
+        switch self {
+        case .camera: "camera.fill"
+        case .accessibility: "accessibility"
+        case .calendar: "calendar"
+        case .automation: "terminal.fill"
+        }
+    }
+
+    var isAgentsOnly: Bool { self == .automation }
+
+    static func shown(agentsEnabled: Bool) -> [OnboardingGrant] {
+        agentsEnabled ? allCases : allCases.filter { !$0.isAgentsOnly }
+    }
+}
+
+/// The rows of the last page's recap, in order. The raw value is the name
+/// in the row's string key.
+enum OnboardingRecapRow: String, CaseIterable, Sendable {
+    case opens
+    case agents
+    case approve
+    case deny
+    case glow
+    case layout
+    case opened
+
+    var isAgentsOnly: Bool {
+        self == .agents || self == .approve || self == .deny
+    }
+
+    static func shown(agentsEnabled: Bool) -> [OnboardingRecapRow] {
+        agentsEnabled ? allCases : allCases.filter { !$0.isAgentsOnly }
+    }
+}
+
+/// A switch drawn in SwiftUI: a track and a knob that slides.
+struct OnboardingSwitchArt: View {
+    let isOn: Bool
+
+    private static let size = CGSize(width: 42, height: 24)
+    private static let knobInset: CGFloat = 3
+
+    var body: some View {
+        Capsule()
+            .fill(isOn ? OnboardingStyle.finished : Color.white.opacity(0.16))
+            .frame(width: Self.size.width, height: Self.size.height)
+            .overlay(alignment: isOn ? .trailing : .leading) {
+                Circle()
+                    .fill(Color.white)
+                    .padding(Self.knobInset)
+            }
+            .accessibilityHidden(true)
     }
 }
 

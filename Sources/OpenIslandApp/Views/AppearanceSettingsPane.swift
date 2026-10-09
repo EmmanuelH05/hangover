@@ -25,6 +25,9 @@ struct AppearanceSettingsPane: View {
         model.appearancePreferences(for: editingProfile)
     }
     private var languageCode: String { lang.language.resolvedCode }
+    /// The agents switch. Off, the tab leaves out every choice that only
+    /// makes sense with agents (D41).
+    var showsAgents: Bool { model.agentsEnabled }
 
     var body: some View {
         ScrollView {
@@ -87,9 +90,15 @@ struct AppearanceSettingsPane: View {
                 rightSlot: editingPreferences.rightSlot,
                 centerLabel: editingPreferences.centerLabel
             )
-            rightSlotSection
-            nookHost { nookRightSlotExtras }
-            centerLabelSection
+            if showsAgents {
+                rightSlotSection
+                nookHost { nookRightSlotExtras }
+                centerLabelSection
+            } else {
+                // The island's own three cards and both center labels show
+                // agents. What is left of the right side is one row.
+                nookHost { nookRightSlotWithoutAgents }
+            }
             nookHost { nookLeftSlotSection }
             nookHost { nookClosedSection }
             nookHost { nookHaloSection }
@@ -100,14 +109,20 @@ struct AppearanceSettingsPane: View {
 
     private var sessionListPersonalizationPart: some View {
         VStack(alignment: .leading, spacing: 18) {
-            partHeader(title: lang.t("settings.appearance.sessionListPart.title"))
-            sessionListPreviewSection
+            // With the agents switched off the opened island has no
+            // session list, and the part is named for what is left.
+            partHeader(title: lang.t(
+                showsAgents ? "settings.appearance.sessionListPart.title" : "settings.appearance.openedPart.title"
+            ))
+            if showsAgents { sessionListPreviewSection }
             nookHost { nookOpenedLookSection }
-            usageDisplaySection
-            stateIndicatorSection
-            sessionGroupSection
-            sessionSortSection
-            staleThresholdSection
+            if showsAgents {
+                usageDisplaySection
+                stateIndicatorSection
+                sessionGroupSection
+                sessionSortSection
+                staleThresholdSection
+            }
             nookHost { nookOpenedSection }
         }
     }

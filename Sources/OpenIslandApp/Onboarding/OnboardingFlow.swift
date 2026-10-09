@@ -19,6 +19,26 @@ enum OnboardingPage: Int, CaseIterable, Identifiable, Sendable {
     var next: OnboardingPage? { OnboardingPage(rawValue: rawValue + 1) }
     var previous: OnboardingPage? { OnboardingPage(rawValue: rawValue - 1) }
 
+    /// True for a page that is only about agents.
+    var isAgentsOnly: Bool { self == .agents }
+
+    /// True for the page that carries the agents switch. It is the first
+    /// page, which no run of the tour leaves out.
+    var offersAgentsSwitch: Bool { self == .welcome }
+
+    /// The pages a tour walks, in order. With the agents switched off the
+    /// agents page is left out (D41).
+    static func shown(agentsEnabled: Bool) -> [OnboardingPage] {
+        agentsEnabled ? allCases : allCases.filter { !$0.isAgentsOnly }
+    }
+
+    /// The page to show for `page`: itself, or the nearest page before it
+    /// when `pages` leaves it out.
+    static func landing(_ page: OnboardingPage, in pages: [OnboardingPage]) -> OnboardingPage {
+        if pages.contains(page) { return page }
+        return pages.last { $0.rawValue < page.rawValue } ?? pages.first ?? page
+    }
+
     /// File name of this page's picture in the render snapshots.
     var snapshotName: String {
         switch self {
@@ -48,13 +68,19 @@ enum OnboardingOutcome: Equatable, Sendable {
 struct OnboardingFlow: Equatable, Sendable {
     private(set) var page: OnboardingPage
     private(set) var outcome: OnboardingOutcome?
-
-    init(startingAt page: OnboardingPage = .welcome) {
-        self.page = page
+    /// The pages this run walks, in tour order. A page that is taken out
+    /// while it is up gives way to the one before it.
+    var pages: [OnboardingPage] {
+        didSet { page = OnboardingPage.landing(page, in: pages) }
     }
 
-    var isFirstPage: Bool { page.previous == nil }
-    var isLastPage: Bool { page.next == nil }
+    init(startingAt page: OnboardingPage = .welcome, pages: [OnboardingPage] = OnboardingPage.allCases) {
+        self.pages = pages
+        self.page = OnboardingPage.landing(page, in: pages)
+    }
+
+    var isFirstPage: Bool { page == pages.first }
+    var isLastPage: Bool { page == pages.last }
     var hasEnded: Bool { outcome != nil }
 
     /// Finishing and skipping both count as having seen the tour. Either
@@ -64,8 +90,8 @@ struct OnboardingFlow: Equatable, Sendable {
     /// One page on. On the last page this finishes the tour.
     mutating func next() {
         guard !hasEnded else { return }
-        if let next = page.next {
-            page = next
+        if let index = pages.firstIndex(of: page), index + 1 < pages.count {
+            page = pages[index + 1]
         } else {
             outcome = .finished
         }
@@ -73,13 +99,14 @@ struct OnboardingFlow: Equatable, Sendable {
 
     /// One page back. Nothing on the first page.
     mutating func back() {
-        guard !hasEnded, let previous = page.previous else { return }
-        page = previous
+        guard !hasEnded, let index = pages.firstIndex(of: page), index > 0 else { return }
+        page = pages[index - 1]
     }
 
-    /// Straight to a page, from a progress dot.
+    /// Straight to a page, from a progress dot. A page this run leaves out
+    /// is not gone to.
     mutating func go(to page: OnboardingPage) {
-        guard !hasEnded else { return }
+        guard !hasEnded, pages.contains(page) else { return }
         self.page = page
     }
 

@@ -21,14 +21,60 @@ extension AppearanceSettingsPane {
     var nookLeftSlotSection: some View {
         PersonalizationSectionHeader(
             title: lang.t("settings.appearance.nook.leftSlot.title"),
-            note: lang.t("settings.appearance.nook.leftSlot.note")
+            note: lang.t(
+                showsAgents
+                    ? "settings.appearance.nook.leftSlot.note"
+                    : "settings.appearance.nook.leftSlot.note.nookOnly"
+            )
         )
 
-        nookSideSlotRow([.agents, .count, .grid, .none], group: "nook.leftSlot.first", current: { $0.leftSlot }) { slot in
-            updateNook { $0.leftSlot = slot }
+        if showsAgents {
+            nookSideSlotRow([.agents, .count, .grid, .none], group: "nook.leftSlot.first", current: { $0.leftSlot }) { slot in
+                updateNook { $0.leftSlot = slot }
+            }
+            nookSideSlotRow([.date, .battery, .countdown], group: "nook.leftSlot.second", current: { $0.leftSlot }) { slot in
+                updateNook { $0.leftSlot = slot }
+            }
+        } else {
+            nookSideSlotRow(Self.sideSlotsWithoutAgents, group: "nook.leftSlot.nookOnly", current: { $0.leftSlot }) { slot in
+                updateNook { preferences in
+                    // A saved choice that shows agents already reads as
+                    // None. Picking None must not throw it away.
+                    guard slot != .none || !preferences.leftSlot.needsAgents else { return }
+                    preferences.leftSlot = slot
+                }
+            }
         }
-        nookSideSlotRow([.date, .battery, .countdown], group: "nook.leftSlot.second", current: { $0.leftSlot }) { slot in
-            updateNook { $0.leftSlot = slot }
+    }
+
+    /// The cards one side offers while the agents are switched off (D41):
+    /// nothing, or one of the three items that are the Nook's.
+    static let sideSlotsWithoutAgents: [NookSideSlot] = [.none, .date, .battery, .countdown]
+
+    /// The right side while the agents are switched off, as one row. None
+    /// takes a Nook item off the side and leaves the island's own saved
+    /// slot alone, which brings that slot back with the switch.
+    @ViewBuilder
+    var nookRightSlotWithoutAgents: some View {
+        PersonalizationSectionHeader(
+            title: lang.t("settings.appearance.rightSlot.title"),
+            note: lang.t("settings.appearance.rightSlot.note")
+        )
+
+        nookSideSlotRow(
+            Self.sideSlotsWithoutAgents,
+            group: "nook.rightSlot.nookOnly",
+            current: { $0.rightSlot ?? NookSideSlot.none }
+        ) { slot in
+            if slot == .none {
+                updateNook { preferences in
+                    if preferences.rightSlot?.needsAgents == false { preferences.rightSlot = nil }
+                }
+            } else {
+                withMotion(Motion.selection) {
+                    model.chooseRightSide(.extra(slot), for: editingProfile)
+                }
+            }
         }
     }
 
@@ -45,17 +91,25 @@ extension AppearanceSettingsPane {
 
     /// A row of side-slot cards. The row reads the current slot only while it
     /// is one of this row's own, so choosing a card in one row leaves the
-    /// other row alone.
+    /// other row alone. With the agents switched off the row leaves out the
+    /// cards that show agents, and a saved one of those reads as None.
     private func nookSideSlotRow(
-        _ slots: [NookSideSlot],
+        _ allSlots: [NookSideSlot],
         group: String,
         current: @escaping (NookDisplayPreferences) -> NookSideSlot?,
         pick: @escaping (NookSideSlot) -> Void
     ) -> some View {
-        NookSliceReader(
+        let showsAgents = showsAgents
+        let slots = AgentsSwitch.offered(allSlots, agentsEnabled: showsAgents)
+        return NookSliceReader(
             nook: model.nook,
             profile: editingProfile,
-            select: { preferences in current(preferences).flatMap { slots.contains($0) ? $0 : nil } }
+            showsAgents: showsAgents,
+            select: { preferences in
+                current(preferences)
+                    .map { AgentsSwitch.shown($0, agentsEnabled: showsAgents) }
+                    .flatMap { slots.contains($0) ? $0 : nil }
+            }
         ) { selected in
             NookCardRow(
                 options: slots,
@@ -84,7 +138,13 @@ extension AppearanceSettingsPane {
             note: lang.t("settings.appearance.nook.closed.note")
         )
 
-        NookSliceReader(nook: model.nook, profile: editingProfile, select: \.mediaStyle) { selected in
+        let showsAgents = showsAgents
+        NookSliceReader(
+            nook: model.nook,
+            profile: editingProfile,
+            showsAgents: showsAgents,
+            select: \.mediaStyle
+        ) { selected in
             NookCardRow(
                 options: NookClosedMediaStyle.allCases,
                 selected: selected,
@@ -92,33 +152,41 @@ extension AppearanceSettingsPane {
                 title: { nookTitle(for: $0) },
                 pick: { style in updateNook { $0.mediaStyle = style } }
             ) { style in
-                NookMediaStylePreview(style: style)
+                NookMediaStylePreview(style: style, showsAgents: showsAgents)
             }
         }
 
         VStack(spacing: 8) {
-            nookToggleRow(
-                titleKey: "settings.appearance.nook.reclaim.title",
-                noteKey: "settings.appearance.nook.reclaim.note",
-                \.agentsReclaimRightSide,
-                enabledWhen: { $0.mediaStyle == .artAndVisual }
-            )
-            nookToggleRow(
-                titleKey: "settings.appearance.nook.dot.title",
-                noteKey: "settings.appearance.nook.dot.note",
-                \.showsAgentDotOnArt,
-                enabledWhen: { $0.mediaStyle != .off }
-            )
+            // Both rows say what an agent does to the music.
+            if showsAgents {
+                nookToggleRow(
+                    titleKey: "settings.appearance.nook.reclaim.title",
+                    noteKey: "settings.appearance.nook.reclaim.note",
+                    \.agentsReclaimRightSide,
+                    enabledWhen: { $0.mediaStyle == .artAndVisual }
+                )
+                nookToggleRow(
+                    titleKey: "settings.appearance.nook.dot.title",
+                    noteKey: "settings.appearance.nook.dot.note",
+                    \.showsAgentDotOnArt,
+                    enabledWhen: { $0.mediaStyle != .off }
+                )
+            }
             if editingProfile == .topBar {
+                // Each note has a wording that leaves the agents out.
                 nookToggleRow(
                     titleKey: "settings.appearance.nook.track.title",
-                    noteKey: "settings.appearance.nook.track.note",
+                    noteKey: showsAgents
+                        ? "settings.appearance.nook.track.note"
+                        : "settings.appearance.nook.track.note.nookOnly",
                     \.centerLabelShowsTrack,
                     enabledWhen: { $0.mediaStyle != .off }
                 )
                 nookToggleRow(
                     titleKey: "settings.appearance.nook.nextEvent.title",
-                    noteKey: "settings.appearance.nook.nextEvent.note",
+                    noteKey: showsAgents
+                        ? "settings.appearance.nook.nextEvent.note"
+                        : "settings.appearance.nook.nextEvent.note.nookOnly",
                     \.centerLabelShowsNextEvent
                 )
             }
@@ -134,15 +202,29 @@ extension AppearanceSettingsPane {
 
     @ViewBuilder
     var nookHaloSection: some View {
+        let showsAgents = showsAgents
         PersonalizationSectionHeader(
             title: lang.t("settings.appearance.nook.halo.title"),
-            note: lang.t("settings.appearance.nook.halo.note")
+            note: lang.t(
+                showsAgents
+                    ? "settings.appearance.nook.halo.note"
+                    : "settings.appearance.nook.halo.note.nookOnly"
+            )
         )
 
         NookSliceReader(
             nook: model.nook,
             profile: editingProfile,
-            select: { NookHaloStyleChoice(style: $0.haloStyle, color: $0.haloColors.effectivePalette.approval) }
+            showsAgents: showsAgents,
+            select: {
+                // The sample glows as a waiting agent does, or as a notice
+                // does while the agents are switched off.
+                let palette = $0.haloColors.effectivePalette
+                return NookHaloStyleChoice(
+                    style: $0.haloStyle,
+                    color: showsAgents ? palette.approval : palette.noticeColor(own: IslandHaloPalette.suggestedNotice)
+                )
+            }
         ) { choice in
             NookCardRow(
                 options: IslandHaloStyle.allCases,
@@ -155,7 +237,7 @@ extension AppearanceSettingsPane {
             }
         }
 
-        GlowColorsSection(nook: model.nook, profile: editingProfile)
+        GlowColorsSection(nook: model.nook, profile: editingProfile, showsAgents: showsAgents)
 
         VStack(alignment: .leading, spacing: 8) {
             nookToggleRow(
@@ -219,36 +301,40 @@ extension AppearanceSettingsPane {
 
     @ViewBuilder
     var nookOpenedSection: some View {
-        PersonalizationSectionHeader(
-            title: lang.t("settings.appearance.nook.opened.title"),
-            note: lang.t("settings.appearance.nook.opened.note")
-        )
+        // Which page opens first and the rows that link the two pages.
+        // With the agents switched off the Nook is the only page.
+        if showsAgents {
+            PersonalizationSectionHeader(
+                title: lang.t("settings.appearance.nook.opened.title"),
+                note: lang.t("settings.appearance.nook.opened.note")
+            )
 
-        NookSliceReader(nook: model.nook, profile: editingProfile, select: \.openedPage) { selected in
-            NookCardRow(
-                options: NookOpenedPage.allCases,
-                selected: selected,
-                ringGroup: "nook.openedPage",
-                title: { nookTitle(for: $0) },
-                pick: { page in updateNook { $0.openedPage = page } }
-            ) { page in
-                Image(systemName: Self.nookSymbol(for: page))
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(V6Palette.paper.opacity(0.85))
+            NookSliceReader(nook: model.nook, profile: editingProfile, select: \.openedPage) { selected in
+                NookCardRow(
+                    options: NookOpenedPage.allCases,
+                    selected: selected,
+                    ringGroup: "nook.openedPage",
+                    title: { nookTitle(for: $0) },
+                    pick: { page in updateNook { $0.openedPage = page } }
+                ) { page in
+                    Image(systemName: Self.nookSymbol(for: page))
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(V6Palette.paper.opacity(0.85))
+                }
             }
-        }
 
-        VStack(spacing: 8) {
-            nookToggleRow(
-                titleKey: "settings.appearance.nook.compactBar.title",
-                noteKey: "settings.appearance.nook.compactBar.note",
-                \.showsCompactBar
-            )
-            nookToggleRow(
-                titleKey: "settings.appearance.nook.agentsBar.title",
-                noteKey: "settings.appearance.nook.agentsBar.note",
-                \.showsAgentsBar
-            )
+            VStack(spacing: 8) {
+                nookToggleRow(
+                    titleKey: "settings.appearance.nook.compactBar.title",
+                    noteKey: "settings.appearance.nook.compactBar.note",
+                    \.showsCompactBar
+                )
+                nookToggleRow(
+                    titleKey: "settings.appearance.nook.agentsBar.title",
+                    noteKey: "settings.appearance.nook.agentsBar.note",
+                    \.showsAgentsBar
+                )
+            }
         }
 
         nookWidgetsSection
@@ -371,6 +457,7 @@ extension AppearanceSettingsPane {
         NookSliceReader(
             nook: model.nook,
             profile: editingProfile,
+            showsAgents: showsAgents,
             select: { NookSwitchState(isOn: $0[keyPath: keyPath], isEnabled: isEnabled($0)) }
         ) { state in
             PersonalizationToggleRow(
@@ -491,17 +578,23 @@ private struct NookCalendarChoices: Equatable, Sendable {
 private struct NookSliceReader<Slice: Equatable & Sendable, Content: View>: View {
     let nook: NookModel
     let profile: IslandAppearanceDisplayProfile
+    /// The agents switch, for content that draws differently with it off.
+    /// It is part of what makes two hosts equal, which is what lets such
+    /// content redraw when only the switch changed.
+    let showsAgents: Bool
     private let read: () -> Slice
     private let content: (Slice) -> Content
 
     init(
         nook: NookModel,
         profile: IslandAppearanceDisplayProfile,
+        showsAgents: Bool = true,
         select: @escaping (NookDisplayPreferences) -> Slice,
         @ViewBuilder content: @escaping (Slice) -> Content
     ) {
         self.nook = nook
         self.profile = profile
+        self.showsAgents = showsAgents
         self.read = { select(nook.displayPreferences(for: profile)) }
         self.content = content
     }
@@ -514,12 +607,13 @@ private struct NookSliceReader<Slice: Equatable & Sendable, Content: View>: View
     ) {
         self.nook = nook
         self.profile = profile
+        self.showsAgents = true
         self.read = read
         self.content = content
     }
 
     var body: some View {
-        NookSliceHost(nook: nook, profile: profile, slice: read(), content: content)
+        NookSliceHost(nook: nook, profile: profile, showsAgents: showsAgents, slice: read(), content: content)
             .equatable()
     }
 }
@@ -527,11 +621,13 @@ private struct NookSliceReader<Slice: Equatable & Sendable, Content: View>: View
 private struct NookSliceHost<Slice: Equatable & Sendable, Content: View>: View, Equatable {
     let nook: NookModel
     let profile: IslandAppearanceDisplayProfile
+    let showsAgents: Bool
     let slice: Slice
     let content: (Slice) -> Content
 
     nonisolated static func == (lhs: NookSliceHost, rhs: NookSliceHost) -> Bool {
-        lhs.nook === rhs.nook && lhs.profile == rhs.profile && lhs.slice == rhs.slice
+        lhs.nook === rhs.nook && lhs.profile == rhs.profile
+            && lhs.showsAgents == rhs.showsAgents && lhs.slice == rhs.slice
     }
 
     var body: some View {
@@ -610,6 +706,7 @@ private struct NookHaloStylePreview: View {
     private static func state(for style: IslandHaloStyle, color: IslandHaloRGB) -> IslandHaloState {
         guard style != .off else { return .off }
         let metrics = IslandHaloMetrics.metrics(for: style)
+        // The source only labels the sample. Its color is the one handed in.
         return IslandHaloState(
             source: .approval,
             color: color,
@@ -675,6 +772,8 @@ private struct NookChipFlow: Layout {
 /// Miniature of the closed island's two sides for each music style.
 private struct NookMediaStylePreview: View {
     let style: NookClosedMediaStyle
+    /// False leaves the agent bars and the session count out of the sample.
+    var showsAgents = true
 
     var body: some View {
         HStack(spacing: 22) {
@@ -684,16 +783,24 @@ private struct NookMediaStylePreview: View {
                 NookBarVisualizer(isPlaying: true, barCount: 4, height: 14, color: V6Palette.paper.opacity(0.85))
             case .artOnly:
                 artTile
-                Text("×3")
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(V6Palette.paper.opacity(0.72))
+                if showsAgents { sessionCount }
             case .off:
-                UnifiedBars(mode: .running, size: 20)
-                Text("×3")
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(V6Palette.paper.opacity(0.72))
+                if showsAgents {
+                    UnifiedBars(mode: .running, size: 20)
+                    sessionCount
+                } else {
+                    Image(systemName: "minus")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(V6Palette.paper.opacity(0.5))
+                }
             }
         }
+    }
+
+    private var sessionCount: some View {
+        Text("×3")
+            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+            .foregroundStyle(V6Palette.paper.opacity(0.72))
     }
 
     private var artTile: some View {

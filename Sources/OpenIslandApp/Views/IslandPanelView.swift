@@ -190,8 +190,14 @@ struct IslandPanelView: View {
         isExternalDisplayPlacement ? .external : .macbook
     }
 
+    /// The page switch is left out while the Nook is the only page.
+    private var openedHeaderButtonCount: CGFloat {
+        model.showsPageSwitch ? 4 : 3
+    }
+
     private var openedHeaderButtonsWidth: CGFloat {
-        (Self.headerControlButtonSize * 4) + (Self.headerControlSpacing * 3)
+        (Self.headerControlButtonSize * openedHeaderButtonCount)
+            + (Self.headerControlSpacing * (openedHeaderButtonCount - 1))
     }
 
     private var openedHeaderHorizontalPadding: CGFloat {
@@ -522,13 +528,15 @@ struct IslandPanelView: View {
         let showsNookPage = presentation.showsNookPage
 
         return HStack(spacing: Self.headerControlSpacing) {
-            headerIconButton(
-                systemName: showsNookPage ? "terminal.fill" : "music.note.house.fill",
-                tint: showsNookPage ? .white.opacity(0.62) : .mint.opacity(0.9),
-                accessibilityLabel: showsNookPage ? "Show agents" : "Show nook"
-            ) {
-                withMotion(Motion.pageSwitch) {
-                    model.toggleNookPage()
+            if model.showsPageSwitch {
+                headerIconButton(
+                    systemName: showsNookPage ? "terminal.fill" : "music.note.house.fill",
+                    tint: showsNookPage ? .white.opacity(0.62) : .mint.opacity(0.9),
+                    accessibilityLabel: showsNookPage ? "Show agents" : "Show nook"
+                ) {
+                    withMotion(Motion.pageSwitch) {
+                        model.toggleNookPage()
+                    }
                 }
             }
 
@@ -1106,7 +1114,8 @@ struct IslandPanelView: View {
     }
 
     private var openedUsageProviders: [UsageProviderPresentation] {
-        guard model.islandUsageDisplay == .compact else {
+        // The usage meters belong to the agent half.
+        guard model.agentsEnabled, model.islandUsageDisplay == .compact else {
             return []
         }
 

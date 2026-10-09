@@ -10,7 +10,7 @@ fi
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 app_name="${OPEN_ISLAND_APP_NAME:-Hangover}"
 bundle_identifier="${OPEN_ISLAND_BUNDLE_ID:-com.emmanuelhernandez.hangover}"
-version="${OPEN_ISLAND_VERSION:-1.0.3}"
+version="${OPEN_ISLAND_VERSION:-1.0.4}"
 build_number="${OPEN_ISLAND_BUILD_NUMBER:-$(git -C "$repo_root" rev-list --count HEAD 2>/dev/null || echo 1)}"
 package_root="${OPEN_ISLAND_PACKAGE_ROOT:-$repo_root/output/package}"
 bundle_dir="${OPEN_ISLAND_BUNDLE_DIR:-$package_root/$app_name.app}"
@@ -225,7 +225,10 @@ if [[ "$skip_smoke_test" == "true" ]]; then
     rm -rf "$(dirname "$smoke_dir")"
 elif [[ -x "$smoke_binary" ]]; then
     # Launch and give it a few seconds — if it crashes, the pid disappears.
-    "$smoke_binary" &
+    # The copy listens on a socket of its own. On the app's real path it
+    # would take the socket from a copy that is already running, and that
+    # copy would hear nothing from its agents until it was restarted.
+    OPEN_ISLAND_SOCKET_PATH="$smoke_dir/bridge.sock" "$smoke_binary" &
     smoke_pid=$!
     sleep 3
     if kill -0 "$smoke_pid" 2>/dev/null; then

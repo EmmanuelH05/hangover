@@ -47,7 +47,9 @@ struct TemplatesSection: View {
             // display switch does.
             apply: { template in withMotion(Motion.morph) { model.applyTemplate(template, for: profile) } },
             undo: { withMotion(Motion.morph) { model.undoTemplate(for: profile) } },
-            preview: { previewed = $0 }
+            // The stage plays an agent working, asking and finishing.
+            preview: model.agentsEnabled ? { previewed = $0 } : nil,
+            showsAgents: model.agentsEnabled
         )
     }
 }
@@ -68,6 +70,9 @@ struct TemplateGallery: View {
     let undo: () -> Void
     /// Opens the preview stage for a template. Nil leaves the control out.
     var preview: ((PersonalizationTemplate) -> Void)? = nil
+    /// False leaves out the template that is all about agents, and draws
+    /// the others without their agent glyphs (D41).
+    var showsAgents = true
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -136,8 +141,8 @@ struct TemplateGallery: View {
 
     private var cards: some View {
         VStack(spacing: 8) {
-            ForEach(PersonalizationTemplate.all) { template in
-                let text = TemplateText(template.id, lang: lang)
+            ForEach(PersonalizationTemplate.offered(agentsEnabled: showsAgents)) { template in
+                let text = TemplateText(template.id, lang: lang, showsAgents: showsAgents)
                 PersonalizationCard(
                     title: text.spokenSummary,
                     selected: applied == template.id,
@@ -152,7 +157,8 @@ struct TemplateGallery: View {
                         isApplied: applied == template.id,
                         appliedTitle: lang.t("settings.appearance.templates.applied"),
                         switchedOffNote: applied == template.id ? switchedOffNote : nil,
-                        previewTitle: preview == nil ? nil : previewTitle
+                        previewTitle: preview == nil ? nil : previewTitle,
+                        showsAgents: showsAgents
                     )
                 }
                 // A sibling above the card, not inside its label: a click
@@ -186,16 +192,33 @@ struct TemplateText: Equatable, Sendable {
     let bestFor: String
     let points: [String]
 
-    init(_ id: PersonalizationTemplate.ID, lang: LanguageManager) {
-        let keys = Self.keys(for: id)
+    /// `showsAgents` false words the points for the app with its agents
+    /// switched off (D41).
+    init(_ id: PersonalizationTemplate.ID, lang: LanguageManager, showsAgents: Bool = true) {
+        let keys = Self.keys(for: id, showsAgents: showsAgents)
         title = lang.t(keys.title)
         bestFor = lang.t(keys.bestFor)
         points = keys.points.map { lang.t($0) }
     }
 
-    static func keys(for id: PersonalizationTemplate.ID) -> (title: String, bestFor: String, points: [String]) {
+    /// The points that speak of agents. Each has a second wording, under
+    /// its key plus `nookOnlySuffix`, for when the agents are switched off.
+    static let pointsAboutAgents: Set<String> = [
+        "settings.appearance.templates.nowPlaying.point1",
+        "settings.appearance.templates.minimal.point1",
+        "settings.appearance.templates.minimal.point2",
+    ]
+    static let nookOnlySuffix = ".nookOnly"
+
+    static func keys(
+        for id: PersonalizationTemplate.ID,
+        showsAgents: Bool = true
+    ) -> (title: String, bestFor: String, points: [String]) {
         let base = "settings.appearance.templates.\(id.rawValue)"
-        return ("\(base).title", "\(base).bestFor", (1...pointCount).map { "\(base).point\($0)" })
+        let points = (1...pointCount).map { "\(base).point\($0)" }.map { key in
+            !showsAgents && pointsAboutAgents.contains(key) ? key + nookOnlySuffix : key
+        }
+        return ("\(base).title", "\(base).bestFor", points)
     }
 
     /// Everything on the card as one sentence run, for VoiceOver.
@@ -216,13 +239,14 @@ private struct TemplateRow: View {
     /// Keeps room under the thumbnail for the gallery's preview control,
     /// which sits above the card. Nil keeps none.
     var previewTitle: String?
+    var showsAgents = true
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
             VStack(spacing: TemplatePreviewControl.gap) {
-                TemplateThumbnail(template: template)
+                TemplateThumbnail(template: template, showsAgents: showsAgents)
                 if previewTitle != nil {
                     Color.clear
                         .frame(width: TemplateThumbnail.size.width, height: TemplatePreviewControl.height)
@@ -310,6 +334,8 @@ enum TemplatePreviewControl {
 /// SwiftUI and still.
 struct TemplateThumbnail: View {
     let template: PersonalizationTemplate
+    /// False leaves a side empty where the template shows agents.
+    var showsAgents = true
 
     static let size = CGSize(width: 148, height: 92)
     private static let contentWidth: CGFloat = 110
@@ -364,7 +390,7 @@ struct TemplateThumbnail: View {
 
     @ViewBuilder
     private func glyph(_ glyph: PersonalizationTemplate.Glyph) -> some View {
-        switch glyph {
+        switch showsAgents || !glyph.needsAgents ? glyph : .none {
         case .bars:
             TemplateMiniBars(levels: [0.45, 0.9, 0.6])
                 .frame(width: Self.slotSize, height: Self.slotSize)

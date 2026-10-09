@@ -72,6 +72,7 @@ extension AppModel {
             agentHotkeys.displayText(for: AgentHotkeyCombo(keyCode: keyCode, modifiers: []))
         }
         return OnboardingState(
+            agentsEnabled: agentsEnabled,
             openTrigger: islandOpenTrigger,
             isIslandOpen: notchStatus == .opened,
             agents: [
@@ -116,6 +117,7 @@ extension AppModel {
     /// else, and none of them asks macOS for a permission.
     private var onboardingActions: OnboardingActions {
         OnboardingActions(
+            setAgentsEnabled: { [weak self] in self?.agentsEnabled = $0 },
             setOpenTrigger: { [weak self] in self?.islandOpenTrigger = $0 },
             connect: { [weak self] in self?.connect($0) },
             showAllAgents: { [weak self] in self?.showSetupSettings() },

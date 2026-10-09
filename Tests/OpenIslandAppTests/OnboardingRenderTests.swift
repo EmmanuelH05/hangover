@@ -166,6 +166,35 @@ struct OnboardingRenderTests {
         #expect(try render(nil) { tourView(.done, picked) } == render(nil) { tourView(.done, Self.sampleState) })
     }
 
+    /// The agents switch (D41) is on the first page and is drawn in SwiftUI
+    /// alone, which is what lets a snapshot show it.
+    @Test func theWelcomePageShowsTheAgentsSwitch() throws {
+        var off = Self.sampleState
+        off.agentsEnabled = false
+        #expect(
+            try render("1-welcome-agents-off") { tourView(.welcome, off) }
+                != render(nil) { tourView(.welcome, Self.sampleState) }
+        )
+    }
+
+    @Test func thePagesSayNothingAboutAgentsWhileTheSwitchIsOff() throws {
+        var off = Self.sampleState
+        off.agentsEnabled = false
+        let expectedWidth = Int(OnboardingStyle.windowSize.width * Self.scale)
+        let expectedHeight = Int(OnboardingStyle.windowSize.height * Self.scale)
+
+        for page in OnboardingPage.shown(agentsEnabled: false) where page != .welcome {
+            let withAgents = try render(nil) { tourView(page, Self.sampleState) }
+            let without = try render("\(page.snapshotName)-agents-off") { tourView(page, off) }
+            // The progress dots alone differ: one page fewer.
+            #expect(without != withAgents, "\(page) drew the same with the agents off")
+
+            let image = try image { tourView(page, off) }
+            #expect(image.width == expectedWidth, "\(page) is \(image.width) wide")
+            #expect(image.height == expectedHeight, "\(page) is \(image.height) tall")
+        }
+    }
+
     // MARK: - Rendering
 
     private func tourView(_ page: OnboardingPage, _ state: OnboardingState) -> some View {

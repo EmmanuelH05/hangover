@@ -918,3 +918,22 @@
 "onboarding.done.recap.opened" = "展开的岛";
 "onboarding.done.recap.opened.value" = "%@，%@";
 "onboarding.done.where" = "打开岛后，顶部的齿轮就是设置。这次导览也在那里的「关于」里。";
+
+/* The agents switch */
+"settings.general.agents.section" = "编程 Agent";
+"settings.general.agents.toggle" = "让 Hangover 配合编程 Agent 使用";
+"settings.general.agents.note" = "关闭后，与 Agent 有关的一切都会停用：会话、批准卡片、用量、Agent 快捷键和终端跳转，只留下 Nook。已经安装的 hook 会留在各个 Agent 的设置里，关闭期间不起任何作用。可以在关闭之前到「安装引导」里把它们移除。";
+"settings.appearance.openedPart.title" = "展开的岛";
+"settings.appearance.nook.leftSlot.note.nookOnly" = "收起状态下岛左侧显示的内容。音乐、计时器或提示仍会临时占用。";
+"settings.appearance.nook.halo.note.nookOnly" = "收起状态的岛周围的柔和光晕。播放音乐时跟随专辑的颜色；计时器、充电和日程提示则使用各自的颜色。可以在下方选择主题或自己的颜色。";
+"onboarding.welcome.body.nookOnly" = "Hangover 住在屏幕顶部的刘海里，让你的音乐和日程随手可及。这次导览大约一分钟，随时可以跳过。";
+"onboarding.welcome.agents.title" = "让 Hangover 配合编程 Agent 使用";
+"onboarding.welcome.agents.note.on" = "刘海会显示 Claude Code、Codex 等 Agent 正在做什么，以及它们向你提出的请求。只想用 Nook 的话，把它关掉。";
+"onboarding.welcome.agents.note.off" = "已关闭。Hangover 现在只有 Nook：音乐、日历、待办等等。随时可以在设置的「通用」里重新打开。";
+"onboarding.nook.body.nookOnly" = "岛打开后就是 Nook，也就是放着小组件的页面。打开或关闭小组件，然后选一个起始布局，或者保留现在的。";
+"onboarding.look.body.nookOnly" = "刘海周围的柔和光晕会告诉你正在发生什么，不用横幅打扰你。播放音乐时它跟随专辑的颜色；计时器结束、接上充电器或日程即将开始时，它会亮起各自的颜色。";
+"settings.appearance.templates.nowPlaying.point1.nookOnly" = "封面和可视化效果一直显示在收起的岛上";
+"settings.appearance.templates.minimal.point1.nookOnly" = "空空的刘海：没有光晕、音乐和提示";
+"settings.appearance.templates.minimal.point2.nookOnly" = "打开后是待办和计时器";
+"settings.appearance.nook.track.note.nookOnly" = "在收起的岛的标签里显示歌曲名称。";
+"settings.appearance.nook.nextEvent.note.nookOnly" = "标签里没有显示歌曲时，用下一个日历日程填充标签。";

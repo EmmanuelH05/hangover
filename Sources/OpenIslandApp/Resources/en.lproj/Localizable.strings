@@ -918,3 +918,22 @@
 "onboarding.done.recap.opened" = "Opened island";
 "onboarding.done.recap.opened.value" = "%@, %@";
 "onboarding.done.where" = "Settings are behind the gear at the top of the open island. This tour is there too, under About.";
+
+/* The agents switch */
+"settings.general.agents.section" = "Coding agents";
+"settings.general.agents.toggle" = "Use Hangover with coding agents";
+"settings.general.agents.note" = "Off turns off everything about agents: sessions, approval cards, usage meters, agent shortcuts and terminal jumps, and leaves the Nook. Hooks already installed stay in each agent's settings and do nothing while this is off. You can remove them in Setup before you switch it off.";
+"settings.appearance.openedPart.title" = "Opened island";
+"settings.appearance.nook.leftSlot.note.nookOnly" = "What shows on the left of the closed island. Music, a timer or a notice still takes it over.";
+"settings.appearance.nook.halo.note.nookOnly" = "A soft glow around the closed island. It takes the album's color while music plays, and the notice's own color for timers, charging and events. Pick a theme or your own colors below.";
+"onboarding.welcome.body.nookOnly" = "Hangover lives in the notch at the top of your screen and keeps your music and your day within reach. This tour takes about a minute, and you can skip it at any time.";
+"onboarding.welcome.agents.title" = "Use Hangover with coding agents";
+"onboarding.welcome.agents.note.on" = "The notch shows what Claude Code, Codex and other agents are doing and what they ask you. Switch this off to use the Nook alone.";
+"onboarding.welcome.agents.note.off" = "Off. Hangover is the Nook alone: music, calendar, to-dos and more. You can switch this back on in Settings, under General.";
+"onboarding.nook.body.nookOnly" = "The island opens on the Nook, the page with your widgets. Switch widgets on or off, then pick a starting layout or keep the one you have.";
+"onboarding.look.body.nookOnly" = "A soft glow around the notch tells you what is happening, with no banner in your way. It takes the album's color while music plays, and a timer that ends, the charger or an event about to start lights it in a color of its own.";
+"settings.appearance.templates.nowPlaying.point1.nookOnly" = "Album art and the visualizer hold the closed island";
+"settings.appearance.templates.minimal.point1.nookOnly" = "An empty notch: no glow, music or notices";
+"settings.appearance.templates.minimal.point2.nookOnly" = "To-dos and the timer when you open it";
+"settings.appearance.nook.track.note.nookOnly" = "Shows the song in the label on the closed island.";
+"settings.appearance.nook.nextEvent.note.nookOnly" = "Fills the label with your next calendar event while no song is shown there.";

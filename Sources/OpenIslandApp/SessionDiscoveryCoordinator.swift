@@ -41,6 +41,12 @@ final class SessionDiscoveryCoordinator {
     @ObservationIgnored
     var onAgentEvent: ((AgentEvent) -> Void)?
 
+    /// False while the agents are switched off (D41). A scan that was
+    /// under way then must not land, and no registry on disk may be
+    /// rewritten from the session list the switch has just emptied.
+    @ObservationIgnored
+    var isActive: () -> Bool = { true }
+
     @ObservationIgnored
     private let codexSessionStore = CodexSessionStore()
 
@@ -481,6 +487,7 @@ final class SessionDiscoveryCoordinator {
     }
 
     private func applyCodexAppRediscovery(_ records: [CodexTrackedSessionRecord]) {
+        guard isActive() else { return }
         let existingIDs = Set(state.sessions.filter { $0.tool == .codex }.map(\.id))
         let existingPaths = Set(state.sessions.compactMap(\.codexMetadata?.transcriptPath))
 
@@ -538,6 +545,7 @@ final class SessionDiscoveryCoordinator {
     }
 
     func scheduleCodexSessionPersistence() {
+        guard isActive() else { return }
         codexSessionPersistenceTask?.cancel()
 
         let records = state.sessions
@@ -551,6 +559,7 @@ final class SessionDiscoveryCoordinator {
     }
 
     func scheduleClaudeSessionPersistence() {
+        guard isActive() else { return }
         claudeSessionPersistenceTask?.cancel()
 
         let prefix = syntheticClaudeSessionPrefix
@@ -571,6 +580,7 @@ final class SessionDiscoveryCoordinator {
     }
 
     func scheduleOpenCodeSessionPersistence() {
+        guard isActive() else { return }
         openCodeSessionPersistenceTask?.cancel()
 
         let records = state.sessions
@@ -588,6 +598,7 @@ final class SessionDiscoveryCoordinator {
     }
 
     func scheduleCursorSessionPersistence() {
+        guard isActive() else { return }
         cursorSessionPersistenceTask?.cancel()
 
         let records = state.sessions
@@ -606,6 +617,7 @@ final class SessionDiscoveryCoordinator {
     }
 
     func schedulePiSessionPersistence() {
+        guard isActive() else { return }
         piSessionPersistenceTask?.cancel()
         let records = state.sessions
             .filter {

@@ -165,6 +165,22 @@ final class AgentHotkeyController {
         applyRegistration(probing: true)
     }
 
+    /// True once the system registrar was handed over.
+    var isActive: Bool { registrar != nil }
+
+    /// Lets go of every shortcut and of the registrar. Nothing is
+    /// registered again until `activate`. The agents switch calls this
+    /// when it is switched off (D41).
+    func deactivate() {
+        disarmTask?.cancel()
+        disarmTask = nil
+        isArmed = false
+        registrar?.unregisterAll()
+        registeredCombos = [:]
+        registrar = nil
+        refreshStatuses(outcomes: nil)
+    }
+
     /// Tells the controller whether any agent is waiting for approval.
     func setArmed(_ armed: Bool) {
         guard armed != isArmed else { return }
