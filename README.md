@@ -2,7 +2,7 @@
 
 Hangover makes the notch on your MacBook useful. It's free and the code is all here.
 
-I built it on top of [Open Island](https://github.com/Octane0411/open-vibe-island), an open source notch app for AI coding agents. I kept adding the things I wanted in my own notch until it turned into its own app.
+After NotchNook stopped working for me, I started looking for alternatives. I ended up building my own on top of [Open Island](https://github.com/Octane0411/open-vibe-island), an open source notch app for AI coding agents.
 
 ## What's in it
 
