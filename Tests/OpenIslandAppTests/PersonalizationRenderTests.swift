@@ -165,6 +165,7 @@ struct PersonalizationRenderTests {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(width: 488)
                 .environment(\.colorScheme, .dark)
+                .environment(\.nookDrawsStill, true)
         )
         renderer.scale = Self.scale
         let image = try #require(renderer.cgImage, "ImageRenderer returned no image")
@@ -233,7 +234,7 @@ struct PersonalizationRenderTests {
             .background(V6Palette.ink)
             .environment(\.colorScheme, .dark)
 
-        let renderer = ImageRenderer(content: framed)
+        let renderer = ImageRenderer(content: framed.environment(\.nookDrawsStill, true))
         renderer.scale = Self.scale
         let rendered = renderer.cgImage
         let image = try #require(rendered, "ImageRenderer returned no image for \(name)")

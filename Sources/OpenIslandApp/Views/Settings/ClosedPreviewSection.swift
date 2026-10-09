@@ -31,6 +31,10 @@ struct ClosedPreviewSection: View {
 
     private static let autoCycleOrder: [UnifiedBars.Mode] = [.idle, .running, .waiting]
     private static let autoCycleInterval: Duration = .seconds(2)
+    /// How many steps the preview plays by itself before it comes to rest:
+    /// twice through idle, running and waiting. A preview that cycled for as
+    /// long as the tab was open kept the whole Settings window drawing.
+    static let autoCycleSteps = 6
     private static let physicalNotchWidth: CGFloat = 180
     private static let pillHeight: CGFloat = 32
     /// Glow color for the music chip when the track has no usable art color.
@@ -200,7 +204,7 @@ struct ClosedPreviewSection: View {
     private func runAutoCycle() async {
         guard previewAutoCycle else { return }
 
-        while !Task.isCancelled {
+        for _ in 0..<Self.autoCycleSteps {
             try? await Task.sleep(for: Self.autoCycleInterval)
             guard !Task.isCancelled, previewAutoCycle else { return }
 
@@ -210,6 +214,11 @@ struct ClosedPreviewSection: View {
             withMotion(Motion.morph) {
                 previewMode = next
             }
+        }
+        // Played out. The Auto chip plays it again.
+        guard !Task.isCancelled else { return }
+        withMotion(Motion.contentSwap) {
+            previewAutoCycle = false
         }
     }
 

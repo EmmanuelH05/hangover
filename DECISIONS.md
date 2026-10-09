@@ -340,7 +340,8 @@ Rulings that fix boundaries between Nook tasks. Builders and the arbiter read th
 - Applies to: anything that sizes or draws the opened island, which must read `IslandOpenedMetrics`.
 
 ## D36: Hangover updates itself from a feed of its own
-- Ruling: from version 1.0.1 the packaged release starts Sparkle. It reads one feed, `appcast.xml` on the `main` branch of Hangover's own repository (`AppBrand.updateFeedURL`), once a day, and offers a newer version when the feed lists one. It installs nothing without the user's yes.
+- Ruling: from version 1.0.1 the packaged release starts Sparkle. It reads one feed, `appcast.xml` on the `main` branch of Hangover's own repository (`AppBrand.updateFeedURL`), once a day. Through 1.0.2 it offered a newer version and installed nothing without the user's yes.
+- Changed in 1.0.3, at the owner's request: a copy that has never checked looks at the feed at its first launch (`UpdateChecker.checksRightAway`), and a new version is downloaded and installed without asking (`SUAutomaticallyUpdate` in the release plist). Sparkle installs it when the app next quits. Settings, About has the switch that turns this off. The README's download link is the newest release's file, which keeps a first download from being an old version.
 - Only a bundle that carries that exact feed address and Hangover's public key starts it (`UpdateChecker.shouldStart`). The release plist in `scripts/package-app.sh` carries both; the dev bundle and a test run carry neither. The delegate also pins the feed (`feedURLString(for:)`), which keeps a changed plist from pointing the updater anywhere else.
 - The feed must never be the upstream project's. That feed lists Open Island and would replace this app with it. A test checks that every download in the feed is under Hangover's releases and is signed.
 - Updates are signed with an EdDSA key made by `generate_keys --account hangover`. The private half lives in the owner's Keychain and is never in the repository. The public half is `AppBrand.updatePublicKey`. Losing the private half means installed copies accept no further update.
@@ -349,3 +350,46 @@ Rulings that fix boundaries between Nook tasks. Builders and the arbiter read th
 - Not verified when this was written: one version updating itself to the next on a real Mac.
 - Why: without it every fix needs each user to find the releases page again.
 - Applies to: anything that fetches or installs a new version, and any change to the feed, the key or the release plist.
+
+## D37: TickTick as a task source
+- Ruling: the todo widget has a third source, TickTick, beside Reminders and Notion (D13). `NookTodoHub` holds `tickTick` (`NookTickTickTodoService`), the choice is saved as `ticktick`, and its code lives in `Widgets/Todo/TickTick/`. Like Notion it does no Keychain, disk or network work unless it is the selected source.
+- Auth is a personal API token the user makes in TickTick's web app (Settings, Account, API Token) and pastes in Settings. It is kept in a Keychain item of its own (`NookTodoKeychain.tickTick`). OAuth is not used: it needs a client secret held on a server, and the app has no server.
+- TickTick has no request that names the account. Listing the lists is the token check, and Settings shows no account name.
+- The card shows the open tasks of one list. The inbox is the default and is always in the picker, because TickTick leaves it out of its list of lists. It is read at `/project/inbox/data`. Its real ID (`inbox` plus digits) is learned from a load or from the answer to a new task. Until it is known a new inbox task names no list, and TickTick files it in the inbox.
+- Rows are sorted by due date, then by TickTick's own order. An all-day task is shown on its day in the zone it was set in. One that runs over several days is shown on its last day: its end, as sent, is the day after, which is how other TickTick clients read it and is not in TickTick's docs. Completed and abandoned tasks and notes are left out. Subtasks show as rows of their own, and checklist items inside a task are not shown.
+- A task's note is its `content`, or its `desc` when the task has a checklist. Saving a note reads the whole task, changes that one field and sends the whole task back, fields the app does not know included. TickTick's docs do not say what an update does to a field it leaves out, and a title or a due date must never be lost to a note. Nothing is written when the read fails.
+- A list shared as read or comment only, or one that answers 403 to a write, turns adding, completing and notes off, and the card says the list is read-only. Writes are also off unless the last load worked, which keeps a typed task from going nowhere while offline or rate limited.
+- A check-off TickTick answers with 404 is a failure, not a done task: the task may have moved to another list. Disconnect takes the token out of the Keychain first, and when the Keychain refuses, the session stays and Settings says the token is still stored.
+- The pieces a network source needs and that are not about one service now live beside the sources and carry no service's name: `NookTodoTransport`, `NookTodoKeychain`, `NookTodoRefreshGate`. The Notion Keychain item kept its name, which keeps a saved Notion token readable.
+- Limits: built from TickTick's published API pages and from how other open source clients read the inbox, and not run against a real account when this was written. Dida365, the same service under its name in China, uses another address and is not supported. No "Today" view across lists.
+- Why: the owner asked for it.
+- Applies to: anything that adds a task source, which follows the same shape and reuses the shared pieces.
+
+## D38: Nothing on screen animates forever on the main thread
+- Ruling: motion that never ends runs on a Core Animation layer, which the system plays without waking the app. A SwiftUI timeline (`TimelineView(.animation)`) or a repeating SwiftUI animation (`phaseAnimator`, `repeatForever`) is not used for it, in Settings, in the welcome tour or on the closed island.
+- What was wrong: macOS wrote eight CPU reports about the app in two days, each showing the Settings window redrawing itself on every frame at 58 to 70% of a core while it was the front window. Three things on the Personalization tab never stopped: the music bars preview (a timeline that changed the bars' frames twenty times a second, and each change re-laid out the whole window), the glow previews (`phaseAnimator`), and the closed-island preview, which changed state every two seconds for as long as the tab was open. The same music bars ran in the island whenever music played.
+- The music bars are layers now (`NookBarVisualizerLayerView`). The glow previews in a window are the island's own halo layer (`islandHalo`). The closed-island preview plays `ClosedPreviewSection.autoCycleSteps` steps and comes to rest; the Auto chip plays it again.
+- A picture drawn offscreen shows no layers. A view that moves on a layer draws a still SwiftUI copy of itself when `nookDrawsStill` is set, and every test that draws a picture sets it.
+- `EnergyPolicyTests` reads the sources of Settings and the tour and fails when one of the banned calls comes back.
+- Not measured when this was written: the app's CPU with the Personalization tab open after the change. The cause was read from the system's reports and from the code, and the fix removes every endless main-thread animation the tab had.
+- Why: the owner's Activity Monitor showed the app near the top of the energy list.
+- Applies to: any view that keeps moving while it is on screen.
+
+## D39: A pick for the right of the closed island takes the whole side
+- Ruling: the two rows of cards under "01 · Right slot" act as one choice (`IslandRightSideChoice`). One of the island's own cards (count, agents, none) clears the Nook's extra. An extra (bars, date, battery, countdown) sets the island's own slot to none.
+- What was wrong: an extra left the island's own slot as it was. The pill puts that slot back whenever an agent waits, and with several agents open one is waiting most of the day. The extra showed only when the own slot was already on none.
+- A template may still set both, for an extra that gives way to the agent count while an agent waits.
+- Why: reported by the owner as "you can only edit the right side if you go from none".
+- Applies to: anything that writes either right slot.
+
+## D40: Quick notes can go to Apple Notes
+- Ruling: Settings, Nook, Notes has a "Save to" choice: a Markdown file (the default, as before) or Apple Notes (`NookNotesDestination`, saved as `nook.notes.destination`).
+- With Apple Notes picked, each note is added as a line to a note called Quick Notes in the default folder of the default account, made when it is missing. Apple Notes has no API: the app runs AppleScript through `osascript` (`NookAppleNotesScriptWriter`), and macOS asks once whether Hangover may control Notes. The typed text travels as an argument and is never pasted into the script.
+- Notes has no "add a line". The script sets the note's whole text again with the line on the end, which can drop pictures and checklists put in that note by hand. Settings says that.
+- The card cannot read the note back. It lists the last 20 notes it sent, kept in the app's preferences, and offers no delete for them.
+- A note Notes does not take (no permission, or an error) goes to the Markdown file, and a notice says where it went. A typed note is never dropped.
+- Only the default folder is searched, which keeps a note in Recently Deleted from taking lines nobody would see.
+- Fixed with this: adding a note to a file that was not empty always failed. The file was opened only for writing and then read from, to check for a final newline.
+- Not run when this was written: the script against the real Notes app. It compiles (`osacompile`), and running it would have put a permission prompt and a note on the owner's Mac.
+- Why: the owner asked for quick notes to land in Apple Notes.
+- Applies to: anything that saves a quick note.

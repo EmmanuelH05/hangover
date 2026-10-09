@@ -4,14 +4,14 @@ import Testing
 @testable import OpenIslandApp
 
 @Suite struct NotionClientTests {
-    private func client(_ transport: StubNotionTransport) -> NotionClient {
+    private func client(_ transport: StubTodoTransport) -> NotionClient {
         NotionClient(token: NotionFixtures.token, transport: transport)
     }
 
     // MARK: Requests
 
     @Test func requestsCarryTheTokenAndThePinnedVersion() async throws {
-        let transport = StubNotionTransport { _, _ in
+        let transport = StubTodoTransport { _, _ in
             .json("{\"object\":\"user\",\"name\":\"Nook\",\"type\":\"bot\",\"bot\":{\"workspace_name\":\"Home\"}}")
         }
 
@@ -27,7 +27,7 @@ import Testing
     }
 
     @Test func searchAsksForDataSources() async throws {
-        let transport = StubNotionTransport { _, _ in
+        let transport = StubTodoTransport { _, _ in
             .json(NotionFixtures.list([NotionFixtures.selectSchema, "{\"object\":\"page\"}"]))
         }
 
@@ -42,7 +42,7 @@ import Testing
     }
 
     @Test func idsStayInsideOnePathSegment() async throws {
-        let transport = StubNotionTransport()
+        let transport = StubTodoTransport()
 
         await #expect(throws: NotionAPIError.self) {
             _ = try await client(transport).dataSource(id: "abc/../../users/me?x=1")
@@ -57,7 +57,7 @@ import Testing
     // MARK: Pagination
 
     @Test func queryFollowsCursorsAndStopsAtTheLimit() async throws {
-        let transport = StubNotionTransport { _, index in
+        let transport = StubTodoTransport { _, index in
             let ids = (0..<100).map { "page-\(index)-\($0)" }
             let pages = ids.map { NotionFixtures.page(id: $0, title: "T") }
             return .json(NotionFixtures.list(pages, hasMore: true, nextCursor: "cursor-\(index + 1)"))
@@ -82,7 +82,7 @@ import Testing
     }
 
     @Test func paginationIsBoundedEvenWhenTheServerNeverFinishes() async throws {
-        let transport = StubNotionTransport { _, index in
+        let transport = StubTodoTransport { _, index in
             .json(NotionFixtures.list([NotionFixtures.page(id: "p\(index)", title: "T")], hasMore: true, nextCursor: "again"))
         }
 
@@ -95,7 +95,7 @@ import Testing
     }
 
     @Test func queryStopsWhenThereIsNoMore() async throws {
-        let transport = StubNotionTransport { _, _ in
+        let transport = StubTodoTransport { _, _ in
             .json(NotionFixtures.list([NotionFixtures.page(id: "only", title: "T")]))
         }
 
@@ -118,7 +118,7 @@ import Testing
         (503, NotionAPIError.server(status: 503)),
     ])
     func statusCodesMapToTypedErrors(status: Int, expected: NotionAPIError) async {
-        let transport = StubNotionTransport { _, _ in
+        let transport = StubTodoTransport { _, _ in
             .json("{\"object\":\"error\",\"code\":\"validation_error\",\"message\":\"secret detail\"}", status: status)
         }
 
@@ -128,7 +128,7 @@ import Testing
     }
 
     @Test func rateLimitCarriesRetryAfter() async {
-        let transport = StubNotionTransport { _, _ in .json("{}", status: 429, headers: ["Retry-After": "17"]) }
+        let transport = StubTodoTransport { _, _ in .json("{}", status: 429, headers: ["Retry-After": "17"]) }
 
         await #expect(throws: NotionAPIError.rateLimited(retryAfter: 17)) {
             _ = try await client(transport).currentUser()
@@ -136,7 +136,7 @@ import Testing
     }
 
     @Test func rateLimitWithoutHeaderStillMaps() async {
-        let transport = StubNotionTransport { _, _ in .json("{}", status: 429) }
+        let transport = StubTodoTransport { _, _ in .json("{}", status: 429) }
 
         await #expect(throws: NotionAPIError.rateLimited(retryAfter: nil)) {
             _ = try await client(transport).currentUser()
@@ -144,18 +144,18 @@ import Testing
     }
 
     @Test func networkFailuresMapToOfflineAndCancellationStaysCancellation() async {
-        let offline = StubNotionTransport { _, _ in throw URLError(.notConnectedToInternet) }
+        let offline = StubTodoTransport { _, _ in throw URLError(.notConnectedToInternet) }
         await #expect(throws: NotionAPIError.offline) { _ = try await client(offline).currentUser() }
 
-        let timeout = StubNotionTransport { _, _ in throw URLError(.timedOut) }
+        let timeout = StubTodoTransport { _, _ in throw URLError(.timedOut) }
         await #expect(throws: NotionAPIError.offline) { _ = try await client(timeout).currentUser() }
 
-        let cancelled = StubNotionTransport { _, _ in throw URLError(.cancelled) }
+        let cancelled = StubTodoTransport { _, _ in throw URLError(.cancelled) }
         await #expect(throws: NotionAPIError.cancelled) { _ = try await client(cancelled).currentUser() }
     }
 
     @Test func garbageBodyIsAnInvalidResponseNotACrash() async {
-        let transport = StubNotionTransport { _, _ in .json("<html>gateway</html>") }
+        let transport = StubTodoTransport { _, _ in .json("<html>gateway</html>") }
 
         await #expect(throws: NotionAPIError.invalidResponse) {
             _ = try await client(transport).dataSource(id: NotionFixtures.dataSourceID)
@@ -165,7 +165,7 @@ import Testing
     // MARK: Writes
 
     @Test func createPageUsesADataSourceParent() async throws {
-        let transport = StubNotionTransport { _, _ in .json(NotionFixtures.page(id: "new", title: "Buy milk")) }
+        let transport = StubTodoTransport { _, _ in .json(NotionFixtures.page(id: "new", title: "Buy milk")) }
 
         let page = try await client(transport).createPage(
             dataSourceID: NotionFixtures.dataSourceID,
@@ -180,7 +180,7 @@ import Testing
     }
 
     @Test func updatePagePatchesProperties() async throws {
-        let transport = StubNotionTransport { _, _ in .json(NotionFixtures.page(id: "p1", title: "T")) }
+        let transport = StubTodoTransport { _, _ in .json(NotionFixtures.page(id: "p1", title: "T")) }
 
         try await client(transport).updatePage(id: "p1", properties: ["Done": ["checkbox": true]])
 
@@ -195,7 +195,7 @@ import Testing
     private let start = Date(timeIntervalSince1970: 1_800_000_000)
 
     @Test func eachTriggerHasItsOwnSpacing() {
-        var gate = NotionRefreshGate()
+        var gate = NookTodoRefreshGate()
         #expect(gate.shouldRun(.background, now: start))
         gate.recordAttempt(now: start)
         gate.recordSuccess()
@@ -210,12 +210,12 @@ import Testing
     }
 
     @Test func failuresBackOffExponentiallyUpToTheCap() {
-        #expect(NotionRefreshGate.backoff(afterFailures: 1) == 5)
-        #expect(NotionRefreshGate.backoff(afterFailures: 2) == 10)
-        #expect(NotionRefreshGate.backoff(afterFailures: 3) == 20)
-        #expect(NotionRefreshGate.backoff(afterFailures: 50) == NotionRefreshGate.backoffCap)
+        #expect(NookTodoRefreshGate.backoff(afterFailures: 1) == 5)
+        #expect(NookTodoRefreshGate.backoff(afterFailures: 2) == 10)
+        #expect(NookTodoRefreshGate.backoff(afterFailures: 3) == 20)
+        #expect(NookTodoRefreshGate.backoff(afterFailures: 50) == NookTodoRefreshGate.backoffCap)
 
-        var gate = NotionRefreshGate()
+        var gate = NookTodoRefreshGate()
         gate.recordAttempt(now: start)
         gate.recordFailure(now: start)
         gate.recordFailure(now: start)
@@ -230,7 +230,7 @@ import Testing
     }
 
     @Test func rateLimitHoldsEveryTriggerForRetryAfter() {
-        var gate = NotionRefreshGate()
+        var gate = NookTodoRefreshGate()
         gate.recordAttempt(now: start)
         gate.recordRateLimit(retryAfter: 120, now: start)
 
@@ -240,7 +240,7 @@ import Testing
 
         gate.reset()
         gate.recordRateLimit(retryAfter: nil, now: start)
-        #expect(!gate.shouldRun(.manual, now: start.addingTimeInterval(NotionRefreshGate.defaultRateLimitWait - 1)))
+        #expect(!gate.shouldRun(.manual, now: start.addingTimeInterval(NookTodoRefreshGate.defaultRateLimitWait - 1)))
     }
 }
 
@@ -284,7 +284,7 @@ import Testing
     /// default. `OPEN_ISLAND_KEYCHAIN_TESTS=1` turns it on.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["OPEN_ISLAND_KEYCHAIN_TESTS"] == "1"))
     func keychainStoresReplacesAndDeletesTheToken() throws {
-        let keychain = NotionKeychain(
+        let keychain = NookTodoKeychain(
             service: "app.openisland.tests.notion.\(UUID().uuidString)", account: "integration-token"
         )
         defer { try? keychain.delete() }
@@ -292,7 +292,7 @@ import Testing
         do {
             #expect(try keychain.read() == nil)
             try keychain.save("ntn_first")
-        } catch let error as NotionKeychainError where error.status == errSecInteractionNotAllowed
+        } catch let error as NookTodoKeychainError where error.status == errSecInteractionNotAllowed
             || error.status == errSecNotAvailable || error.status == errSecNoDefaultKeychain {
             // No usable login keychain in this session (headless CI).
             return
@@ -306,8 +306,9 @@ import Testing
     }
 
     @Test func keychainServiceIsScopedToTheBundleIdentifier() {
-        let keychain = NotionKeychain()
-        #expect(keychain.service.hasSuffix(NotionKeychain.serviceSuffix))
-        #expect(keychain.service.count > NotionKeychain.serviceSuffix.count)
+        let keychain = NookTodoKeychain.notion
+        #expect(keychain.service.hasSuffix(NookTodoKeychain.notionServiceSuffix))
+        #expect(keychain.service.count > NookTodoKeychain.notionServiceSuffix.count)
+        #expect(keychain.account == "integration-token")
     }
 }

@@ -176,7 +176,7 @@ struct OnboardingRenderTests {
     }
 
     private func image<Content: View>(@ViewBuilder _ content: () -> Content) throws -> CGImage {
-        let renderer = ImageRenderer(content: content())
+        let renderer = ImageRenderer(content: content().environment(\.nookDrawsStill, true))
         renderer.scale = Self.scale
         let rendered = renderer.cgImage
         return try #require(rendered, "ImageRenderer returned no image")

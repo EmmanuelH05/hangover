@@ -191,7 +191,7 @@ struct IslandOpenedLookRenderTests {
     }
 
     private func image<Content: View>(_ name: String?, @ViewBuilder _ content: () -> Content) throws -> CGImage {
-        let renderer = ImageRenderer(content: content())
+        let renderer = ImageRenderer(content: content().environment(\.nookDrawsStill, true))
         renderer.scale = Self.scale
         let rendered = try #require(renderer.cgImage, "no image for \(name ?? "a picture")")
         if let name, ProcessInfo.processInfo.environment[Self.snapshotEnvKey] == "1" {

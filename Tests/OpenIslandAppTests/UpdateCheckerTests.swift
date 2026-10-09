@@ -87,4 +87,29 @@ struct UpdateCheckerTests {
         #expect(script.contains("\(AppBrand.releasesURL.absoluteString)/download/"))
         #expect(!script.contains(Self.upstreamOwner))
     }
+
+    @Test func aCopyThatNeverCheckedLooksAtTheFeedAtItsFirstLaunch() {
+        let earlier = Date(timeIntervalSince1970: 1_800_000_000)
+
+        #expect(UpdateChecker.checksRightAway(lastCheck: nil, checksAutomatically: true))
+        // After the first check Sparkle keeps its own once-a-day pace.
+        #expect(UpdateChecker.checksRightAway(lastCheck: earlier, checksAutomatically: true) == false)
+        // Someone who turned checks off is left alone.
+        #expect(UpdateChecker.checksRightAway(lastCheck: nil, checksAutomatically: false) == false)
+    }
+
+    @Test func theReleaseInstallsUpdatesWithoutAskingAndTheDevBundleDoesNot() throws {
+        let release = try Self.text(of: "scripts/package-app.sh")
+        let dev = try Self.text(of: "scripts/launch-dev-app.sh")
+
+        #expect(release.contains("<key>SUAutomaticallyUpdate</key>\n    <true/>"))
+        #expect(release.contains("<key>SUEnableAutomaticChecks</key>\n    <true/>"))
+        #expect(!dev.contains("SUAutomaticallyUpdate"))
+    }
+
+    @Test func theReadmesDownloadIsAlwaysTheNewestVersion() throws {
+        let readme = try Self.text(of: "README.md")
+
+        #expect(readme.contains("\(AppBrand.releasesURL.absoluteString)/latest/download/Hangover.zip"))
+    }
 }

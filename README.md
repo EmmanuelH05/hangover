@@ -18,7 +18,7 @@ After NotchNook stopped working for me, I started looking for alternatives. I en
 
 - Music, with a scrub bar and a speaker picker
 - Calendar, with a Join button when a meeting is about to start
-- To-dos from Reminders or Notion
+- To-dos from Reminders, Notion or TickTick
 - Quick notes
 - A file tray you can drop things on, with AirDrop, zip and a clipboard history
 - A focus timer with pomodoro rounds
@@ -55,14 +55,14 @@ You need macOS 14 or later and a Mac with Apple silicon.
 
 One thing to know first. I'm not in the Apple Developer Program, which means Apple hasn't notarized Hangover and macOS will block it the first time you open it. To open it anyway:
 
-1. Download `Hangover.zip` from the [releases page](https://github.com/EmmanuelH05/hangover/releases) and unzip it.
+1. Download [Hangover.zip](https://github.com/EmmanuelH05/hangover/releases/latest/download/Hangover.zip) and unzip it. That link is always the newest version.
 2. Move Hangover to your Applications folder and double-click it. macOS shows a warning. Click **Done**.
 3. Open **System Settings**, go to **Privacy & Security**, scroll down to **Security** and click **Open Anyway**. That button stays for about an hour.
 4. macOS asks one more time. Confirm it.
 
 After that it opens like any other app. Only do this with a copy you downloaded from this repo, and leave Gatekeeper on. Apple explains these steps in [Open a Mac app from an unknown developer](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac).
 
-From version 1.0.1 Hangover updates itself. It checks once a day and offers the new version when there is one. Version 1.0.0 doesn't, which means one more download by hand. Because the app isn't notarized, macOS may ask for your permissions again after an update.
+Hangover keeps itself up to date. It checks the first time you open it and once a day after that, downloads a new version by itself and installs it the next time the app starts. You can turn that off in Settings, About. Because the app isn't notarized, macOS may ask for your permissions again after an update.
 
 ## Build it yourself
 
@@ -82,7 +82,7 @@ A few names inside the code still say `OpenIsland`. That's on purpose: the hooks
 
 ## Privacy
 
-There's no account and no analytics, and Hangover has no server of its own. Almost everything stays on your Mac. The weather tile and the Notion to-do list are the two things that go online, and only after you turn them on. The full list is in [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
+There's no account and no analytics, and Hangover has no server of its own. Almost everything stays on your Mac. The weather tile and a to-do list kept in Notion or TickTick are the things that go online, and only after you turn them on. The full list is in [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
 
 ## Credit and license
 

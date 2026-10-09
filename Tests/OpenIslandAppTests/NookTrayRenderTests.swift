@@ -138,7 +138,7 @@ struct NookTrayRenderTests {
             .background(V6Palette.ink)
             .environment(\.colorScheme, .dark)
 
-        let renderer = ImageRenderer(content: framed)
+        let renderer = ImageRenderer(content: framed.environment(\.nookDrawsStill, true))
         renderer.scale = Self.scale
         let rendered = renderer.cgImage
         let image = try #require(rendered, "ImageRenderer returned no image for \(name)")

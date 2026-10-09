@@ -39,7 +39,7 @@ struct NookNotesCard: View {
             NookCardHeader(
                 title: "Notes",
                 systemImage: "note.text",
-                trailing: size == .small ? nil : service.fileURL.lastPathComponent
+                trailing: size == .small ? nil : Self.destinationName(service)
             )
             .lineLimit(1)
             .truncationMode(.middle)
@@ -56,12 +56,12 @@ struct NookNotesCard: View {
                 }
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(service.entries.prefix(visibleEntryCount)) { entry in
-                    NookNoteRow(entry: entry) { service.delete(entry.id) }
+                    NookNoteRow(entry: entry, canDelete: service.canDelete) { service.delete(entry.id) }
                 }
             }
             Spacer(minLength: 0)
             if size == .large {
-                Text("Saves to \(Self.displayPath(service.fileURL))")
+                Text(Self.destinationLine(service))
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.35))
                     .lineLimit(1)
@@ -74,6 +74,18 @@ struct NookNotesCard: View {
         .background(NookCardBackground())
     }
 
+    /// The short name for the card's header.
+    static func destinationName(_ service: NookNotesService) -> String {
+        service.destination == .appleNotes ? "Apple Notes" : service.fileURL.lastPathComponent
+    }
+
+    /// The line under the large card's list.
+    static func destinationLine(_ service: NookNotesService) -> String {
+        service.destination == .appleNotes
+            ? "Saves to Apple Notes, in \(NookAppleNotesLine.noteTitle)"
+            : "Saves to \(displayPath(service.fileURL))"
+    }
+
     /// The file path with the home folder shortened to a tilde.
     private static func displayPath(_ url: URL) -> String {
         (url.path as NSString).abbreviatingWithTildeInPath
@@ -82,6 +94,7 @@ struct NookNotesCard: View {
 
 private struct NookNoteRow: View {
     let entry: NookNoteEntry
+    var canDelete = true
     let onDelete: () -> Void
 
     @State private var isHovering = false
@@ -99,7 +112,7 @@ private struct NookNoteRow: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: 0)
-            if isHovering {
+            if isHovering, canDelete {
                 Button(action: onDelete) {
                     Image(systemName: "xmark")
                         .font(.system(size: 8, weight: .bold))

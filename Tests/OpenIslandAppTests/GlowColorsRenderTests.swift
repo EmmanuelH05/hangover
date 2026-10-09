@@ -117,7 +117,7 @@ struct GlowColorsRenderTests {
             .frame(width: size.width, height: size.height)
             .background(background)
             .environment(\.colorScheme, .dark)
-        let renderer = ImageRenderer(content: framed)
+        let renderer = ImageRenderer(content: framed.environment(\.nookDrawsStill, true))
         renderer.scale = Self.scale
         let image = try #require(renderer.cgImage, "no image for \(name)")
         let expectedWidth = Int(size.width * Self.scale)

@@ -1,7 +1,7 @@
 import Foundation
 
 /// What asked for a refresh. Each trigger has its own minimum spacing.
-enum NotionRefreshTrigger: Sendable {
+enum NookTodoRefreshTrigger: Sendable {
     /// The card appeared: the island opened to the Nook page.
     case opened
     /// The card's repeating timer while the island stays open.
@@ -14,7 +14,7 @@ enum NotionRefreshTrigger: Sendable {
 
 /// Decides whether a refresh may run now. Pure value type: the service owns
 /// one and feeds it the clock, which keeps the policy testable.
-struct NotionRefreshGate: Equatable, Sendable {
+struct NookTodoRefreshGate: Equatable, Sendable {
     /// Collapses bursts of card appearances into one request.
     static let openedSpacing: TimeInterval = 10
     static let timerSpacing: TimeInterval = 60
@@ -30,7 +30,7 @@ struct NotionRefreshGate: Equatable, Sendable {
     /// Set by a 429. Nothing refreshes until this passes, manual included.
     private(set) var rateLimitedUntil: Date?
 
-    func shouldRun(_ trigger: NotionRefreshTrigger, now: Date) -> Bool {
+    func shouldRun(_ trigger: NookTodoRefreshTrigger, now: Date) -> Bool {
         if let rateLimitedUntil, now < rateLimitedUntil { return false }
         if trigger == .manual { return true }
         if let backoffUntil, now < backoffUntil { return false }
@@ -60,7 +60,7 @@ struct NotionRefreshGate: Equatable, Sendable {
         backoffUntil = now.addingTimeInterval(Self.backoff(afterFailures: consecutiveFailures))
     }
 
-    /// A 429: wait as long as Notion asked.
+    /// A 429: wait as long as the server asked.
     mutating func recordRateLimit(retryAfter: TimeInterval?, now: Date) {
         rateLimitedUntil = now.addingTimeInterval(max(retryAfter ?? Self.defaultRateLimitWait, 1))
     }
@@ -69,11 +69,11 @@ struct NotionRefreshGate: Equatable, Sendable {
         rateLimitedUntil.map { now < $0 } ?? false
     }
 
-    /// Clears spacing and backoff for a new database or session. A rate
+    /// Clears spacing and backoff for a new list or session. A rate
     /// limit belongs to the token, and survives unless `forgetRateLimit`.
     mutating func reset(forgetRateLimit: Bool = false) {
         let held = forgetRateLimit ? nil : rateLimitedUntil
-        self = NotionRefreshGate()
+        self = NookTodoRefreshGate()
         rateLimitedUntil = held
     }
 

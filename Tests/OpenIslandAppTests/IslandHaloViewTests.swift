@@ -427,7 +427,7 @@ import Testing
                 .frame(width: 120, height: 40)
                 .islandHaloPreview(state, cornerRadius: 16)
                 .padding(30)
-            let renderer = ImageRenderer(content: content)
+            let renderer = ImageRenderer(content: content.environment(\.nookDrawsStill, true))
             renderer.scale = 2
 
             #expect(renderer.cgImage != nil, "\(state.motion)")
@@ -440,7 +440,7 @@ import Testing
                 .frame(width: 100, height: 40)
                 .islandHaloPreview(state, cornerRadius: 16)
                 .padding(40)
-            let renderer = ImageRenderer(content: content)
+            let renderer = ImageRenderer(content: content.environment(\.nookDrawsStill, true))
             renderer.scale = 1
             let image = try #require(renderer.cgImage)
             let rep = NSBitmapImageRep(cgImage: image)

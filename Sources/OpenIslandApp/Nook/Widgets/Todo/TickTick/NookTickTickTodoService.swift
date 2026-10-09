@@ -1,31 +1,25 @@
 import Foundation
 import Observation
 
-/// Notion as a task source for the todo card. Reads open tasks from one
-/// database the user picked, marks them done and adds new ones.
+/// TickTick as a task source for the todo card. Reads the open tasks of one
+/// list, marks them done, adds new ones and edits their notes.
 ///
 /// Idle until `setActive(true)`: no Keychain, disk or network work happens
-/// while Reminders is the selected source.
+/// while another source is selected.
 @MainActor
 @Observable
-final class NookNotionTodoService {
+final class NookTickTickTodoService {
     enum Keys {
-        static let dataSourceID = "nook.todo.notion.dataSourceID"
-        static let databaseTitle = "nook.todo.notion.databaseTitle"
-        static let mapping = "nook.todo.notion.mapping"
-        static let account = "nook.todo.notion.account"
-        /// Set once the notes column was looked for, which lets a setup
-        /// saved before notes existed pick one up without overriding "None".
-        static let notesColumnChecked = "nook.todo.notion.notesColumnChecked"
+        /// Absent means the inbox.
+        static let listID = "nook.todo.ticktick.listID"
+        static let listName = "nook.todo.ticktick.listName"
     }
 
     /// Most tasks loaded for the card.
     static let taskLimit = 100
-    /// Most databases listed in the picker.
-    static let databaseLimit = 200
-    /// Notion's limit for one rich text item.
-    static let maxTitleLength = 2000
-    static let mappingDebounce: Duration = .milliseconds(400)
+    /// Keeps a pasted page of text out of a task title. TickTick documents
+    /// no limit of its own.
+    static let maxTitleLength = 500
     /// Both tick a little slower than the gate spacing they must clear
     /// (60s open, 300s closed); an exact match would lose every other tick.
     static let foregroundRefreshInterval: Duration = .seconds(62)
@@ -34,37 +28,44 @@ final class NookNotionTodoService {
     // MARK: Observable state
 
     private(set) var isActive = false
-    var items: [NookTodoItem] = []
-    var state: NotionTodoState = .inactive
+    /// The card's rows, each with the list it lives in.
+    var rows: [TickTickRow] = []
+    var state: TickTickTodoState = .inactive
     var isShowingCachedItems = false
-    var actionError: NotionTodoActionError?
-    /// False after Notion answered 403 to creating a page.
-    var canInsert = true
-    /// False after Notion answered 403 to updating a page.
-    var canUpdate = true
+    var actionError: TickTickTodoActionError?
+    /// The selected list is shared with the user as read or comment only.
+    var isListReadOnly = false
+    /// False after TickTick answered 403 to a write.
+    var canWrite = true
     var hasToken = false
-    /// Notion answered 401 for the stored token. Stays set until a new
+    /// TickTick answered 401 for the stored token. Stays set until a new
     /// token connects, which keeps the token field on screen.
     var tokenRejected = false
-    var accountName: String?
-    var databases: [NotionDatabaseChoice] = []
-    var hasLoadedDatabases = false
-    var isLoadingDatabases = false
-    var selectedDatabaseID: String?
-    var databaseTitle: String?
-    var schema: NotionDataSource?
-    var mapping = NotionTodoMapping()
-    /// The mapping checked against the schema by the last good load.
-    var resolved: NotionResolvedMapping?
+    /// Disconnect could not take the token out of the Keychain. It is
+    /// still stored, and the session is as it was.
+    var tokenRemovalFailed = false
+    var lists: [TickTickListChoice] = []
+    var hasLoadedLists = false
+    var isLoadingLists = false
+    /// The last try to load the lists failed. The picker shows what it had.
+    var listsLoadFailed = false
+    var selectedListID = TickTickClient.inboxID
+    /// The selected list's name. Nil for the inbox, which is named in the
+    /// user's language.
+    var listName: String?
     var lastRefreshed: Date?
     /// The offline copy could not be written or removed.
     var cacheFailed = false
+
+    var items: [NookTodoItem] { rows.map(\.item) }
 
     // MARK: Internals
 
     @ObservationIgnored var token: String?
     @ObservationIgnored var gate = NookTodoRefreshGate()
-    /// Rows removed optimistically whose update has not finished.
+    /// The inbox's real ID, learned from a load. New inbox tasks name it.
+    @ObservationIgnored var inboxProjectID: String?
+    /// Rows removed optimistically whose request has not finished.
     @ObservationIgnored var pendingCompletions: Set<String> = []
     /// Notes written locally whose update has not finished, by task ID. An
     /// empty text means cleared. A load never overwrites these.
@@ -73,11 +74,11 @@ final class NookNotionTodoService {
     /// behind each one.
     @ObservationIgnored var notesInFlight: Set<String> = []
     @ObservationIgnored var queuedNotes: [String: String] = [:]
-    /// Called when a notes write ends: task ID, the text, and whether Notion
-    /// took it. The hub keeps text that did not save.
+    /// Called when a notes write ends: task ID, the text, and whether
+    /// TickTick took it. The hub keeps text that did not save.
     @ObservationIgnored var onNotesWriteFinished: ((_ id: String, _ text: String, _ saved: Bool) -> Void)?
     /// Bumped whenever in-flight work must be ignored: source switch,
-    /// connect, disconnect.
+    /// connect, disconnect, another list.
     @ObservationIgnored var epoch = 0
     @ObservationIgnored var refreshSerial = 0
     @ObservationIgnored var refreshTask: Task<Void, Never>?
@@ -87,15 +88,15 @@ final class NookNotionTodoService {
 
     @ObservationIgnored let defaults: UserDefaults
     @ObservationIgnored let tokenStore: any NookTodoTokenStoring
-    @ObservationIgnored let cache: NotionTodoCache
+    @ObservationIgnored let cache: TickTickTodoCache
     @ObservationIgnored let now: @Sendable () -> Date
     @ObservationIgnored private var transport: (any NookTodoTransport)?
 
     init(
         defaults: UserDefaults = .standard,
         transport: (any NookTodoTransport)? = nil,
-        tokenStore: any NookTodoTokenStoring = NookTodoKeychain.notion,
-        cache: NotionTodoCache = NotionTodoCache(),
+        tokenStore: any NookTodoTokenStoring = NookTodoKeychain.tickTick,
+        cache: TickTickTodoCache = TickTickTodoCache(),
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.defaults = defaults
@@ -143,13 +144,9 @@ final class NookNotionTodoService {
             token = stored
             hasToken = true
         }
-        guard let selectedDatabaseID else {
-            state = .noDatabase
-            return
-        }
-        if let snapshot, snapshot.dataSourceID == selectedDatabaseID {
-            items = snapshot.items
-            isShowingCachedItems = !snapshot.items.isEmpty
+        if let snapshot, snapshot.listID == selectedListID {
+            rows = snapshot.rows
+            isShowingCachedItems = !snapshot.rows.isEmpty
         }
         await performRefresh()
     }
@@ -162,8 +159,10 @@ final class NookNotionTodoService {
         hasToken = false
         tokenRejected = false
         resetSession()
-        databases = []
-        hasLoadedDatabases = false
+        lists = []
+        hasLoadedLists = false
+        listsLoadFailed = false
+        tokenRemovalFailed = false
         state = .inactive
     }
 
@@ -177,18 +176,17 @@ final class NookNotionTodoService {
         refreshTask = nil
         actionTasks.values.forEach { $0.cancel() }
         actionTasks = [:]
-        isLoadingDatabases = false
+        isLoadingLists = false
     }
 
-    /// Clears everything derived from one token and database.
+    /// Clears everything derived from one token and list.
     func resetSession() {
-        items = []
+        rows = []
         isShowingCachedItems = false
         actionError = nil
-        canInsert = true
-        canUpdate = true
-        schema = nil
-        resolved = nil
+        isListReadOnly = false
+        canWrite = true
+        inboxProjectID = nil
         pendingCompletions = []
         pendingNotes = [:]
         notesInFlight = []
@@ -216,8 +214,8 @@ final class NookNotionTodoService {
 
     /// Asks for a refresh. The gate drops requests that come too soon after
     /// the last one, during backoff, or while rate limited.
-    func refresh(_ trigger: NookTodoRefreshTrigger, debounce: Duration? = nil) {
-        guard isActive, hasToken, selectedDatabaseID != nil else { return }
+    func refresh(_ trigger: NookTodoRefreshTrigger) {
+        guard isActive, hasToken else { return }
         // A rejected token stays rejected until the user pastes a new one.
         if tokenRejected, trigger != .manual { return }
         guard gate.shouldRun(trigger, now: now()) else { return }
@@ -225,13 +223,6 @@ final class NookNotionTodoService {
         refreshSerial += 1
         let serial = refreshSerial
         refreshTask = Task { [weak self] in
-            if let debounce {
-                do {
-                    try await Task.sleep(for: debounce)
-                } catch {
-                    return
-                }
-            }
             await self?.runRefresh(serial: serial)
         }
     }
@@ -242,76 +233,43 @@ final class NookNotionTodoService {
         await runRefresh(serial: refreshSerial)
     }
 
-    /// True while Notion's Retry-After window is open. Nothing is sent.
+    /// True while a rate limit's wait is open. Nothing is sent.
     var isRateLimited: Bool { gate.isRateLimited(now: now()) }
 
-    private func runRefresh(serial: Int, mayDetect: Bool = true) async {
-        guard isActive, let client = makeClient(), let dataSourceID = selectedDatabaseID else { return }
+    private func runRefresh(serial: Int) async {
+        guard isActive, let client = makeClient() else { return }
         guard !isRateLimited else {
-            isShowingCachedItems = !items.isEmpty
+            isShowingCachedItems = !rows.isEmpty
             state = .rateLimited
             return
         }
         gate.recordAttempt(now: now())
-        let result = await NotionTodoLoader.load(
-            client: client, dataSourceID: dataSourceID, mapping: mapping, limit: Self.taskLimit
+        let result = await TickTickTodoLoader.load(
+            client: client, listID: selectedListID, listName: displayName, limit: Self.taskLimit
         )
         // A newer refresh, a source switch or a disconnect makes this one void.
         guard isActive, serial == refreshSerial else { return }
         switch result {
-        case .success(let load):
-            if mayDetect, adoptNotesColumnOnce(from: load.schema) {
-                await runRefresh(serial: serial, mayDetect: false)
-                return
-            }
-            apply(load)
-        case .failure(.mapping(let issue, let latestSchema)):
-            // Picking the database could not read its schema (offline, for
-            // one), which left the mapping empty. Guess it now, once.
-            let detected = NotionTodoMapper.detect(latestSchema)
-            if mayDetect, issue == .doneNotChosen, mapping == NotionTodoMapping(), detected != mapping {
-                schema = latestSchema
-                mapping = detected
-                persistSelection()
-                await runRefresh(serial: serial, mayDetect: false)
-                return
-            }
-            schema = latestSchema
-            resolved = nil
-            items = []
-            isShowingCachedItems = false
-            gate.recordSuccess()
-            state = .needsAttention(issue)
-        case .failure(.api(let error)):
-            applyFailure(error)
+        case .success(let load): apply(load)
+        case .failure(let error): applyFailure(error)
         }
     }
 
-    /// A setup saved before notes existed has no notes column. Guess one
-    /// the first time the schema is seen. Returns true when the mapping changed.
-    private func adoptNotesColumnOnce(from schema: NotionDataSource) -> Bool {
-        guard !defaults.bool(forKey: Keys.notesColumnChecked) else { return false }
-        defaults.set(true, forKey: Keys.notesColumnChecked)
-        // Nobody is looking at the pickers here: only a column whose name
-        // says notes is taken, never just the first text column.
-        guard mapping.notesPropertyID == nil,
-              let detected = NotionTodoMapper.detectNotesProperty(schema, namedOnly: true) else { return false }
-        mapping.notesPropertyID = detected.id
-        persistSelection()
-        return true
-    }
-
-    private func apply(_ load: NotionTodoLoad) {
-        schema = load.schema
-        resolved = load.resolved
-        if !load.schema.title.isEmpty {
-            databaseTitle = load.schema.title
-            defaults.set(load.schema.title, forKey: Keys.databaseTitle)
+    private func apply(_ load: TickTickTodoLoad) {
+        if let name = load.listName, name != listName {
+            listName = name
+            defaults.set(name, forKey: Keys.listName)
         }
-        items = load.items.filter { !pendingCompletions.contains($0.id) }.map { item in
-            guard let pending = pendingNotes[item.id] else { return item }
-            var kept = item
-            kept.notes = pending.isEmpty ? nil : pending
+        if let inbox = load.inboxProjectID { inboxProjectID = inbox }
+        // The token works: a rejection seen earlier no longer stands.
+        tokenRejected = false
+        // The list of lists says who may write, and the list's own answer
+        // may say it too.
+        isListReadOnly = load.isReadOnly || (lists.first { $0.id == selectedListID }?.isReadOnly ?? false)
+        rows = load.rows.filter { !pendingCompletions.contains($0.item.id) }.map { row in
+            guard let pending = pendingNotes[row.item.id] else { return row }
+            var kept = row
+            kept.item.notes = pending.isEmpty ? nil : pending
             return kept
         }
         isShowingCachedItems = false
@@ -324,49 +282,48 @@ final class NookNotionTodoService {
     }
 
     /// Turns a failed request into the state the card and settings show.
-    func applyFailure(_ error: NotionAPIError) {
+    func applyFailure(_ error: TickTickAPIError) {
         switch error {
         case .cancelled:
             return
         case .unauthorized:
-            dropItems()
+            dropRows()
             tokenRejected = hasToken
             state = .invalidToken
         case .forbidden:
-            dropItems()
-            state = .missingReadCapability
+            dropRows()
+            state = .forbidden
         case .notFound:
-            dropItems()
-            state = .databaseUnavailable
+            dropRows()
+            state = .listUnavailable
         case .badRequest:
-            dropItems()
-            state = .needsAttention(.queryRejected)
+            dropRows()
+            state = .rejected
         case .rateLimited(let retryAfter):
             gate.recordRateLimit(retryAfter: retryAfter, now: now())
-            isShowingCachedItems = !items.isEmpty
+            isShowingCachedItems = !rows.isEmpty
             state = .rateLimited
         case .offline:
             gate.recordFailure(now: now())
-            isShowingCachedItems = !items.isEmpty
+            isShowingCachedItems = !rows.isEmpty
             state = .offline
         case .server, .invalidResponse:
             gate.recordFailure(now: now())
-            isShowingCachedItems = !items.isEmpty
+            isShowingCachedItems = !rows.isEmpty
             state = .serverError
         }
     }
 
-    private func dropItems() {
-        items = []
+    private func dropRows() {
+        rows = []
         isShowingCachedItems = false
-        resolved = nil
     }
 
     // MARK: Helpers shared with the actions extension
 
-    func makeClient() -> NotionClient? {
+    func makeClient() -> TickTickClient? {
         guard let token else { return nil }
-        return NotionClient(token: token, transport: resolvedTransport())
+        return TickTickClient(token: token, transport: resolvedTransport())
     }
 
     func resolvedTransport() -> any NookTodoTransport {
@@ -378,12 +335,8 @@ final class NookNotionTodoService {
 
     /// Writes the current rows to disk in the background.
     func saveCache() {
-        guard let selectedDatabaseID else { return }
-        let snapshot = NotionTodoSnapshot(
-            dataSourceID: selectedDatabaseID,
-            databaseTitle: databaseTitle ?? "",
-            savedAt: now(),
-            items: items
+        let snapshot = TickTickTodoSnapshot(
+            listID: selectedListID, listName: displayName, savedAt: now(), rows: rows
         )
         Task { [weak self, cache] in
             do {
@@ -405,33 +358,20 @@ final class NookNotionTodoService {
     }
 
     private func loadPreferences() {
-        selectedDatabaseID = defaults.string(forKey: Keys.dataSourceID)
-        databaseTitle = defaults.string(forKey: Keys.databaseTitle)
-        accountName = defaults.string(forKey: Keys.account)
-        if let data = defaults.data(forKey: Keys.mapping),
-           let stored = try? JSONDecoder().decode(NotionTodoMapping.self, from: data) {
-            mapping = stored
-        } else {
-            // Missing or unreadable: resolving an empty mapping reports
-            // "pick how tasks are marked done" in the card and settings.
-            mapping = NotionTodoMapping()
-        }
+        selectedListID = defaults.string(forKey: Keys.listID).flatMap { $0.isEmpty ? nil : $0 } ?? TickTickClient.inboxID
+        listName = defaults.string(forKey: Keys.listName)
     }
 
     func persistSelection() {
-        setOrRemove(selectedDatabaseID, Keys.dataSourceID)
-        setOrRemove(databaseTitle, Keys.databaseTitle)
-        setOrRemove(accountName, Keys.account)
-        if let data = try? JSONEncoder().encode(mapping) {
-            defaults.set(data, forKey: Keys.mapping)
-        }
-    }
-
-    private func setOrRemove(_ value: String?, _ key: String) {
-        if let value {
-            defaults.set(value, forKey: key)
+        if selectedListID == TickTickClient.inboxID {
+            defaults.removeObject(forKey: Keys.listID)
         } else {
-            defaults.removeObject(forKey: key)
+            defaults.set(selectedListID, forKey: Keys.listID)
+        }
+        if let listName {
+            defaults.set(listName, forKey: Keys.listName)
+        } else {
+            defaults.removeObject(forKey: Keys.listName)
         }
     }
 }

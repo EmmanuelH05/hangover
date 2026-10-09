@@ -20,6 +20,7 @@ struct NookTodoSettings: View {
             )) {
                 Text(lang.t("nook.todo.source.reminders")).tag(NookTodoSourceKind.reminders)
                 Text(lang.t("nook.todo.source.notion")).tag(NookTodoSourceKind.notion)
+                Text(lang.t("nook.todo.source.ticktick")).tag(NookTodoSourceKind.tickTick)
             }
 
             if hub.selectedKind == .reminders {
@@ -49,6 +50,9 @@ struct NookTodoSettings: View {
 
         if hub.selectedKind == .notion {
             NookNotionTodoSettings(service: hub.notion)
+        }
+        if hub.selectedKind == .tickTick {
+            NookTickTickTodoSettings(service: hub.tickTick)
         }
     }
 

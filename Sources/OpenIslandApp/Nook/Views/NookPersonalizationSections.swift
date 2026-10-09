@@ -32,12 +32,14 @@ extension AppearanceSettingsPane {
         }
     }
 
-    /// The right slot's extra choices, under the island's own three. The
-    /// island's cards clear this; these set it.
+    /// The right slot's extra choices, under the island's own three. A pick
+    /// in either row takes the whole right side (`IslandRightSideChoice`).
     @ViewBuilder
     var nookRightSlotExtras: some View {
         nookSideSlotRow([.agents, .date, .battery, .countdown], group: "nook.rightSlot.extras", current: { $0.rightSlot }) { slot in
-            updateNook { $0.rightSlot = slot }
+            withMotion(Motion.selection) {
+                model.chooseRightSide(.extra(slot), for: editingProfile)
+            }
         }
     }
 

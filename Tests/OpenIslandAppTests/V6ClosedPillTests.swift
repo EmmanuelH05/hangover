@@ -359,7 +359,7 @@ struct V6ClosedPillTests {
     /// views, so only static SwiftUI content is meaningful here.
     @MainActor
     private func renderedPixels(of view: some View) throws -> RenderedPixels {
-        let renderer = ImageRenderer(content: view)
+        let renderer = ImageRenderer(content: view.environment(\.nookDrawsStill, true))
         renderer.scale = 1
         let image = try #require(renderer.cgImage)
 
@@ -395,7 +395,7 @@ struct V6ClosedPillTests {
     /// flat top edge, in the middle, which only the fill can cover.
     @MainActor
     private func renderedAlpha(of pill: V6ClosedPill) throws -> RenderedAlpha {
-        let renderer = ImageRenderer(content: pill)
+        let renderer = ImageRenderer(content: pill.environment(\.nookDrawsStill, true))
         renderer.scale = 1
         let image = try #require(renderer.cgImage)
 

@@ -1,35 +1,5 @@
 import Foundation
 
-/// Sends one HTTP request. The app uses `URLSession`; tests use a stub.
-protocol NotionTransport: Sendable {
-    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse)
-}
-
-struct NotionURLSessionTransport: NotionTransport {
-    static let requestTimeout: TimeInterval = 15
-    static let resourceTimeout: TimeInterval = 30
-
-    private let session: URLSession
-
-    init() {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = Self.requestTimeout
-        configuration.timeoutIntervalForResource = Self.resourceTimeout
-        configuration.waitsForConnectivity = false
-        configuration.httpCookieStorage = nil
-        configuration.urlCache = nil
-        session = URLSession(configuration: configuration)
-    }
-
-    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw NotionAPIError.invalidResponse
-        }
-        return (data, http)
-    }
-}
-
 /// Every way a Notion request can fail, already sorted into the cases the
 /// widget shows differently. Carries no token and no response text.
 enum NotionAPIError: Error, Equatable, Sendable {
@@ -69,7 +39,7 @@ struct NotionClient: Sendable {
     private static let pathPrefix = "/v1/"
 
     let token: String
-    let transport: any NotionTransport
+    let transport: any NookTodoTransport
 
     // MARK: Endpoints
 
@@ -186,7 +156,7 @@ struct NotionClient: Sendable {
 
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.timeoutInterval = NotionURLSessionTransport.requestTimeout
+        request.timeoutInterval = NookTodoURLSessionTransport.requestTimeout
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue(Self.apiVersion, forHTTPHeaderField: "Notion-Version")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -205,7 +175,12 @@ struct NotionClient: Sendable {
         if let known = error as? NotionAPIError { return known }
         if error is CancellationError { return .cancelled }
         if let urlError = error as? URLError {
-            return urlError.code == .cancelled ? .cancelled : .offline
+            switch urlError.code {
+            case .cancelled: return .cancelled
+            // The transport's word for an answer that is not HTTP.
+            case .badServerResponse: return .invalidResponse
+            default: return .offline
+            }
         }
         return .offline
     }

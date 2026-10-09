@@ -360,7 +360,7 @@ struct OnboardingTourTests {
     /// Builds the page a tour is on the way its window does, which runs
     /// the page's body and everything in it.
     private func draw(_ tour: OnboardingTour) throws {
-        let renderer = ImageRenderer(content: OnboardingView(tour: tour, lang: .shared))
+        let renderer = ImageRenderer(content: OnboardingView(tour: tour, lang: .shared).environment(\.nookDrawsStill, true))
         renderer.scale = 1
         _ = try #require(renderer.cgImage, "the \(tour.page) page did not draw")
     }

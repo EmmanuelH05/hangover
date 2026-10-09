@@ -156,9 +156,7 @@ struct AppearanceSettingsPane: View {
             ringGroup: "rightSlot",
             select: { [model] option in
                 withMotion(Motion.selection) {
-                    let profile = model.appearanceSettingsProfile
-                    model.nook.updateDisplayPreferences(for: profile) { $0.rightSlot = nil }
-                    model.updateAppearancePreferences(for: profile) { $0.rightSlot = option }
+                    model.chooseRightSide(.own(option), for: model.appearanceSettingsProfile)
                 }
             },
             icon: { option in

@@ -157,6 +157,7 @@ import Testing
                 .frame(width: size.width, height: size.height)
                 .background(Color.black)
                 .environment(\.colorScheme, .dark)
+                .environment(\.nookDrawsStill, true)
         )
         renderer.scale = Self.scale
         let image = try #require(renderer.cgImage, "ImageRenderer returned no image")

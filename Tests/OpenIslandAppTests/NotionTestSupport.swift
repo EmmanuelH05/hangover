@@ -2,26 +2,26 @@ import Foundation
 @testable import OpenIslandApp
 
 /// What the stub answers for one request.
-struct StubNotionResponse: Sendable {
+struct StubTodoResponse: Sendable {
     var status = 200
     var headers: [String: String] = [:]
     var body = "{}"
 
-    static func json(_ body: String, status: Int = 200, headers: [String: String] = [:]) -> StubNotionResponse {
-        StubNotionResponse(status: status, headers: headers, body: body)
+    static func json(_ body: String, status: Int = 200, headers: [String: String] = [:]) -> StubTodoResponse {
+        StubTodoResponse(status: status, headers: headers, body: body)
     }
 }
 
 /// A transport that never touches the network. Records every request.
-final class StubNotionTransport: NotionTransport, @unchecked Sendable {
-    typealias Responder = @Sendable (_ request: URLRequest, _ callIndex: Int) throws -> StubNotionResponse
+final class StubTodoTransport: NookTodoTransport, @unchecked Sendable {
+    typealias Responder = @Sendable (_ request: URLRequest, _ callIndex: Int) throws -> StubTodoResponse
 
     private let lock = NSLock()
     private var recorded: [URLRequest] = []
     private var responder: Responder
     private var hold: (@Sendable (URLRequest) async -> Void)?
 
-    init(_ responder: @escaping Responder = { _, _ in StubNotionResponse() }) {
+    init(_ responder: @escaping Responder = { _, _ in StubTodoResponse() }) {
         self.responder = responder
     }
 
@@ -50,7 +50,7 @@ final class StubNotionTransport: NotionTransport, @unchecked Sendable {
         guard let response = HTTPURLResponse(
             url: url, statusCode: reply.status, httpVersion: "HTTP/1.1", headerFields: reply.headers
         ) else {
-            throw NotionAPIError.invalidResponse
+            throw URLError(.badServerResponse)
         }
         return (Data(reply.body.utf8), response)
     }
@@ -73,11 +73,11 @@ extension URLRequest {
     var route: String { "\(httpMethod ?? "") \(url?.path ?? "")" }
 }
 
-final class InMemoryNotionTokenStore: NotionTokenStoring, @unchecked Sendable {
+final class InMemoryTodoTokenStore: NookTodoTokenStoring, @unchecked Sendable {
     private let lock = NSLock()
     private var stored: String?
     private var reads = 0
-    var failure: NotionKeychainError?
+    var failure: NookTodoKeychainError?
 
     init(token: String? = nil) { stored = token }
 

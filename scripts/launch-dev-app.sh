@@ -126,7 +126,7 @@ cat > "$plist_path" <<EOF
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Hangover uses automation to find your agent's terminal window, jump back to it and send your reply there.</string>
+    <string>Hangover uses automation to find your agent's terminal window, jump back to it and send your reply there, and to add your quick notes to the Notes app when you pick that.</string>
     <key>NSCameraUsageDescription</key>
     <string>The Nook mirror shows your camera inside the notch, and its photo booth takes pictures only when you start it.</string>
     <key>NSCalendarsFullAccessUsageDescription</key>

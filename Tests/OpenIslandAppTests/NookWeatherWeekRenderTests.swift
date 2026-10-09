@@ -189,6 +189,7 @@ import Testing
             content: try content()
                 .background(Color.black)
                 .environment(\.colorScheme, .dark)
+                .environment(\.nookDrawsStill, true)
         )
         renderer.scale = Self.scale
         let image = try #require(renderer.cgImage, "ImageRenderer returned no image for \(name ?? "a view")")

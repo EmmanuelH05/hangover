@@ -149,29 +149,233 @@ struct AnimatedGIFView: NSViewRepresentable {
     }
 }
 
-/// Four bars bouncing on a timeline while playing, flat while paused.
+/// Four bars bouncing while playing, flat while paused.
+///
+/// The bars are Core Animation layers (`NookBarVisualizerLayerView`), which
+/// the system moves without waking the app. A SwiftUI timeline here changed
+/// the bars' frames twenty times a second, and each change re-laid out the
+/// whole window it sat in: the island while music played, and the Settings
+/// window for as long as the Personalization tab was open.
 struct NookBarVisualizer: View {
     var isPlaying: Bool
     var barCount: Int = 4
     var height: CGFloat = 16
     var color: Color = .white
-    /// False pauses the timeline while the visualizer is hidden.
+    /// False holds the bars still while the visualizer is hidden.
     var isLive: Bool = true
 
+    static let barWidth: CGFloat = 3
+    static let barSpacing: CGFloat = 2
+    /// A bar at rest, and the lowest a moving bar gets, as parts of the height.
+    static let pausedLevel: CGFloat = 0.25
+    static let lowLevel: CGFloat = 0.35
+    static let minimumBarHeight: CGFloat = 3
+
+    static func width(barCount: Int) -> CGFloat {
+        let count = CGFloat(max(barCount, 0))
+        return count * barWidth + max(count - 1, 0) * barSpacing
+    }
+
+    /// The bars of a picture drawn offscreen, which shows no layers: playing
+    /// bars at fixed, uneven heights.
+    static func stillLevel(index: Int, isPlaying: Bool) -> CGFloat {
+        guard isPlaying else { return pausedLevel }
+        return lowLevel + (1 - lowLevel) * abs(sin(1.1 + Double(index) * 1.3))
+    }
+
+    @Environment(\.nookDrawsStill) private var drawsStill
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 20.0, paused: !isPlaying || !isLive)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            HStack(alignment: .center, spacing: 2) {
-                ForEach(0..<barCount, id: \.self) { index in
-                    let phase = t * (2.6 + Double(index) * 0.45) + Double(index) * 1.3
-                    let level = isPlaying ? (0.35 + 0.65 * abs(sin(phase))) : 0.25
-                    RoundedRectangle(cornerRadius: 1, style: .continuous)
-                        .fill(color.opacity(isPlaying ? 0.9 : 0.4))
-                        .frame(width: 3, height: max(3, height * level))
-                }
+        Group {
+            if drawsStill {
+                stillBars
+            } else {
+                NookBarVisualizerLayers(
+                    isMoving: isPlaying && isLive && !reduceMotion,
+                    isPlaying: isPlaying,
+                    barCount: barCount,
+                    height: height,
+                    color: NSColor(color)
+                )
             }
-            .frame(height: height, alignment: .center)
         }
+        .frame(width: Self.width(barCount: barCount), height: height, alignment: .center)
+    }
+
+    private var stillBars: some View {
+        HStack(alignment: .center, spacing: Self.barSpacing) {
+            ForEach(0..<barCount, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 1, style: .continuous)
+                    .fill(color.opacity(isPlaying ? 0.9 : 0.4))
+                    .frame(
+                        width: Self.barWidth,
+                        height: max(Self.minimumBarHeight, height * Self.stillLevel(index: index, isPlaying: isPlaying))
+                    )
+            }
+        }
+    }
+}
+
+private struct NookBarVisualizerLayers: NSViewRepresentable {
+    let isMoving: Bool
+    let isPlaying: Bool
+    let barCount: Int
+    let height: CGFloat
+    let color: NSColor
+
+    func makeNSView(context: Context) -> NookBarVisualizerLayerView {
+        let view = NookBarVisualizerLayerView()
+        configure(view)
+        return view
+    }
+
+    func updateNSView(_ nsView: NookBarVisualizerLayerView, context: Context) {
+        configure(nsView)
+    }
+
+    private func configure(_ view: NookBarVisualizerLayerView) {
+        view.update(isMoving: isMoving, isPlaying: isPlaying, barCount: barCount, height: height, color: color.cgColor)
+    }
+}
+
+/// The visualizer's bars as layers. Each bar's height runs on a loop the
+/// render server plays. Applying the same state twice changes nothing, which
+/// keeps a SwiftUI re-render from restarting the bars.
+final class NookBarVisualizerLayerView: NSView {
+    static let loopKey = "visualizer.loop"
+    /// How long one bar takes from low to full. Each bar has its own pace,
+    /// which keeps the four from moving as one.
+    static func riseDuration(index: Int) -> CFTimeInterval {
+        .pi / (2 * (2.6 + Double(index) * 0.45))
+    }
+
+    private struct Applied: Equatable {
+        var isMoving: Bool
+        var isPlaying: Bool
+        var barCount: Int
+        var height: CGFloat
+        var color: CGColor
+    }
+
+    private(set) var bars: [CALayer] = []
+    private var applied: Applied?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not used")
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func isAccessibilityElement() -> Bool { false }
+
+    override func layout() {
+        super.layout()
+        placeBars()
+    }
+
+    /// A layer can lose its animations when its view leaves a window. Back
+    /// in one, bars that should move and have no loop get theirs again.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil, let applied, applied.isMoving,
+              bars.contains(where: { $0.animation(forKey: Self.loopKey) == nil }) else { return }
+        applyMotion(applied)
+    }
+
+    func update(isMoving: Bool, isPlaying: Bool, barCount: Int, height: CGFloat, color: CGColor) {
+        let next = Applied(
+            isMoving: isMoving, isPlaying: isPlaying, barCount: max(barCount, 0), height: height, color: color
+        )
+        guard next != applied else { return }
+        let previous = applied
+        applied = next
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if previous?.barCount != next.barCount { rebuildBars(count: next.barCount) }
+        for bar in bars {
+            bar.backgroundColor = next.color
+            bar.opacity = next.isPlaying ? 0.9 : 0.4
+        }
+        placeBars()
+        // A change of size or of pace starts the loops again. Anything else
+        // (a new tint) leaves them running.
+        let restarts = previous?.isMoving != next.isMoving || previous?.height != next.height
+            || previous?.barCount != next.barCount
+        if restarts { applyMotion(next) }
+        CATransaction.commit()
+    }
+
+    private func rebuildBars(count: Int) {
+        bars.forEach { $0.removeFromSuperlayer() }
+        bars = (0..<count).map { _ in
+            let bar = CALayer()
+            bar.cornerRadius = 1
+            bar.cornerCurve = .continuous
+            layer?.addSublayer(bar)
+            return bar
+        }
+    }
+
+    private func restingHeight(_ state: Applied, index: Int) -> CGFloat {
+        let level: CGFloat = state.isPlaying
+            ? (state.isMoving ? 1 : NookBarVisualizer.stillLevel(index: index, isPlaying: true))
+            : NookBarVisualizer.pausedLevel
+        return max(NookBarVisualizer.minimumBarHeight, state.height * level)
+    }
+
+    /// Centers the row of bars in the view. Leaves the loops alone.
+    private func placeBars() {
+        guard let applied else { return }
+        let rowWidth = NookBarVisualizer.width(barCount: bars.count)
+        let originX = (bounds.width - rowWidth) / 2
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for (index, bar) in bars.enumerated() {
+            let x = originX + CGFloat(index) * (NookBarVisualizer.barWidth + NookBarVisualizer.barSpacing)
+            bar.bounds = CGRect(x: 0, y: 0, width: NookBarVisualizer.barWidth, height: restingHeight(applied, index: index))
+            bar.position = CGPoint(x: x + NookBarVisualizer.barWidth / 2, y: bounds.midY)
+        }
+        CATransaction.commit()
+    }
+
+    private func applyMotion(_ state: Applied) {
+        for (index, bar) in bars.enumerated() {
+            bar.removeAnimation(forKey: Self.loopKey)
+            guard state.isMoving else { continue }
+            let low = max(NookBarVisualizer.minimumBarHeight, state.height * NookBarVisualizer.lowLevel)
+            let loop = CABasicAnimation(keyPath: "bounds.size.height")
+            loop.fromValue = low
+            loop.toValue = max(low, state.height)
+            loop.duration = Self.riseDuration(index: index)
+            loop.autoreverses = true
+            loop.repeatCount = .infinity
+            loop.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            // Starts each bar at a different point of its loop.
+            loop.timeOffset = loop.duration * 2 * (Double(index) * 0.37).truncatingRemainder(dividingBy: 1)
+            bar.add(loop, forKey: Self.loopKey)
+        }
+    }
+}
+
+/// True while a view is drawn into a picture offscreen (a test, the README
+/// art). Layers are not drawn there, and a view that moves on a layer draws
+/// a still copy of itself in SwiftUI.
+private struct NookDrawsStillKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var nookDrawsStill: Bool {
+        get { self[NookDrawsStillKey.self] }
+        set { self[NookDrawsStillKey.self] = newValue }
     }
 }
 

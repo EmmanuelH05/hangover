@@ -192,6 +192,7 @@
 /* Settings - About */
 "settings.about.version" = "Version %@";
 "settings.about.checkForUpdates" = "Check for Updates…";
+"settings.about.installAutomatically" = "Install updates automatically";
 "settings.about.quitApp" = "Quit Hangover";
 "settings.about.credit" = "Hangover is based on Open Island and is free software under the GNU General Public License, version 3. It comes with no warranty.";
 "settings.about.sourceCode" = "Source Code";
@@ -459,6 +460,7 @@
 "nook.todo.source" = "Source";
 "nook.todo.source.reminders" = "Reminders";
 "nook.todo.source.notion" = "Notion";
+"nook.todo.source.ticktick" = "TickTick";
 "nook.todo.offline" = "offline";
 "nook.todo.notion.section" = "Notion";
 "nook.todo.notion.token.placeholder" = "Internal integration token";
@@ -517,6 +519,43 @@
 "nook.todo.notion.error.completeFailed" = "Could not mark the task done.";
 "nook.todo.notion.error.cannotUpdate" = "The integration cannot update tasks. Turn on Update content in Notion.";
 "nook.todo.notion.error.cannotInsert" = "The integration cannot add tasks. Turn on Insert content in Notion.";
+/* Nook: TickTick todo */
+"nook.todo.ticktick.section" = "TickTick";
+"nook.todo.ticktick.token.placeholder" = "API token";
+"nook.todo.ticktick.token.help" = "In TickTick on the web, open Settings, then Account, then API Token. Create a token and paste it here. The token is stored in your Mac's Keychain and nowhere else.";
+"nook.todo.ticktick.token.saved" = "Saved in your Keychain";
+"nook.todo.ticktick.connect" = "Connect";
+"nook.todo.ticktick.disconnect" = "Disconnect";
+"nook.todo.ticktick.openWeb" = "Open TickTick";
+"nook.todo.ticktick.savedTasks" = "Showing saved tasks.";
+"nook.todo.ticktick.cacheFailed" = "Could not update the saved copy of your tasks.";
+"nook.todo.ticktick.inbox" = "Inbox";
+"nook.todo.ticktick.untitled" = "Untitled";
+"nook.todo.ticktick.add" = "Add a task";
+"nook.todo.ticktick.addUnavailable" = "Adding is unavailable right now";
+"nook.todo.ticktick.list.section" = "TickTick list";
+"nook.todo.ticktick.list" = "List";
+"nook.todo.ticktick.list.reload" = "Reload lists";
+"nook.todo.ticktick.list.refresh" = "Refresh now";
+"nook.todo.ticktick.state.inactive" = "TickTick is not the selected source.";
+"nook.todo.ticktick.state.connecting" = "Connecting to TickTick…";
+"nook.todo.ticktick.state.noToken" = "Add a TickTick token in Settings.";
+"nook.todo.ticktick.state.keychain" = "The Keychain refused access to the TickTick token.";
+"nook.todo.ticktick.state.invalidToken" = "TickTick rejected the token. Paste a new one in Settings.";
+"nook.todo.ticktick.state.listUnavailable" = "List not found. Choose another list in Settings.";
+"nook.todo.ticktick.state.forbidden" = "TickTick refused access to this list.";
+"nook.todo.ticktick.state.rateLimited" = "TickTick is limiting requests. Trying again soon.";
+"nook.todo.ticktick.state.offline" = "Offline. Cannot reach TickTick.";
+"nook.todo.ticktick.state.serverError" = "TickTick had a problem. Trying again soon.";
+"nook.todo.ticktick.state.ready" = "Connected.";
+"nook.todo.ticktick.error.addFailed" = "Could not add the task.";
+"nook.todo.ticktick.error.completeFailed" = "Could not mark the task done.";
+"nook.todo.ticktick.error.notesFailed" = "Could not save the note.";
+"nook.todo.ticktick.error.readOnly" = "This list is read-only.";
+"nook.todo.ticktick.state.connectFailed" = "Could not check the token with TickTick. Try again.";
+"nook.todo.ticktick.state.rejected" = "TickTick rejected the request.";
+"nook.todo.ticktick.error.tokenNotRemoved" = "Could not remove the token from your Keychain. It is still stored.";
+"nook.todo.ticktick.list.loadFailed" = "Could not load your lists.";
 
 /* Nook: file tray */
 "nook.tray.tab.files" = "Files";

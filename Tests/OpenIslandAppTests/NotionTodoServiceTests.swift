@@ -7,8 +7,8 @@ import Testing
     /// Everything one service needs, with nothing shared between tests.
     @MainActor
     final class Harness {
-        let transport: StubNotionTransport
-        let tokens: InMemoryNotionTokenStore
+        let transport: StubTodoTransport
+        let tokens: InMemoryTodoTokenStore
         let defaults = NotionFixtures.makeDefaults()
         let directory = NotionFixtures.makeTempDirectory()
         let clock = TestClock()
@@ -16,8 +16,8 @@ import Testing
         let service: NookNotionTodoService
 
         init(token: String? = NotionFixtures.token, configured: Bool = true, schema: String = NotionFixtures.selectSchema) throws {
-            transport = StubNotionTransport()
-            tokens = InMemoryNotionTokenStore(token: token)
+            transport = StubTodoTransport()
+            tokens = InMemoryTodoTokenStore(token: token)
             cache = NotionTodoCache(directory: directory)
             if configured {
                 let mapping = NotionTodoMapper.detect(try NotionFixtures.decodeSchema(schema))
@@ -146,7 +146,7 @@ import Testing
         #expect(noDatabase.transport.requests.isEmpty)
 
         let lockedKeychain = try Harness()
-        lockedKeychain.tokens.failure = NotionKeychainError(status: -25308)
+        lockedKeychain.tokens.failure = NookTodoKeychainError(status: -25308)
         await lockedKeychain.activate()
         #expect(lockedKeychain.service.state == .keychainUnavailable)
     }
@@ -226,7 +226,7 @@ import Testing
         #expect(saved.tasks.map(\.id) == ["a", "b", "c"])
 
         // A second launch with the same cache folder and no network.
-        let transport = StubNotionTransport { _, _ in throw URLError(.notConnectedToInternet) }
+        let transport = StubTodoTransport { _, _ in throw URLError(.notConnectedToInternet) }
         let service = NookNotionTodoService(
             defaults: first.defaults, transport: transport, tokenStore: first.tokens,
             cache: NotionTodoCache(directory: first.directory)

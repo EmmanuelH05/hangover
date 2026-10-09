@@ -192,6 +192,7 @@
 /* Settings - About */
 "settings.about.version" = "版本 %@";
 "settings.about.checkForUpdates" = "檢查更新…";
+"settings.about.installAutomatically" = "自動安裝更新";
 "settings.about.quitApp" = "結束 Hangover";
 "settings.about.credit" = "Hangover 以 Open Island 為基礎開發，是依 GNU 通用公共授權條款第 3 版發布的自由軟體，不提供任何擔保。";
 "settings.about.sourceCode" = "原始碼";
@@ -458,6 +459,7 @@
 "nook.todo.source" = "來源";
 "nook.todo.source.reminders" = "提醒事項";
 "nook.todo.source.notion" = "Notion";
+"nook.todo.source.ticktick" = "TickTick";
 "nook.todo.offline" = "離線";
 "nook.todo.notion.section" = "Notion";
 "nook.todo.notion.token.placeholder" = "內部整合權杖";
@@ -516,6 +518,43 @@
 "nook.todo.notion.error.completeFailed" = "無法將任務標記為完成。";
 "nook.todo.notion.error.cannotUpdate" = "該整合無法更新任務。請在 Notion 中開啟「更新內容」。";
 "nook.todo.notion.error.cannotInsert" = "該整合無法加入任務。請在 Notion 中開啟「插入內容」。";
+/* Nook: TickTick todo */
+"nook.todo.ticktick.section" = "TickTick";
+"nook.todo.ticktick.token.placeholder" = "API 權杖";
+"nook.todo.ticktick.token.help" = "在 TickTick 網頁版中打開「設定」，然後進入「帳號」，再進入「API Token」。建立一個權杖並貼到這裡。權杖只儲存在這台 Mac 的鑰匙圈中。";
+"nook.todo.ticktick.token.saved" = "已儲存在鑰匙圈中";
+"nook.todo.ticktick.connect" = "連線";
+"nook.todo.ticktick.disconnect" = "中斷連線";
+"nook.todo.ticktick.openWeb" = "打開 TickTick";
+"nook.todo.ticktick.savedTasks" = "正在顯示已儲存的任務。";
+"nook.todo.ticktick.cacheFailed" = "無法更新已儲存的任務副本。";
+"nook.todo.ticktick.inbox" = "收件匣";
+"nook.todo.ticktick.untitled" = "未命名";
+"nook.todo.ticktick.add" = "加入任務";
+"nook.todo.ticktick.addUnavailable" = "暫時無法加入";
+"nook.todo.ticktick.list.section" = "TickTick 清單";
+"nook.todo.ticktick.list" = "清單";
+"nook.todo.ticktick.list.reload" = "重新載入清單";
+"nook.todo.ticktick.list.refresh" = "立即重新整理";
+"nook.todo.ticktick.state.inactive" = "目前未選擇 TickTick 作為來源。";
+"nook.todo.ticktick.state.connecting" = "正在連線到 TickTick…";
+"nook.todo.ticktick.state.noToken" = "請在設定中加入 TickTick 權杖。";
+"nook.todo.ticktick.state.keychain" = "鑰匙圈拒絕存取 TickTick 權杖。";
+"nook.todo.ticktick.state.invalidToken" = "TickTick 拒絕了該權杖。請在設定中貼上新的權杖。";
+"nook.todo.ticktick.state.listUnavailable" = "找不到清單。請在設定中選擇其他清單。";
+"nook.todo.ticktick.state.forbidden" = "TickTick 拒絕存取此清單。";
+"nook.todo.ticktick.state.rateLimited" = "TickTick 正在限制請求。稍後重試。";
+"nook.todo.ticktick.state.offline" = "離線。無法連線到 TickTick。";
+"nook.todo.ticktick.state.serverError" = "TickTick 發生問題。稍後重試。";
+"nook.todo.ticktick.state.ready" = "已連線。";
+"nook.todo.ticktick.error.addFailed" = "無法加入任務。";
+"nook.todo.ticktick.error.completeFailed" = "無法將任務標記為完成。";
+"nook.todo.ticktick.error.notesFailed" = "無法儲存備註。";
+"nook.todo.ticktick.error.readOnly" = "此清單為唯讀。";
+"nook.todo.ticktick.state.connectFailed" = "無法向 TickTick 驗證權杖。請重試。";
+"nook.todo.ticktick.state.rejected" = "TickTick 拒絕了該請求。";
+"nook.todo.ticktick.error.tokenNotRemoved" = "無法從鑰匙圈移除權杖。權杖仍然儲存著。";
+"nook.todo.ticktick.list.loadFailed" = "無法載入你的清單。";
 
 /* Nook: file tray */
 "nook.tray.tab.files" = "檔案";

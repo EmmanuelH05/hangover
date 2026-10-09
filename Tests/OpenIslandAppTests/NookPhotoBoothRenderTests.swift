@@ -63,7 +63,7 @@ struct NookPhotoBoothRenderTests {
             .frame(width: size.width, height: size.height)
             .overlay { NookPhotoBoothOverlay(nook: nook) }
             .environment(\.colorScheme, .dark)
-        let renderer = ImageRenderer(content: content)
+        let renderer = ImageRenderer(content: content.environment(\.nookDrawsStill, true))
         renderer.scale = 2
         let image = try #require(renderer.cgImage, "no picture for \(name)")
         let png = try #require(NookPhotoBoothImaging.pngData(image), "no PNG for \(name)")

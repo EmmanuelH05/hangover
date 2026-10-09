@@ -1,9 +1,15 @@
 import SwiftUI
 
 extension View {
-    /// The pure SwiftUI twin of `islandHalo`, for Settings (`ImageRenderer`
-    /// cannot draw AppKit views). The glow is a blurred rounded rect behind
-    /// the view, driven by `phaseAnimator` and `keyframeAnimator`.
+    /// The status glow behind a pill in Settings and in the welcome tour.
+    ///
+    /// In a window it is the same Core Animation layer the island uses
+    /// (`islandHalo`), which the system animates without waking the app. A
+    /// SwiftUI copy that breathed with `phaseAnimator` redrew the whole
+    /// Settings window on every frame for as long as it was on screen.
+    ///
+    /// A picture drawn offscreen shows no layers, and gets a still SwiftUI
+    /// copy of the glow (`nookDrawsStill`).
     ///
     /// The blur reaches past the view's bounds, so the host needs room around it.
     func islandHaloPreview(_ state: IslandHaloState, cornerRadius: CGFloat) -> some View {
@@ -14,124 +20,45 @@ extension View {
 private struct IslandHaloPreviewModifier: ViewModifier {
     let state: IslandHaloState
     let cornerRadius: CGFloat
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.nookDrawsStill) private var drawsStill
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content.background(
-            IslandHaloPreviewGlow(state: state, cornerRadius: cornerRadius, reduceMotion: reduceMotion)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-        )
+        if drawsStill {
+            content.background(
+                IslandHaloStillGlow(state: state, cornerRadius: cornerRadius)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            )
+        } else {
+            content.islandHalo(state, cornerRadius: cornerRadius)
+        }
     }
 }
 
-private struct IslandHaloPreviewGlow: View {
+/// The glow as one still frame: a blurred rounded rect at the opacity the
+/// state rests at. A flash is drawn at its peak.
+struct IslandHaloStillGlow: View {
     let state: IslandHaloState
     let cornerRadius: CGFloat
-    let reduceMotion: Bool
 
     /// Same inset as the Core Animation halo.
     private static let pillInset = IslandHaloLayerView.pillInset
 
+    /// The one opacity a still picture shows for a state.
+    static func opacity(for state: IslandHaloState) -> Double {
+        if case let .flash(_, peak, _) = state.motion { return peak }
+        return state.restOpacity
+    }
+
     var body: some View {
-        ZStack {
-            if state.isVisible {
-                glow
-                    .transition(.opacity)
-            }
+        if state.isVisible {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(state.color.color)
+                .padding(Self.pillInset)
+                .blur(radius: state.radius)
+                .offset(y: state.drop)
+                .opacity(Self.opacity(for: state))
         }
-        .animation(.easeInOut(duration: Motion.Halo.fade), value: state.isVisible)
-    }
-
-    private var glow: some View {
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(state.color.color)
-            .padding(Self.pillInset)
-            .blur(radius: state.radius)
-            .offset(y: state.drop)
-            .modifier(IslandHaloOpacityDriver(motion: state.motion, restOpacity: state.restOpacity, reduceMotion: reduceMotion))
-            .animation(.easeInOut(duration: Motion.Halo.colorCrossfade), value: state.color)
-            .animation(.easeInOut(duration: Motion.Halo.fade), value: state.radius)
-            .animation(.easeInOut(duration: Motion.Halo.fade), value: state.drop)
-    }
-}
-
-/// Moves the glow's opacity the way the layer halo does. Each motion is its
-/// own branch, so switching motion starts the new one fresh.
-private struct IslandHaloOpacityDriver: ViewModifier {
-    let motion: IslandHaloMotion
-    let restOpacity: Double
-    let reduceMotion: Bool
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        switch motion {
-        case .none, .steady:
-            content.opacity(restOpacity)
-        case let .breathing(period, low, high):
-            if reduceMotion {
-                content.opacity(restOpacity)
-            } else {
-                content.phaseAnimator([low, high]) { view, opacity in
-                    view.opacity(opacity)
-                } animation: { _ in
-                    .easeInOut(duration: period / 2)
-                }
-            }
-        case let .drift(period):
-            if reduceMotion {
-                content.opacity(restOpacity)
-            } else {
-                content.phaseAnimator([restOpacity * 0.75, min(1, restOpacity * 1.15)]) { view, opacity in
-                    view.opacity(opacity)
-                } animation: { _ in
-                    .easeInOut(duration: period)
-                }
-            }
-        case let .flash(token, peak, duration):
-            content.modifier(
-                IslandHaloFlash(token: token, peak: peak, rest: restOpacity, duration: duration, reduceMotion: reduceMotion)
-            )
-        }
-    }
-}
-
-/// One rise, settle and fall per token. It also plays when it first appears,
-/// which `keyframeAnimator` alone does not do. With Reduce Motion it is one
-/// fade instead: start at the peak and ease out to rest.
-private struct IslandHaloFlash: ViewModifier {
-    let token: UInt64
-    let peak: Double
-    let rest: Double
-    let duration: TimeInterval
-    let reduceMotion: Bool
-
-    @State private var trigger: UInt64?
-
-    func body(content: Content) -> some View {
-        content
-            .keyframeAnimator(initialValue: rest, trigger: trigger) { view, opacity in
-                view.opacity(opacity)
-            } keyframes: { _ in
-                KeyframeTrack {
-                    if reduceMotion {
-                        MoveKeyframe(peak)
-                        // A start velocity of twice the average slope, ending
-                        // flat, eases the fade out.
-                        CubicKeyframe(
-                            rest,
-                            duration: duration,
-                            startVelocity: duration > 0 ? 2 * (rest - peak) / duration : 0,
-                            endVelocity: 0
-                        )
-                    } else {
-                        CubicKeyframe(peak, duration: duration * 0.18)
-                        CubicKeyframe(peak * 0.55, duration: duration * 0.32)
-                        CubicKeyframe(rest, duration: duration * 0.5)
-                    }
-                }
-            }
-            .onAppear { trigger = token }
-            .onChange(of: token) { _, newToken in trigger = newToken }
     }
 }

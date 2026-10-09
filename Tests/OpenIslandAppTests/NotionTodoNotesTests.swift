@@ -328,7 +328,7 @@ private let notesTestPages = [
         await first.activate()
         await first.settle()
 
-        let transport = StubNotionTransport { _, _ in throw URLError(.notConnectedToInternet) }
+        let transport = StubTodoTransport { _, _ in throw URLError(.notConnectedToInternet) }
         let service = NookNotionTodoService(
             defaults: first.defaults, transport: transport, tokenStore: first.tokens,
             cache: NotionTodoCache(directory: first.directory)

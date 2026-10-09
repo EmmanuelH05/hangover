@@ -26,6 +26,27 @@ final class UpdateChecker: NSObject {
         bundleFeed == feedURL.absoluteString && bundleKey == AppBrand.updatePublicKey
     }
 
+    /// A copy that has never checked looks at the feed as soon as it
+    /// starts, not a day later. Nobody should have to press "Check for
+    /// Updates" after a first download to get onto the newest version.
+    nonisolated static func checksRightAway(lastCheck: Date?, checksAutomatically: Bool) -> Bool {
+        checksAutomatically && lastCheck == nil
+    }
+
+    /// Whether a new version is downloaded and installed without asking.
+    /// The release sets this on (`SUAutomaticallyUpdate`), and the switch
+    /// in Settings, About turns it off.
+    var installsAutomatically = false {
+        didSet {
+            // Only a real change is written. Copying Sparkle's own value in
+            // at launch must not save it as the user's choice, which would
+            // outlive a later change to the release's default.
+            guard cancellable != nil,
+                  updaterController.updater.automaticallyDownloadsUpdates != installsAutomatically else { return }
+            updaterController.updater.automaticallyDownloadsUpdates = installsAutomatically
+        }
+    }
+
     private(set) var canCheckForUpdates = false
     private(set) var hasUpdate = false
     private(set) var latestVersion: String?
@@ -46,8 +67,9 @@ final class UpdateChecker: NSObject {
     }
 
     /// Called once after app launch. Starts Sparkle in a release bundle:
-    /// it then checks the feed once a day and offers a new version when
-    /// there is one. Everywhere else it starts nothing, and
+    /// it checks the feed at the first launch and once a day after that,
+    /// downloads a new version by itself and installs it the next time the
+    /// app starts. Everywhere else it starts nothing, and
     /// `canCheckForUpdates` stays false, which keeps the button in
     /// Settings off.
     func startIfNeeded() {
@@ -65,6 +87,14 @@ final class UpdateChecker: NSObject {
                 Task { @MainActor in self?.canCheckForUpdates = value }
             }
         updaterController.startUpdater()
+        let updater = updaterController.updater
+        installsAutomatically = updater.automaticallyDownloadsUpdates
+        if Self.checksRightAway(
+            lastCheck: updater.lastUpdateCheckDate,
+            checksAutomatically: updater.automaticallyChecksForUpdates
+        ) {
+            updater.checkForUpdatesInBackground()
+        }
     }
 
     /// Manually trigger an update check (from Settings UI).

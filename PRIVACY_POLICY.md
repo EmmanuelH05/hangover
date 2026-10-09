@@ -1,6 +1,6 @@
 # Hangover Privacy Policy
 
-**Last updated: 2026-10-09. Applies to Hangover 1.0.1.**
+**Last updated: 2026-10-09. Applies to Hangover 1.0.3.**
 
 Hangover is a Mac app that lives in the notch. It shows your coding agents,
 your music and a page of small widgets. This page says what the app keeps,
@@ -13,7 +13,8 @@ the source code, which is public: https://github.com/EmmanuelH05/hangover
   advertising. The app has no server of its own.
 - Almost everything stays on your Mac.
 - Two widgets talk to a service on the internet, and only after you turn them
-  on: the weather tile (Open-Meteo) and the Notion to-do source (Notion).
+  on: the weather tile (Open-Meteo) and the to-do widget, when you set its
+  source to Notion or TickTick.
 - About once a day the app asks GitHub whether there is a new version.
 - One feature talks to your own iPhone or Apple Watch over your local
   network, and only after you turn it on.
@@ -31,10 +32,10 @@ the source code, which is public: https://github.com/EmmanuelH05/hangover
 | Photo booth strips | PDF files in `Pictures/Hangover Photo Booth`, or in a folder you pick. |
 | The camera picture | Shown live in the mirror and nowhere else. It is recorded only when you start the photo booth, and then only as the strip above. The mirror records no sound. |
 | Mirror frames and stickers | In the app's preferences. |
-| Quick notes | Lines added to one Markdown file: `~/Library/Application Support/OpenIsland/Notes/Quick Notes.md`, or a file you pick. |
+| Quick notes | Lines added to one Markdown file: `~/Library/Application Support/OpenIsland/Notes/Quick Notes.md`, or a file you pick. When you pick Apple Notes in Settings, each note is added to a note called Quick Notes in your Notes app, and the app keeps the last 20 in its preferences to list them. |
 | Calendar events and reminders | Read from, and written to, the Calendar and Reminders data already on your Mac, through macOS. The app keeps no copy of its own. |
 | Weather | The last report and the city you typed, in the app's preferences. |
-| Notion tasks | A copy of the last loaded tasks in `~/Library/Application Support/OpenIsland/Todo/`. Your Notion token is kept in the macOS Keychain. |
+| Notion or TickTick tasks | A copy of the last loaded tasks in `~/Library/Application Support/OpenIsland/Todo/`. Your Notion or TickTick token is kept in the macOS Keychain. |
 | Diagnostic messages | Written to the macOS log on this Mac. They are not sent anywhere. |
 
 ## What leaves your Mac, and when
@@ -56,6 +57,14 @@ Notion integration token, the app talks to `api.notion.com` with that token.
 It reads the database you chose, and it creates and updates tasks there when
 you add one, complete one or edit its notes. Nothing is sent to Notion until
 you pick it and connect it.
+
+### TickTick to-do source (off by default)
+
+If you pick TickTick as the source of the to-do widget and give the app a
+TickTick API token, the app talks to `api.ticktick.com` with that token. It
+reads the names of your lists and the open tasks of the list you chose, and
+it creates and updates tasks there when you add one, complete one or edit its
+notes. Nothing is sent to TickTick until you pick it and connect it.
 
 ### iPhone and Apple Watch relay (off by default)
 
@@ -117,7 +126,7 @@ answer in System Settings, under Privacy & Security.
 | Camera | The mirror and its photo booth. | The first time you turn the mirror on. |
 | Calendars | The calendar widget, the notice before an event, and the Join button for a meeting. | The first time the calendar widget is shown in an island you opened, or when you turn that widget on in Settings. Not at launch. |
 | Reminders | The to-do widget, while Reminders is its source. | The first time the to-do widget is shown in an island you opened, or when you turn it on in Settings. Not at launch. |
-| Automation | Finding the terminal window an agent runs in, jumping to it, and typing your reply there. Used with Terminal, iTerm, Ghostty and System Events. | When an agent session is live and the app first looks for its window, and again for a jump or a reply. |
+| Automation | Finding the terminal window an agent runs in, jumping to it, and typing your reply there. Used with Terminal, iTerm, Ghostty and System Events. Also used with Notes, to add a quick note, and only after you pick Apple Notes as where notes go. | When an agent session is live and the app first looks for its window, and again for a jump or a reply. |
 | Accessibility | Handling the volume and brightness keys itself, if you turn that option on. Switching tabs in the Warp terminal. | When you turn the key option on, or when a jump needs it. |
 | Local Network | The iPhone and Apple Watch relay. | macOS 15 and later may ask when you turn the relay on. |
 | Paste from other apps | Clipboard history. | macOS 15.4 and later lets you limit which apps read the clipboard. The app follows that setting, and stops reading by itself when macOS is set to ask every time. |
@@ -127,7 +136,8 @@ Photos library or screen recording.
 
 ## Other people's software
 
-The weather data comes from Open-Meteo and the to-do source from Notion.
+The weather data comes from Open-Meteo. The to-do source can be Notion or
+TickTick.
 Their own privacy policies apply to what you send them.
 
 ## Changes

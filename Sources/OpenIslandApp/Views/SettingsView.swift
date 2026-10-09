@@ -395,6 +395,12 @@ struct AboutSettingsPane: View {
                     .disabled(!model.updateChecker.canCheckForUpdates)
                     .opacity(model.updateChecker.canCheckForUpdates ? 1 : 0.55)
                     .accessibilityIdentifier("settings.about.checkForUpdates")
+
+                    Toggle(lang.t("settings.about.installAutomatically"), isOn: Binding(
+                        get: { model.updateChecker.installsAutomatically },
+                        set: { model.updateChecker.installsAutomatically = $0 }
+                    ))
+                    .disabled(!model.updateChecker.canCheckForUpdates)
                 }
 
                 Section {

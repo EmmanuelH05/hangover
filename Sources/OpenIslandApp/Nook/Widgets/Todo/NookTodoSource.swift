@@ -6,6 +6,7 @@ import Observation
 enum NookTodoSourceKind: String, CaseIterable, Identifiable, Sendable {
     case reminders
     case notion
+    case tickTick = "ticktick"
 
     var id: String { rawValue }
 }
@@ -74,14 +75,16 @@ extension NookRemindersService: NookTodoSource {
     func refreshOnTimer() {}
 }
 
-/// Owns the choice of task source and the Notion service. `NookModel` holds
-/// one; the Reminders service stays where it always was, on `nook.reminders`.
+/// Owns the choice of task source and the two services that read tasks from
+/// the network. `NookModel` holds one; the Reminders service stays where it
+/// always was, on `nook.reminders`.
 @MainActor
 @Observable
 final class NookTodoHub {
     static let sourceKey = "nook.todo.source"
 
     let notion: NookNotionTodoService
+    let tickTick: NookTickTickTodoService
 
     /// Notes text that has not reached its source, by task ID: a save that
     /// failed, or a draft left when its task went away. The notes page
@@ -100,11 +103,19 @@ final class NookTodoHub {
     @ObservationIgnored private(set) weak var nook: NookModel?
     @ObservationIgnored private var hasStarted = false
 
-    init(defaults: UserDefaults = .standard, notion: NookNotionTodoService? = nil) {
+    init(
+        defaults: UserDefaults = .standard,
+        notion: NookNotionTodoService? = nil,
+        tickTick: NookTickTickTodoService? = nil
+    ) {
         self.defaults = defaults
         self.notion = notion ?? NookNotionTodoService(defaults: defaults)
+        self.tickTick = tickTick ?? NookTickTickTodoService(defaults: defaults)
         selectedKind = defaults.string(forKey: Self.sourceKey).flatMap(NookTodoSourceKind.init(rawValue:)) ?? .reminders
         self.notion.onNotesWriteFinished = { [weak self] id, text, saved in
+            self?.notesWriteFinished(id: id, text: text, saved: saved)
+        }
+        self.tickTick.onNotesWriteFinished = { [weak self] id, text, saved in
             self?.notesWriteFinished(id: id, text: text, saved: saved)
         }
     }
@@ -130,12 +141,15 @@ final class NookTodoHub {
         switch selectedKind {
         case .reminders: reminders
         case .notion: notion
+        case .tickTick: tickTick
         }
     }
 
-    /// Notion does no Keychain, disk or network work unless it is selected.
+    /// A network source does no Keychain, disk or network work unless it is
+    /// the selected one.
     private func applySelection() {
         guard hasStarted else { return }
         notion.setActive(selectedKind == .notion)
+        tickTick.setActive(selectedKind == .tickTick)
     }
 }

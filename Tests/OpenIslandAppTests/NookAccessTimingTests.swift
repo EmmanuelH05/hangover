@@ -67,6 +67,7 @@ struct NookAccessTimingTests {
     func aToDoWidgetOnNotionNeverAsksForReminders(moment: NookAccessMoment) {
         let none: Set<NookEventKitPermission> = []
         #expect(NookAccessTiming.permissions(for: .todo, at: moment, isEnabled: true, todoSource: .notion) == none)
+        #expect(NookAccessTiming.permissions(for: .todo, at: moment, isEnabled: true, todoSource: .tickTick) == none)
     }
 
     @Test(arguments: [NookAccessMoment.shown, .turnedOn])

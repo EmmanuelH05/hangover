@@ -192,6 +192,7 @@
 /* Settings - About */
 "settings.about.version" = "版本 %@";
 "settings.about.checkForUpdates" = "检查更新…";
+"settings.about.installAutomatically" = "自动安装更新";
 "settings.about.quitApp" = "退出 Hangover";
 "settings.about.credit" = "Hangover 基于 Open Island 开发，是依据 GNU 通用公共许可证第 3 版发布的自由软件，不提供任何担保。";
 "settings.about.sourceCode" = "源代码";
@@ -459,6 +460,7 @@
 "nook.todo.source" = "来源";
 "nook.todo.source.reminders" = "提醒事项";
 "nook.todo.source.notion" = "Notion";
+"nook.todo.source.ticktick" = "TickTick";
 "nook.todo.offline" = "离线";
 "nook.todo.notion.section" = "Notion";
 "nook.todo.notion.token.placeholder" = "内部集成令牌";
@@ -517,6 +519,43 @@
 "nook.todo.notion.error.completeFailed" = "无法将任务标记为完成。";
 "nook.todo.notion.error.cannotUpdate" = "该集成无法更新任务。请在 Notion 中开启“更新内容”。";
 "nook.todo.notion.error.cannotInsert" = "该集成无法添加任务。请在 Notion 中开启“插入内容”。";
+/* Nook: TickTick todo */
+"nook.todo.ticktick.section" = "TickTick";
+"nook.todo.ticktick.token.placeholder" = "API 令牌";
+"nook.todo.ticktick.token.help" = "在 TickTick 网页版中打开「设置」，然后进入「账户」，再进入「API Token」。创建一个令牌并粘贴到这里。令牌只保存在这台 Mac 的钥匙串中。";
+"nook.todo.ticktick.token.saved" = "已保存在钥匙串中";
+"nook.todo.ticktick.connect" = "连接";
+"nook.todo.ticktick.disconnect" = "断开连接";
+"nook.todo.ticktick.openWeb" = "打开 TickTick";
+"nook.todo.ticktick.savedTasks" = "正在显示已保存的任务。";
+"nook.todo.ticktick.cacheFailed" = "无法更新已保存的任务副本。";
+"nook.todo.ticktick.inbox" = "收集箱";
+"nook.todo.ticktick.untitled" = "未命名";
+"nook.todo.ticktick.add" = "添加任务";
+"nook.todo.ticktick.addUnavailable" = "暂时无法添加";
+"nook.todo.ticktick.list.section" = "TickTick 清单";
+"nook.todo.ticktick.list" = "清单";
+"nook.todo.ticktick.list.reload" = "重新载入清单";
+"nook.todo.ticktick.list.refresh" = "立即刷新";
+"nook.todo.ticktick.state.inactive" = "当前未选择 TickTick 作为来源。";
+"nook.todo.ticktick.state.connecting" = "正在连接 TickTick…";
+"nook.todo.ticktick.state.noToken" = "请在设置中添加 TickTick 令牌。";
+"nook.todo.ticktick.state.keychain" = "钥匙串拒绝访问 TickTick 令牌。";
+"nook.todo.ticktick.state.invalidToken" = "TickTick 拒绝了该令牌。请在设置中粘贴新的令牌。";
+"nook.todo.ticktick.state.listUnavailable" = "找不到清单。请在设置中选择其他清单。";
+"nook.todo.ticktick.state.forbidden" = "TickTick 拒绝访问此清单。";
+"nook.todo.ticktick.state.rateLimited" = "TickTick 正在限制请求。稍后重试。";
+"nook.todo.ticktick.state.offline" = "离线。无法连接 TickTick。";
+"nook.todo.ticktick.state.serverError" = "TickTick 出现问题。稍后重试。";
+"nook.todo.ticktick.state.ready" = "已连接。";
+"nook.todo.ticktick.error.addFailed" = "无法添加任务。";
+"nook.todo.ticktick.error.completeFailed" = "无法将任务标记为完成。";
+"nook.todo.ticktick.error.notesFailed" = "无法保存备注。";
+"nook.todo.ticktick.error.readOnly" = "此清单为只读。";
+"nook.todo.ticktick.state.connectFailed" = "无法向 TickTick 验证令牌。请重试。";
+"nook.todo.ticktick.state.rejected" = "TickTick 拒绝了该请求。";
+"nook.todo.ticktick.error.tokenNotRemoved" = "无法从钥匙串中移除令牌。令牌仍然保存着。";
+"nook.todo.ticktick.list.loadFailed" = "无法载入你的清单。";
 
 /* Nook: file tray */
 "nook.tray.tab.files" = "文件";
