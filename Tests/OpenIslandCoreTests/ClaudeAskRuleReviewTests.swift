@@ -154,15 +154,22 @@ struct ClaudeAskRuleReviewTests {
         let filler = String(repeating: "a;", count: (ClaudeBashCommandParts.longestParsedCommand - cap) / 2)
         let command = open + filler
         let many = (0..<200).compactMap { ClaudeAskRule("Bash(tool\($0) *)") }
+        let single = Array(many.prefix(1))
         let clock = ContinuousClock()
         var hit: ClaudeAskRule?
 
+        // Measured against one rule and not against the clock: a slow
+        // machine is slow for both, and a reader that ran once per rule
+        // would take about two hundred times as long.
+        let one = clock.measure {
+            _ = ClaudeAskRuleMatcher.firstMatch(in: single, toolName: "Bash", toolInput: Self.bash(command))
+        }
         let elapsed = clock.measure {
             hit = ClaudeAskRuleMatcher.firstMatch(in: many, toolName: "Bash", toolInput: Self.bash(command))
         }
 
         #expect(hit == nil)
-        #expect(elapsed < .seconds(1), "took \(elapsed)")
+        #expect(elapsed < one * 20 + .milliseconds(100), "one rule took \(one), two hundred took \(elapsed)")
     }
 
     @Test
