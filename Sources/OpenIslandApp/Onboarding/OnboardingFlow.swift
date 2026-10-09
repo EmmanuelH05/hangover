@@ -90,35 +90,20 @@ struct OnboardingFlow: Equatable, Sendable {
     }
 }
 
-/// Whether this launch is the first one on record. The answer has to be
-/// read before the startup migration runs, because the migration is what
-/// puts a launch on record: read after it, every launch looks like a
-/// later one and the tour never shows.
-enum OnboardingFirstLaunch {
-    static func read(from store: AgentIntentStore, thenMigrate migrate: () -> Void) -> Bool {
-        let isFirstLaunch = store.migrationVersion == 0
-        migrate()
-        return isFirstLaunch
-    }
-}
-
 /// Decides whether the welcome tour may come up without being asked for.
 enum OnboardingGate {
     struct Facts: Equatable, Sendable {
-        /// No earlier launch of this app was on record when this one began.
-        var isFirstLaunch: Bool
-        /// The tour was finished or skipped before, or the app found agent
-        /// hooks from an install that came before the tour.
+        /// The tour was finished, skipped or closed on this install.
         var isCompleted: Bool
         /// A harness run is driving the app for screenshots.
         var isHarness: Bool
     }
 
-    /// Only a fresh install gets the tour by itself, and only once. An
-    /// install that has run before never does: its user opens the tour from
-    /// Settings.
+    /// Every install gets the tour by itself once: a new one on its first
+    /// launch, and one that ran before the tour existed, with or without
+    /// agents connected, on its first launch of a build that has it.
     static func showsByItself(_ facts: Facts) -> Bool {
-        facts.isFirstLaunch && !facts.isCompleted && !facts.isHarness
+        !facts.isCompleted && !facts.isHarness
     }
 
     /// A name in the app's environment that starts this way belongs to a

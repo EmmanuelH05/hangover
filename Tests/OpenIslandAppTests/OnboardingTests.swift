@@ -89,62 +89,49 @@ struct OnboardingFlowTests {
 // MARK: - The gate
 
 struct OnboardingGateTests {
-    private static func facts(
-        isFirstLaunch: Bool = true,
-        isCompleted: Bool = false,
-        isHarness: Bool = false
-    ) -> OnboardingGate.Facts {
-        OnboardingGate.Facts(isFirstLaunch: isFirstLaunch, isCompleted: isCompleted, isHarness: isHarness)
+    private static func facts(isCompleted: Bool = false, isHarness: Bool = false) -> OnboardingGate.Facts {
+        OnboardingGate.Facts(isCompleted: isCompleted, isHarness: isHarness)
     }
 
-    @Test func aFreshInstallGetsTheTourByItself() {
+    @Test func anInstallThatHasNotEndedTheTourGetsItByItself() {
         #expect(OnboardingGate.showsByItself(Self.facts()))
     }
 
-    @Test func anInstallThatHasRunBeforeNeverDoes() {
-        // No hooks were found, which leaves the tour unrecorded, and the
-        // app has still run before: it is not a fresh install.
-        #expect(!OnboardingGate.showsByItself(Self.facts(isFirstLaunch: false)))
-        #expect(!OnboardingGate.showsByItself(Self.facts(isFirstLaunch: false, isCompleted: true)))
-    }
-
-    @Test func anOlderInstallWithHooksIsMarkedDoneOnItsFirstLaunchOfThisBuild() {
-        // The startup migration found hooks and marked the tour as seen.
-        #expect(!OnboardingGate.showsByItself(Self.facts(isFirstLaunch: true, isCompleted: true)))
+    @Test func anInstallThatEndedTheTourNeverGetsItByItselfAgain() {
+        #expect(!OnboardingGate.showsByItself(Self.facts(isCompleted: true)))
     }
 
     @Test func aHarnessRunNeverGetsTheTour() {
         #expect(!OnboardingGate.showsByItself(Self.facts(isHarness: true)))
+        #expect(!OnboardingGate.showsByItself(Self.facts(isCompleted: true, isHarness: true)))
     }
 
-    /// The same facts the app model gathers at launch, on a store of its
-    /// own: read whether a launch is on record, run the migration, ask.
-    @Test func theIntentStoreTellsAFreshInstallFromOneThatRanBefore() {
+    /// A Mac that already had agents connected was marked as past its first
+    /// launch by the startup migration, and was never shown the tour. It
+    /// gets the tour all the same.
+    @Test func aMacThatHadAgentsConnectedBeforeStillGetsTheTour() {
         let store = AgentIntentStore(defaults: MemoryDefaults())
-
-        let firstLaunch = store.migrationVersion == 0
-        store.migrateFromLegacyStateIfNeeded { _ in false }
-        #expect(OnboardingGate.showsByItself(
-            Self.facts(isFirstLaunch: firstLaunch, isCompleted: store.firstLaunchCompleted)
-        ))
-
-        // The second launch of the same install, with the tour never ended.
-        let secondLaunch = store.migrationVersion == 0
-        store.migrateFromLegacyStateIfNeeded { _ in false }
-        #expect(!OnboardingGate.showsByItself(
-            Self.facts(isFirstLaunch: secondLaunch, isCompleted: store.firstLaunchCompleted)
-        ))
-    }
-
-    @Test func anUpgradeWithHooksInstalledIsNotAFreshInstall() {
-        let store = AgentIntentStore(defaults: MemoryDefaults())
-
-        let firstLaunch = store.migrationVersion == 0
         store.migrateFromLegacyStateIfNeeded { $0 == .claudeCode }
 
-        #expect(!OnboardingGate.showsByItself(
-            Self.facts(isFirstLaunch: firstLaunch, isCompleted: store.firstLaunchCompleted)
-        ))
+        #expect(store.firstLaunchCompleted)
+        #expect(!store.welcomeTourEnded)
+        #expect(OnboardingGate.showsByItself(Self.facts(isCompleted: store.welcomeTourEnded)))
+    }
+
+    @Test func aSecondLaunchWithTheTourStillOpenOffersItAgain() {
+        let store = AgentIntentStore(defaults: MemoryDefaults())
+        store.migrateFromLegacyStateIfNeeded { _ in false }
+        store.migrateFromLegacyStateIfNeeded { _ in false }
+
+        #expect(OnboardingGate.showsByItself(Self.facts(isCompleted: store.welcomeTourEnded)))
+    }
+
+    @Test func endingTheTourIsWhatStopsIt() {
+        let store = AgentIntentStore(defaults: MemoryDefaults())
+
+        store.welcomeTourEnded = true
+
+        #expect(!OnboardingGate.showsByItself(Self.facts(isCompleted: store.welcomeTourEnded)))
     }
 
     // MARK: A launch set up through the environment
@@ -168,30 +155,6 @@ struct OnboardingGateTests {
         // The prefix has to lead the name.
         #expect(!OnboardingGate.isHarnessLaunch(environment: ["MY_OPEN_ISLAND_HALO": "1", "OPEN_ISLANDS": "1"]))
     }
-
-    // MARK: Reading before the migration
-
-    /// The migration is what puts a launch on record. The answer has to be
-    /// read first, or a fresh install would look like one that ran before.
-    @Test func theFirstLaunchIsReadBeforeTheMigrationRuns() {
-        let store = AgentIntentStore(defaults: MemoryDefaults())
-        var versionsSeenByTheMigration: [Int] = []
-        let migrate = {
-            versionsSeenByTheMigration.append(store.migrationVersion)
-            store.migrateFromLegacyStateIfNeeded { _ in false }
-        }
-
-        let first = OnboardingFirstLaunch.read(from: store, thenMigrate: migrate)
-        let second = OnboardingFirstLaunch.read(from: store, thenMigrate: migrate)
-
-        #expect(first == true)
-        #expect(second == false)
-        // The migration ran both times, and the first time nothing was on
-        // record yet when it started.
-        #expect(versionsSeenByTheMigration.count == 2)
-        #expect(versionsSeenByTheMigration.first == 0)
-        #expect(store.migrationVersion > 0)
-    }
 }
 
 // MARK: - The tour on the app model
@@ -209,33 +172,31 @@ struct OnboardingAppModelTests {
     @Test func aLaunchDrivenOnlyByAForcedGlowOrPageCountsAsAHarness() {
         let model = Self.makeModel()
 
-        let plain = model.welcomeTourFacts(isFirstLaunch: true, environment: ["PATH": "/usr/bin"])
-        let glow = model.welcomeTourFacts(isFirstLaunch: true, environment: ["OPEN_ISLAND_HALO": "approval"])
-        let page = model.welcomeTourFacts(isFirstLaunch: true, environment: ["OPEN_ISLAND_NOOK_PAGE": "1"])
+        let plain = model.welcomeTourFacts(environment: ["PATH": "/usr/bin"])
+        let glow = model.welcomeTourFacts(environment: ["OPEN_ISLAND_HALO": "approval"])
+        let page = model.welcomeTourFacts(environment: ["OPEN_ISLAND_NOOK_PAGE": "1"])
 
         #expect(plain.isHarness == false)
-        #expect(plain.isFirstLaunch == true)
         #expect(glow.isHarness == true)
         #expect(page.isHarness == true)
         #expect(!OnboardingGate.showsByItself(glow))
         #expect(!OnboardingGate.showsByItself(page))
     }
 
-    @Test func theFactsCarryWhetherTheLaunchIsTheFirstAndWhetherTheTourWasEnded() {
+    @Test func theFactsCarryWhetherTheTourWasEndedOnThisInstall() {
         let model = Self.makeModel()
 
-        let later = model.welcomeTourFacts(isFirstLaunch: false, environment: [:])
+        let facts = model.welcomeTourFacts(environment: [:])
 
-        #expect(later.isFirstLaunch == false)
-        #expect(later.isCompleted == model.firstLaunchCompleted)
-        #expect(!OnboardingGate.showsByItself(later))
+        #expect(facts.isCompleted == model.hooks.intentStore.welcomeTourEnded)
+        #expect(facts.isHarness == false)
     }
 
     @Test func aHarnessScenarioStillCountsThroughTheModelsOwnFlags() {
         let model = Self.makeModel()
         model.ignoresPointerExitDuringHarness = true
 
-        #expect(model.welcomeTourFacts(isFirstLaunch: true, environment: [:]).isHarness == true)
+        #expect(model.welcomeTourFacts(environment: [:]).isHarness == true)
     }
 
     /// The pages are told what the app holds for the display the island is

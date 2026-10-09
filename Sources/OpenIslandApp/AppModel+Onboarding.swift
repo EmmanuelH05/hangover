@@ -17,11 +17,10 @@ extension AppModel {
         }
     }
 
-    /// Shows the tour by itself on a fresh install and at no other time.
-    /// `isFirstLaunch` is read before the startup migration runs, because
-    /// the migration is what puts the first launch on record.
-    func offerWelcomeTour(isFirstLaunch: Bool) {
-        guard OnboardingGate.showsByItself(welcomeTourFacts(isFirstLaunch: isFirstLaunch)) else { return }
+    /// Shows the tour by itself until it has been ended once on this
+    /// install, and never in a harness run.
+    func offerWelcomeTour() {
+        guard OnboardingGate.showsByItself(welcomeTourFacts()) else { return }
         showWelcomeTour()
     }
 
@@ -30,12 +29,10 @@ extension AppModel {
     /// its environment, which covers a run driven only by a forced glow or
     /// a forced page.
     func welcomeTourFacts(
-        isFirstLaunch: Bool,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> OnboardingGate.Facts {
         OnboardingGate.Facts(
-            isFirstLaunch: isFirstLaunch,
-            isCompleted: firstLaunchCompleted,
+            isCompleted: hooks.intentStore.welcomeTourEnded,
             isHarness: ignoresPointerExitDuringHarness
                 || disablesOverlayEventMonitoringDuringHarness
                 || OnboardingGate.isHarnessLaunch(environment: environment)

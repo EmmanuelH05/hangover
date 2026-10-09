@@ -2088,12 +2088,10 @@ final class AppModel {
             // marks first-launch as complete so onboarding does not appear
             // on upgrade. Must run after status reads and before any
             // install decision.
-            let isFirstLaunch = OnboardingFirstLaunch.read(from: self.hooks.intentStore) {
-                self.hooks.migrateIntentStoreIfNeeded()
-            }
-            // A fresh install gets the welcome tour, once. The migration
-            // above marks an install that came before the tour as done.
-            self.offerWelcomeTour(isFirstLaunch: isFirstLaunch)
+            self.hooks.migrateIntentStoreIfNeeded()
+            // Every install gets the welcome tour once, whether or not it
+            // had agents connected before.
+            self.offerWelcomeTour()
 
             // Pi and Oh My Pi load a runtime extension that talks to the
             // bridge socket directly, so they do not depend on the hooks

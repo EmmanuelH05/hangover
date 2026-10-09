@@ -204,10 +204,8 @@ final class OnboardingTour {
 
 extension OnboardingTour {
     /// A tour whose end is put on record in `store` before `close` runs.
-    /// Finishing and skipping are recorded alike. The record is one of the
-    /// three things `OnboardingGate` reads, and it is not the one that
-    /// keeps the tour away on a later launch: that is the first launch
-    /// itself going on record, which happens whether or not the tour ends.
+    /// Finishing, skipping and closing are recorded alike, and that record
+    /// is what keeps the tour from coming up by itself again.
     static func recording(
         in store: AgentIntentStore,
         startingAt page: OnboardingPage = .welcome,
@@ -216,6 +214,7 @@ extension OnboardingTour {
         close: @escaping @MainActor () -> Void = {}
     ) -> OnboardingTour {
         OnboardingTour(startingAt: page, state: state, actions: actions) { _ in
+            store.welcomeTourEnded = true
             store.firstLaunchCompleted = true
             close()
         }

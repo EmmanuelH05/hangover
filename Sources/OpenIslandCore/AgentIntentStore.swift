@@ -42,6 +42,15 @@ public final class AgentIntentStore: @unchecked Sendable {
         set { defaults.set(newValue, forKey: Self.firstLaunchCompletedKey) }
     }
 
+    /// True once the welcome tour was finished, skipped or closed on this
+    /// install. Kept apart from `firstLaunchCompleted`, which the startup
+    /// migration also sets when it finds hooks from an earlier install: a
+    /// Mac that had hooks before has still never been shown the tour.
+    public var welcomeTourEnded: Bool {
+        get { defaults.bool(forKey: Self.welcomeTourEndedKey) }
+        set { defaults.set(newValue, forKey: Self.welcomeTourEndedKey) }
+    }
+
     // MARK: - Legacy migration
 
     /// Reconciles intent state with what is actually on disk the first time a
@@ -96,6 +105,7 @@ public final class AgentIntentStore: @unchecked Sendable {
     }
 
     private static let firstLaunchCompletedKey = "firstLaunchCompleted"
+    private static let welcomeTourEndedKey = "welcomeTourEnded"
     private static let migrationVersionKey = "agentIntentMigrationVersion"
     private static let currentMigrationVersion = 1
 }
