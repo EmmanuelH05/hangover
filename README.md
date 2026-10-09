@@ -1,140 +1,71 @@
 # Hangover
 
-Hangover is a Mac app that lives in the notch at the top of your screen (or
-in the top bar on a display with no notch). It keeps your AI coding agents,
-your music and your day within reach, and stays out of the way the rest of
-the time.
+Hangover makes the notch on your MacBook useful. It's free and the code is all here.
 
-It is free software, based on [Open Island](https://github.com/Octane0411/open-vibe-island).
-See [Credit and license](#credit-and-license).
+I built it on top of [Open Island](https://github.com/Octane0411/open-vibe-island), an open source notch app for AI coding agents. I kept adding the things I wanted in my own notch until it turned into its own app.
 
-## What it does
+## What's in it
 
-**Agents.** The island shows what your coding agents are doing and brings
-their questions to you.
+**Your coding agents.** When Claude Code, Codex, Cursor or another agent needs a yes or a no, the request shows up in the notch. You can answer it right there, or press Control-Option-Y or Control-Option-N from whatever app you're in. When an agent finishes, you get one line about what it did.
 
-- Live sessions for Claude Code, Codex, Cursor, Gemini CLI, OpenCode, Kimi,
-  Grok, Qoder, Qwen Code, Factory, CodeBuddy, Pi and Oh My Pi. Each one is
-  connected from Settings, under Setup, and only when you click.
-- Approve, deny or answer a request from the island, or with two global
-  shortcuts (Control-Option-Y and Control-Option-N by default).
-- Jump back to the terminal or editor the agent runs in.
-- A short "what it did" line when an agent finishes.
+**The Nook.** Open the notch and there's a page of widgets. Turn on the ones you want and drag them around.
 
-**The Nook.** A page of widgets you can arrange, resize and switch off.
+- Music, with a scrub bar and a speaker picker
+- Calendar, with a Join button when a meeting is about to start
+- To-dos from Reminders or Notion
+- Quick notes
+- A file tray you can drop things on, with AirDrop, zip and a clipboard history
+- A focus timer with pomodoro rounds
+- Weather, with a 7 day view
+- A mirror
 
-- Now playing, with a scrub bar and a speaker picker.
-- Calendar in five looks, with an event editor and a Join button for meetings.
-- To-do list from Reminders or from a Notion database.
-- Quick notes, kept in a Markdown file.
-- A file tray with sharing, AirDrop, zip and image conversion, and an
-  optional clipboard history kept in memory only.
-- Focus timer with pomodoro rounds.
-- Mirror: your camera on demand, with a ring light, frames, stickers and a
-  photo booth that saves a strip as a PDF.
-- Weather tile, off by default.
+**The mirror.** It shows your camera only when you turn it on. You can put a frame and stickers on it, turn on a ring light, or run the photo booth. The booth counts down, takes four pictures and saves the strip as a PDF, like one from a real booth.
 
-**Look and feel.** A status glow with color themes, templates, a wider or
-squarer opened island, per-display settings for a MacBook notch and an
-external screen, and a welcome tour on first launch. English, Simplified
-Chinese and Traditional Chinese.
+**Your look.** You pick the colors the notch glows in, how wide it opens, and whether its corners are soft or square. A welcome tour walks you through the app the first time you open it.
 
-**Links.** Shortcuts, Raycast and scripts can drive the island with
-`hangover://` links, for example `hangover://timer/start?minutes=25`.
-
-What Hangover keeps and what it sends is in [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
-
-## Requirements
-
-- macOS 14 or later.
-- The download is built for Apple silicon. On an Intel Mac, build from source.
+It comes in English, Simplified Chinese and Traditional Chinese. A native speaker hasn't checked the Chinese yet.
 
 ## Install
 
-Hangover is **not notarized by Apple**. Its author is not in the Apple
-Developer Program, and the download is ad-hoc signed. macOS cannot tell you
-who made it, and it will refuse to open the app the first time. You can
-still open it, with the steps Apple gives for an app from an unknown
-developer. Only do this for a copy you downloaded from this repository's
-releases page.
+You need macOS 14 or later and a Mac with Apple silicon.
 
-1. Download `Hangover.zip` from the
-   [releases page](https://github.com/EmmanuelH05/hangover/releases) and
-   double-click it to unpack it.
-2. Move `Hangover` to your Applications folder.
-3. Double-click `Hangover`. macOS shows a warning and does not open it.
-   Click **Done**. Do not move it to the Trash.
-4. Open the Apple menu, choose **System Settings**, and click **Privacy &
-   Security** in the sidebar.
-5. Scroll down to **Security**. A line there says Hangover was blocked.
-   Click **Open Anyway**. The button is there for about an hour after
-   step 3.
-6. macOS asks once more. Confirm, and enter your login password if it asks.
+One thing to know first. I'm not in the Apple Developer Program, which means Apple hasn't notarized Hangover and macOS will block it the first time you open it. To open it anyway:
 
-Hangover opens, and from then on it opens like any other app. You do not
-need to change any other security setting, and you should not turn
-Gatekeeper off.
+1. Download `Hangover.zip` from the [releases page](https://github.com/EmmanuelH05/hangover/releases) and unzip it.
+2. Move Hangover to your Applications folder and double-click it. macOS shows a warning. Click **Done**.
+3. Open **System Settings**, go to **Privacy & Security**, scroll down to **Security** and click **Open Anyway**. That button stays for about an hour.
+4. macOS asks one more time. Confirm it.
 
-Apple's own pages for these steps:
-[Open a Mac app from an unknown developer](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac)
-and [Safely open apps on your Mac](https://support.apple.com/en-us/102445).
+After that it opens like any other app. Only do this with a copy you downloaded from this repo, and leave Gatekeeper on. Apple explains these steps in [Open a Mac app from an unknown developer](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac).
 
-If macOS says the app is damaged and shows no **Open Anyway** button,
-download it again, or build from source.
+Two things come with skipping notarization. Hangover doesn't update itself, which means a new version is a new download. And macOS may ask for your permissions again after you install one.
 
-Two more things follow from the missing notarization:
+## Build it yourself
 
-- Hangover does not update itself. A new version is a new download.
-- macOS ties the permissions you grant (camera, calendar, automation and
-  the others) to the exact build. After you install a new version, expect
-  to grant them again.
-
-## Build from source
-
-An app you build yourself is not a download, and macOS opens it without the
-warning above. You need Xcode 26 or its command line tools (Swift 6.2).
+If you build it from source, macOS opens it with no warning. You need Xcode 26 or its command line tools.
 
 ```bash
 git clone --recurse-submodules https://github.com/EmmanuelH05/hangover.git
 cd hangover
 swift build
 swift test
-```
-
-To make the app:
-
-```bash
 OPEN_ISLAND_SKIP_SMOKE_TEST=true zsh scripts/package-app.sh
 ```
 
-This writes `output/package/Hangover.app` and `output/package/Hangover.zip`.
-Move the app to your Applications folder and open it. Without
-`OPEN_ISLAND_SKIP_SMOKE_TEST=true` the script also starts the packaged app
-for three seconds to check that it launches.
+The last line writes `output/package/Hangover.app`. Move it to Applications and open it.
 
-For day-to-day development, `zsh scripts/launch-dev-app.sh` builds a debug
-copy, installs it as "Open Island Dev" in `~/Applications` and starts it.
-`zsh scripts/harness.sh ci` runs the string lint, the docs check, the tests
-and a build.
+A few names inside the code still say `OpenIsland`. That's on purpose: the hooks Hangover installs for your agents point at those names. `README.zh-CN.md` and most of `docs/` still belong to the original project.
 
-The code is one Swift package with four targets. Internal names still say
-`OpenIsland`, on purpose: the hooks installed in your agents' settings point
-at them. [docs/index.md](docs/index.md) lists the design documents, which
-were written for the upstream project and mostly still use its name.
-`README.zh-CN.md` is the upstream project's Chinese README and has not been
-rewritten for Hangover.
+## Privacy
+
+There's no account and no analytics, and Hangover has no server of its own. Almost everything stays on your Mac. The weather tile and the Notion to-do list are the two things that go online, and only after you turn them on. The full list is in [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
 
 ## Credit and license
 
-Hangover is a changed version of
-[Open Island](https://github.com/Octane0411/open-vibe-island) by Octane0411
-and its contributors. [NOTICE.md](NOTICE.md) says what was changed and when,
-and lists the other software in the app.
+Hangover is a changed version of [Open Island](https://github.com/Octane0411/open-vibe-island) by Octane0411 and its contributors. [NOTICE.md](NOTICE.md) says what changed.
 
-Hangover is free software under the
-[GNU General Public License, version 3](LICENSE), the same license as Open
-Island. You may use it, change it and pass it on under that license. It
-comes with no warranty. The complete source code is at
-https://github.com/EmmanuelH05/hangover.
+It's free software under the [GNU General Public License, version 3](LICENSE), the same license as Open Island. You can use it, change it and pass it on under that license. It comes with no warranty.
 
 Weather data by [Open-Meteo.com](https://open-meteo.com/).
+
+If something breaks, [open an issue](https://github.com/EmmanuelH05/hangover/issues).
