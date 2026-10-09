@@ -62,7 +62,7 @@ One thing to know first. I'm not in the Apple Developer Program, which means App
 
 After that it opens like any other app. Only do this with a copy you downloaded from this repo, and leave Gatekeeper on. Apple explains these steps in [Open a Mac app from an unknown developer](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac).
 
-Two things come with skipping notarization. Hangover doesn't update itself, which means a new version is a new download. And macOS may ask for your permissions again after you install one.
+From version 1.0.1 Hangover updates itself. It checks once a day and offers the new version when there is one. Version 1.0.0 doesn't, which means one more download by hand. Because the app isn't notarized, macOS may ask for your permissions again after an update.
 
 ## Build it yourself
 

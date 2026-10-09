@@ -14,12 +14,17 @@ final class UpdateChecker: NSObject {
     /// holds a different app.
     nonisolated static let releasesURL = AppBrand.releasesURL
 
-    /// Hangover's update feed. There is none yet, which is why this is nil
-    /// and why Sparkle is never started: no check is made, by timer or by
-    /// hand, and nothing is fetched. A feed set here must be Hangover's
-    /// own. The upstream feed lists Open Island and would replace this app
-    /// with it. Neither bundle plist carries an `SUFeedURL` either.
-    nonisolated static let feedURL: URL? = nil
+    /// Hangover's update feed, a file in its own repository. It must
+    /// never be the upstream project's: that feed lists Open Island and
+    /// would replace this app with it.
+    nonisolated static let feedURL: URL = AppBrand.updateFeedURL
+
+    /// Updates run only in a bundle that names Hangover's feed and carries
+    /// Hangover's key, which is the packaged release. The dev bundle and a
+    /// test run carry neither and never start Sparkle.
+    nonisolated static func shouldStart(bundleFeed: String?, bundleKey: String?) -> Bool {
+        bundleFeed == feedURL.absoluteString && bundleKey == AppBrand.updatePublicKey
+    }
 
     private(set) var canCheckForUpdates = false
     private(set) var hasUpdate = false
@@ -40,13 +45,26 @@ final class UpdateChecker: NSObject {
         )
     }
 
-    /// Called once after app launch. Starts nothing: Hangover has no update
-    /// feed of its own (`feedURL`), and Sparkle never starts without one,
-    /// debug or release. `canCheckForUpdates` stays false, which keeps the
-    /// button in Settings off. Starting Sparkle is to be written together
-    /// with the feed (RELEASE.md, "Later").
+    /// Called once after app launch. Starts Sparkle in a release bundle:
+    /// it then checks the feed once a day and offers a new version when
+    /// there is one. Everywhere else it starts nothing, and
+    /// `canCheckForUpdates` stays false, which keeps the button in
+    /// Settings off.
     func startIfNeeded() {
-        print("[UpdateChecker] off: Hangover has no update feed yet")
+        let info = Bundle.main.infoDictionary
+        guard Self.shouldStart(
+            bundleFeed: info?["SUFeedURL"] as? String,
+            bundleKey: info?["SUPublicEDKey"] as? String
+        ) else {
+            print("[UpdateChecker] off: this build carries no update feed")
+            return
+        }
+        guard cancellable == nil else { return }
+        cancellable = updaterController.updater.publisher(for: \.canCheckForUpdates)
+            .sink { [weak self] value in
+                Task { @MainActor in self?.canCheckForUpdates = value }
+            }
+        updaterController.startUpdater()
     }
 
     /// Manually trigger an update check (from Settings UI).
@@ -61,6 +79,11 @@ final class UpdateChecker: NSObject {
 extension UpdateChecker: SPUUpdaterDelegate {
     nonisolated func allowedChannels(for updater: SPUUpdater) -> Set<String> {
         Set()
+    }
+
+    /// Pins the feed to Hangover's own, whatever a bundle's plist says.
+    nonisolated func feedURLString(for updater: SPUUpdater) -> String? {
+        Self.feedURL.absoluteString
     }
 
     nonisolated func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {

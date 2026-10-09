@@ -23,6 +23,15 @@ enum AppBrand {
     /// upstream project's releases, which hold a different app.
     static let releasesURL = sourceCodeURL.appendingPathComponent("releases")
 
+    /// Hangover's update feed: a file in its own repository. The updater
+    /// reads no other feed.
+    static let updateFeedURL = URL(string: "https://raw.githubusercontent.com/EmmanuelH05/hangover/main/appcast.xml")!
+
+    /// The public half of the key Hangover's updates are signed with. The
+    /// private half stays in the owner's Keychain and is never in the
+    /// repository. The release bundle carries this value as `SUPublicEDKey`.
+    static let updatePublicKey = "G3dIlQPu+1pUh9IOtrMZB39d/ZxZWPnC5PfXMJ1OJaU="
+
     /// The project Hangover is based on, credited in the About pane.
     static let upstreamName = "Open Island"
     static let upstreamURL = URL(string: "https://github.com/Octane0411/open-vibe-island")!

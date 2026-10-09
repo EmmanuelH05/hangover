@@ -10,7 +10,7 @@ fi
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 app_name="${OPEN_ISLAND_APP_NAME:-Hangover}"
 bundle_identifier="${OPEN_ISLAND_BUNDLE_ID:-com.emmanuelhernandez.hangover}"
-version="${OPEN_ISLAND_VERSION:-1.0.0}"
+version="${OPEN_ISLAND_VERSION:-1.0.1}"
 build_number="${OPEN_ISLAND_BUILD_NUMBER:-$(git -C "$repo_root" rev-list --count HEAD 2>/dev/null || echo 1)}"
 package_root="${OPEN_ISLAND_PACKAGE_ROOT:-$repo_root/output/package}"
 bundle_dir="${OPEN_ISLAND_BUNDLE_DIR:-$package_root/$app_name.app}"
@@ -146,6 +146,14 @@ cat > "$bundle_dir/Contents/Info.plist" <<EOF
     <string>$build_number</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
+    <key>SUFeedURL</key>
+    <string>https://raw.githubusercontent.com/EmmanuelH05/hangover/main/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>G3dIlQPu+1pUh9IOtrMZB39d/ZxZWPnC5PfXMJ1OJaU=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
     <key>NSAppleEventsUsageDescription</key>
     <string>Hangover uses automation to find your agent's terminal window, jump back to it and send your reply there.</string>
     <key>NSCameraUsageDescription</key>

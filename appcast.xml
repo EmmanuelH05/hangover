@@ -6,12 +6,19 @@
         <description>Most recent changes with links to updates.</description>
         <language>en</language>
         <!--
-            Hangover has published no update yet, and no build reads this
-            file: the app carries no feed address and never starts Sparkle
-            (Sources/OpenIslandApp/UpdateChecker.swift). The upstream
-            project's entries were removed on purpose. They pointed at Open
-            Island's downloads, which are a different app.
+            Read by Hangover 1.0.1 and later, from the main branch of
+            https://github.com/EmmanuelH05/hangover. Every item must point
+            at that repository and carry a signature made with the
+            project update key. The upstream project has its own feed for
+            a different app, and none of its entries belong here.
         -->
-        <!-- Items are added by the release workflow. See docs/releasing.md. -->
+        <item>
+            <title>Version 1.0.1</title>
+            <pubDate>Fri, 09 Oct 2026 07:28:46 -0700</pubDate>
+            <sparkle:version>1193</sparkle:version>
+            <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/EmmanuelH05/hangover/releases/download/v1.0.1/Hangover.zip" sparkle:edSignature="NMBSMyYbtbyfDAbel7FUTjJadX/cdSd4zGvspAr9dFj+pJaOkrxomxr9l1OgAg4X798I6MxYlJAKpGYd/IiLAA==" length="12062301" type="application/octet-stream"/>
+        </item>
     </channel>
 </rss>

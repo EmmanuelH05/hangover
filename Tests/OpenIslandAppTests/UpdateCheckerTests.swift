@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import OpenIslandApp
 
-/// Hangover has no update feed yet. Until it has one of its own, no build
-/// may check for updates, and nothing may lead to the upstream project's
+/// Hangover updates itself from a feed of its own. Only the packaged
+/// release may check it, and nothing may lead to the upstream project's
 /// feed or downloads, which hold a different app.
 struct UpdateCheckerTests {
     static let upstreamOwner: String = "Octane0411"
@@ -16,9 +16,32 @@ struct UpdateCheckerTests {
         return try String(contentsOf: root.appendingPathComponent(file), encoding: .utf8)
     }
 
-    @Test @MainActor func noCheckCanStartWithoutAFeedOfHangoversOwn() {
+    @Test func theFeedIsAFileInHangoversOwnRepository() {
+        let feed = UpdateChecker.feedURL
+        #expect(feed == AppBrand.updateFeedURL)
+        #expect(feed.scheme == "https")
+        #expect(feed.host == "raw.githubusercontent.com")
+        #expect(feed.path == "/EmmanuelH05/hangover/main/appcast.xml")
+        #expect(!feed.absoluteString.contains(Self.upstreamOwner))
+    }
+
+    @Test func onlyABundleWithHangoversFeedAndKeyStartsUpdates() {
+        let feed = AppBrand.updateFeedURL.absoluteString
+        let key = AppBrand.updatePublicKey
+
+        #expect(UpdateChecker.shouldStart(bundleFeed: feed, bundleKey: key))
+        #expect(!UpdateChecker.shouldStart(bundleFeed: nil, bundleKey: nil))
+        #expect(!UpdateChecker.shouldStart(bundleFeed: feed, bundleKey: nil))
+        #expect(!UpdateChecker.shouldStart(bundleFeed: nil, bundleKey: key))
+        #expect(!UpdateChecker.shouldStart(bundleFeed: feed, bundleKey: "another key"))
+        #expect(!UpdateChecker.shouldStart(
+            bundleFeed: "https://raw.githubusercontent.com/\(Self.upstreamOwner)/open-vibe-island/main/appcast.xml",
+            bundleKey: key
+        ))
+    }
+
+    @Test @MainActor func aTestRunNeverStartsTheUpdater() {
         let checker = UpdateChecker()
-        #expect(UpdateChecker.feedURL == nil)
 
         checker.startIfNeeded()
         checker.checkForUpdates()
@@ -35,18 +58,28 @@ struct UpdateCheckerTests {
         #expect(!link.contains(Self.upstreamOwner))
     }
 
-    @Test(arguments: ["scripts/package-app.sh", "scripts/launch-dev-app.sh"])
-    func noBundleCarriesAFeedAddress(script: String) throws {
-        let text = try Self.text(of: script)
-        #expect(!text.contains("SUFeedURL"), "\(script) gives the bundle an update feed")
-        #expect(!text.contains("SUPublicEDKey"), "\(script) gives the bundle an update key")
+    @Test func theReleaseBundleCarriesHangoversFeedAndKey() throws {
+        let script = try Self.text(of: "scripts/package-app.sh")
+        #expect(script.contains("<key>SUFeedURL</key>\n    <string>\(AppBrand.updateFeedURL.absoluteString)</string>"))
+        #expect(script.contains("<key>SUPublicEDKey</key>\n    <string>\(AppBrand.updatePublicKey)</string>"))
+        #expect(!script.contains(Self.upstreamOwner))
     }
 
-    @Test func theFeedFileHoldsNoUpstreamDownload() throws {
+    @Test func theDevBundleCarriesNoFeedAndNoKey() throws {
+        let script = try Self.text(of: "scripts/launch-dev-app.sh")
+        #expect(!script.contains("SUFeedURL"))
+        #expect(!script.contains("SUPublicEDKey"))
+    }
+
+    @Test func theFeedFileHoldsOnlyHangoverDownloads() throws {
         let feed = try Self.text(of: "appcast.xml")
         #expect(!feed.contains(Self.upstreamOwner))
-        #expect(!feed.contains("<item>"))
         #expect(feed.contains(AppBrand.releasesURL.absoluteString))
+        let download = "\(AppBrand.releasesURL.absoluteString)/download/"
+        for line in feed.split(separator: "\n") where line.contains("<enclosure") {
+            #expect(line.contains("url=\"\(download)"), "an update points somewhere else: \(line)")
+            #expect(line.contains("sparkle:edSignature=\""), "an update is not signed: \(line)")
+        }
     }
 
     @Test func theFeedScriptWritesHangoversDownloadAddress() throws {

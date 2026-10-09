@@ -338,3 +338,14 @@ Rulings that fix boundaries between Nook tasks. Builders and the arbiter read th
 - Not built: a free width, a height choice, a look for the closed pill.
 - Why: a wider, squarer panel was asked for, and one fixed shape does not suit every screen.
 - Applies to: anything that sizes or draws the opened island, which must read `IslandOpenedMetrics`.
+
+## D36: Hangover updates itself from a feed of its own
+- Ruling: from version 1.0.1 the packaged release starts Sparkle. It reads one feed, `appcast.xml` on the `main` branch of Hangover's own repository (`AppBrand.updateFeedURL`), once a day, and offers a newer version when the feed lists one. It installs nothing without the user's yes.
+- Only a bundle that carries that exact feed address and Hangover's public key starts it (`UpdateChecker.shouldStart`). The release plist in `scripts/package-app.sh` carries both; the dev bundle and a test run carry neither. The delegate also pins the feed (`feedURLString(for:)`), which keeps a changed plist from pointing the updater anywhere else.
+- The feed must never be the upstream project's. That feed lists Open Island and would replace this app with it. A test checks that every download in the feed is under Hangover's releases and is signed.
+- Updates are signed with an EdDSA key made by `generate_keys --account hangover`. The private half lives in the owner's Keychain and is never in the repository. The public half is `AppBrand.updatePublicKey`. Losing the private half means installed copies accept no further update.
+- Sparkle sends no system profile. The check is one request for the feed file, and the privacy policy says that.
+- Limits: the release is ad-hoc signed and not notarized, which means macOS may ask for permissions again after an update. Version 1.0.0 has no updater. An app still running from the Downloads folder cannot replace itself; the README says to move it to Applications.
+- Not verified when this was written: one version updating itself to the next on a real Mac.
+- Why: without it every fix needs each user to find the releases page again.
+- Applies to: anything that fetches or installs a new version, and any change to the feed, the key or the release plist.

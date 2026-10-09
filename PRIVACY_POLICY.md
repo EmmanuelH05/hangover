@@ -1,6 +1,6 @@
 # Hangover Privacy Policy
 
-**Last updated: 2026-10-09. Applies to Hangover 1.0.**
+**Last updated: 2026-10-09. Applies to Hangover 1.0.1.**
 
 Hangover is a Mac app that lives in the notch. It shows your coding agents,
 your music and a page of small widgets. This page says what the app keeps,
@@ -14,6 +14,7 @@ the source code, which is public: https://github.com/EmmanuelH05/hangover
 - Almost everything stays on your Mac.
 - Two widgets talk to a service on the internet, and only after you turn them
   on: the weather tile (Open-Meteo) and the Notion to-do source (Notion).
+- About once a day the app asks GitHub whether there is a new version.
 - One feature talks to your own iPhone or Apple Watch over your local
   network, and only after you turn it on.
 
@@ -82,8 +83,16 @@ in an agent's message.
 
 ### Updates
 
-Hangover does not check for updates. The update framework (Sparkle) is part
-of the app and is never started, and the app carries no update address.
+From version 1.0.1 Hangover checks for a new version about once a day. It
+reads one file, `appcast.xml`, from this project's repository on GitHub.
+When that file lists a newer version, the app offers it and, if you accept,
+downloads it from this project's releases on GitHub.
+
+The request carries what any web request carries: your IP address, and the
+app's name and version. No identifier of yours is sent, and the update
+framework (Sparkle) sends no profile of your Mac. Every update is signed
+with a key only the author holds, and the app refuses one that is not.
+Version 1.0.0 and builds made for development never check.
 
 ## What the app writes into other apps' settings
 

@@ -238,19 +238,43 @@ manual steps in the README, they grant permissions again after every update
     xcrun stapler validate output/package/Hangover.app
     ```
 
-## F. Later: automatic updates (OWNER)
+## F. Automatic updates: on from 1.0.1
 
-Version 1.0 ships without them. No build checks for updates, and the tests
-keep it that way (`UpdateCheckerTests`).
+The packaged release carries Hangover's feed address and public key, and
+Sparkle checks the feed once a day (D36). The dev build carries neither and
+never checks. Version 1.0.0 has no updater: its users download once more by
+hand.
 
-35. Generate Sparkle keys. The private key goes into your Keychain and
-    never into the repository.
+The signing key was made on 2026-10-09 with
+`generate_keys --account hangover`. Its private half is in the owner's
+login Keychain and nowhere else. **OWNER:** keep a copy somewhere safe.
+Without it no installed copy accepts another update.
 
-    ```bash
-    .build/artifacts/sparkle/Sparkle/bin/generate_keys
-    ```
+```bash
+.build/artifacts/sparkle/Sparkle/bin/generate_keys --account hangover -x hangover-update-key.txt
+```
 
-36. Then, in code: give both bundle plists `SUFeedURL` and `SUPublicEDKey`,
-    set `UpdateChecker.feedURL`, start Sparkle in `startIfNeeded()`, and
-    update the tests that forbid all three. The feed is `appcast.xml`, which
-    `scripts/update-appcast.sh` fills with Hangover's download address.
+Move that file off this Mac and never put it in the repository.
+
+To publish an update:
+
+1. Build it with the new version number.
+
+   ```bash
+   OPEN_ISLAND_VERSION=1.0.2 zsh scripts/package-app.sh
+   ```
+
+2. Sign the zip. This prints the signature and the length.
+
+   ```bash
+   .build/artifacts/sparkle/Sparkle/bin/sign_update --account hangover output/package/Hangover.zip
+   ```
+
+3. Add an item to `appcast.xml` with the version, the build number from the
+   bundle's `CFBundleVersion`, the signature, the length and the download
+   address `https://github.com/EmmanuelH05/hangover/releases/download/v<version>/Hangover.zip`.
+4. Publish the commit to the public repository, then post the release with
+   the same zip. The feed is read from the `main` branch.
+
+Not done: nobody has watched one version update itself to the next. The
+first real test is the update after 1.0.1.
