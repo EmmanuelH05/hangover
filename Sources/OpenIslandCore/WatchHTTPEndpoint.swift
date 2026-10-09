@@ -39,6 +39,9 @@ public struct WatchPermissionEvent: Codable, Sendable {
     public var primaryAction: String
     public var secondaryAction: String
     public var requestID: String
+    /// The agent takes an approval of this request only where it runs. A
+    /// device should offer the denial alone: the Mac refuses an approval.
+    public var requiresTerminalApproval: Bool = false
 }
 
 public struct WatchQuestionEvent: Codable, Sendable {
@@ -75,6 +78,20 @@ public struct WatchResolutionRequest: Codable, Sendable {
     public var action: String
 }
 
+/// What the Mac did with an answer a paired device sent.
+public enum WatchResolutionOutcome: Equatable, Sendable {
+    /// The answer was taken and is on its way to the agent.
+    case accepted
+    /// The request takes its approval only in the terminal. Nothing was
+    /// decided, and the request can still be denied from the device.
+    case needsTerminal
+    /// The action is neither of the request's two. Nothing was decided.
+    case unknownAction
+    /// No such request is waiting, which is what a request answered
+    /// somewhere else looks like.
+    case unknownRequest
+}
+
 // MARK: - Pairing
 
 public struct WatchPairRequest: Codable, Sendable {
@@ -95,7 +112,7 @@ public struct WatchStatusResponse: Codable, Sendable {
 // MARK: - Resolution Handler
 
 /// Callback invoked when the Watch/iPhone submits a resolution via `/resolution`.
-public typealias WatchResolutionHandler = @Sendable (WatchResolutionRequest) -> Void
+public typealias WatchResolutionHandler = @Sendable (WatchResolutionRequest) -> WatchResolutionOutcome
 
 /// Callback to query current active session count for `/status`.
 public typealias WatchActiveSessionCountProvider = @Sendable () -> Int
@@ -412,8 +429,18 @@ public final class WatchHTTPEndpoint: @unchecked Sendable {
             return
         }
 
-        onResolution?(request)
-        sendHTTPResponse(connection: connection, status: "200 OK", body: #"{"status":"accepted"}"#)
+        // A device marks the request answered on a 200 and keeps it open
+        // on anything else, which is why a refused approval must not get one.
+        switch onResolution?(request) ?? .accepted {
+        case .accepted:
+            sendHTTPResponse(connection: connection, status: "200 OK", body: #"{"status":"accepted"}"#)
+        case .unknownRequest:
+            sendHTTPResponse(connection: connection, status: "200 OK", body: #"{"status":"gone"}"#)
+        case .needsTerminal:
+            sendHTTPResponse(connection: connection, status: "409 Conflict", body: #"{"error":"needs_terminal"}"#)
+        case .unknownAction:
+            sendHTTPResponse(connection: connection, status: "422 Unprocessable Entity", body: #"{"error":"unknown_action"}"#)
+        }
     }
 
     private func handleStatus(headers: [String: String], connection: NWConnection) {

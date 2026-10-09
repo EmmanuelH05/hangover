@@ -208,7 +208,8 @@ final class CodexAppServerCoordinator {
                     sessionID: threadId,
                     summary: "Codex is working…",
                     phase: .running,
-                    timestamp: .now
+                    timestamp: .now,
+                    startsTurn: true
                 )
             ))
 

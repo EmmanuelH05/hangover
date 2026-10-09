@@ -5,10 +5,10 @@ import OpenIslandCore
 import SwiftUI
 
 extension Notification.Name {
-    /// Posted by `AppModel.showOnboarding()` to ask `SettingsView` to
-    /// switch to the Setup tab. Lets the empty-state CTAs deliver the
-    /// user to the right place without `SettingsView`'s `@State` having
-    /// to leak into `AppModel`.
+    /// Posted by `AppModel.showSetupSettings()` to ask `SettingsView` to
+    /// switch to the Setup tab. Lets the welcome tour deliver the user to
+    /// the right place without `SettingsView`'s `@State` having to leak
+    /// into `AppModel`.
     static let openIslandSelectSetupTab = Notification.Name("openIslandSelectSetupTab")
 }
 
@@ -21,6 +21,8 @@ final class AppModel {
     /// When true, click-outside does not dismiss the notch while any session
     /// is waiting for approval or an answer (#547).
     private static let keepNotchOpenUntilDecisionDefaultsKey = "app.keepNotchOpenUntilDecision"
+    static let islandOpenTriggerDefaultsKey = "app.islandOpenTrigger"
+    static let allowsLinksFromOtherAppsDefaultsKey = "app.allowsLinksFromOtherApps"
     private static let islandRightSlotDefaultsKey = "appearance.island.v6.rightSlot"
     private static let islandCenterLabelDefaultsKey = "appearance.island.v6.centerLabel"
     private static let showCodexUsageDefaultsKey = "app.showCodexUsage"
@@ -52,6 +54,7 @@ final class AppModel {
             _cachedSessionBuckets = nil
             pruneAgentsGridObservationTicketsIfNeeded()
             bridgeServer.updateStateSnapshot(state)
+            agentToolsStateDidChange()
         }
     }
     @ObservationIgnored private var _cachedSessionBuckets: (primary: [AgentSession], overflow: [AgentSession])?
@@ -67,10 +70,24 @@ final class AppModel {
     var selectedSessionID: String?
     let hooks = HookInstallationCoordinator()
     let overlay = OverlayUICoordinator()
+    /// Completion flashes for the status halo.
+    let halo = IslandHaloController()
     let discovery = SessionDiscoveryCoordinator()
     let monitoring = ProcessMonitoringCoordinator()
     let codexAppServer = CodexAppServerCoordinator()
     let updateChecker = UpdateChecker()
+    let nook = NookModel()
+
+    /// Approve and deny from the keyboard, replies being typed, and what
+    /// each session did since its last prompt. Glue in
+    /// `AppModel+AgentTools`.
+    let agentHotkeys = AgentHotkeyController()
+    var agentReplies = AgentReplyDraftStore()
+    var agentTurns = AgentTurnLedger()
+    var agentApprovals = AgentApprovalTracker()
+    /// The session whose reply field is being typed in.
+    @ObservationIgnored
+    var agentReplyEditingSessionID: String?
 
     var notchStatus: NotchStatus {
         get { overlay.notchStatus }
@@ -264,6 +281,14 @@ final class AppModel {
             }
         }
     }
+    /// Whether `hangover://` links from other apps are carried out
+    /// (Settings, General). On by default. Off, every link is ignored.
+    var allowsLinksFromOtherApps: Bool = true {
+        didSet {
+            guard hasFinishedInit, allowsLinksFromOtherApps != oldValue else { return }
+            UserDefaults.standard.set(allowsLinksFromOtherApps, forKey: Self.allowsLinksFromOtherAppsDefaultsKey)
+        }
+    }
     var hapticFeedbackEnabled: Bool = false {
         didSet {
             guard hasFinishedInit, hapticFeedbackEnabled != oldValue else { return }
@@ -279,6 +304,15 @@ final class AppModel {
         didSet {
             guard hasFinishedInit, keepNotchOpenUntilDecision != oldValue else { return }
             UserDefaults.standard.set(keepNotchOpenUntilDecision, forKey: Self.keepNotchOpenUntilDecisionDefaultsKey)
+        }
+    }
+    /// Whether the closed island opens when the pointer rests on it or only
+    /// on a click (Settings → General). Files dragged to the island open it
+    /// either way.
+    var islandOpenTrigger: IslandOpenTrigger = .hover {
+        didSet {
+            guard hasFinishedInit, islandOpenTrigger != oldValue else { return }
+            UserDefaults.standard.set(islandOpenTrigger.rawValue, forKey: Self.islandOpenTriggerDefaultsKey)
         }
     }
     var showCodexUsage: Bool = false {
@@ -369,6 +403,10 @@ final class AppModel {
             if activeAppearanceProfile == .topBar { appearancePreferencesDidChange(oldValue: oldValue, newValue: topBarAppearancePreferences) }
         }
     }
+
+    /// Each display's setup from before a template replaced it. Kept for
+    /// the session, which lets the Personalization tab put it back.
+    var templateUndo: [IslandAppearanceDisplayProfile: PersonalizationSetup] = [:]
 
     /// Runtime profile selected from current overlay placement. External
     /// displays use the top-bar presentation; built-in notch displays keep
@@ -545,7 +583,7 @@ final class AppModel {
     private var hasStarted = false
 
     @ObservationIgnored
-    private let bridgeServer = BridgeServer()
+    private let bridgeServer = BridgeServer(claudeAskRules: .live)
 
     @ObservationIgnored
     private var bridgeClient = LocalBridgeClient()
@@ -629,6 +667,7 @@ final class AppModel {
             Self.showDockIconDefaultsKey: true,
             Self.hapticFeedbackEnabledDefaultsKey: false,
             Self.keepNotchOpenUntilDecisionDefaultsKey: false,
+            Self.allowsLinksFromOtherAppsDefaultsKey: true,
             Self.completionReplyEnabledDefaultsKey: false,
             Self.suppressFrontmostNotificationsDefaultsKey: true,
         ])
@@ -637,6 +676,9 @@ final class AppModel {
         showDockIcon = UserDefaults.standard.bool(forKey: Self.showDockIconDefaultsKey)
         hapticFeedbackEnabled = UserDefaults.standard.bool(forKey: Self.hapticFeedbackEnabledDefaultsKey)
         keepNotchOpenUntilDecision = UserDefaults.standard.bool(forKey: Self.keepNotchOpenUntilDecisionDefaultsKey)
+        allowsLinksFromOtherApps = UserDefaults.standard.bool(forKey: Self.allowsLinksFromOtherAppsDefaultsKey)
+        islandOpenTrigger = UserDefaults.standard.string(forKey: Self.islandOpenTriggerDefaultsKey)
+            .flatMap(IslandOpenTrigger.init(rawValue:)) ?? .hover
         suppressFrontmostNotifications = UserDefaults.standard.bool(forKey: Self.suppressFrontmostNotificationsDefaultsKey)
         if UserDefaults.standard.object(forKey: Self.showCodexUsageDefaultsKey) != nil {
             showCodexUsage = UserDefaults.standard.bool(forKey: Self.showCodexUsageDefaultsKey)
@@ -706,6 +748,7 @@ final class AppModel {
         }
 
         codexAppServer.onEvent = { [weak self] event in
+            self?.noteCodexAppServerEvent(event)
             self?.applyTrackedEvent(event, ingress: .bridge)
         }
         codexAppServer.onStatusMessage = { [weak self] message in
@@ -740,6 +783,7 @@ final class AppModel {
         monitoring.onCodexAppMaintenanceTick = { [weak self] in
             self?.discovery.maintainCodexAppSessionsIfNeeded()
         }
+        configureAgentTools()
         refreshOverlayDisplayConfiguration()
         hasFinishedInit = true
     }
@@ -921,8 +965,13 @@ final class AppModel {
     /// preference and current live state. Returns nil when the preference
     /// is `.none` or there's nothing meaningful to show.
     func islandClosedRightSlotContent() -> IslandRightSlotContent? {
+        islandSlotContent(for: islandRightSlot)
+    }
+
+    /// The count badge or agent grid for either side of the closed island.
+    func islandSlotContent(for slot: IslandRightSlot) -> IslandRightSlotContent? {
         let sessions = surfacedSessions
-        switch islandRightSlot {
+        switch slot {
         case .none:
             return nil
         case .count:
@@ -1140,6 +1189,32 @@ final class AppModel {
         } else {
             isResolvingInitialLiveSessions = false
         }
+        // Nook widgets run in harness launches too, so screenshots show live data.
+        nook.onTransient = { [weak self] in
+            // No pop on a display that has notices turned off.
+            guard let self, self.nookDisplay.showsNotices else { return }
+            self.notchPop()
+        }
+        nook.onDisplayPreferencesChanged = { [weak self] in self?.refreshOverlayPlacementIfVisible() }
+        nook.activeProfile = { [weak self] in self?.activeAppearanceProfile ?? .topBar }
+        nook.isSoundMuted = { [weak self] in self?.isSoundMuted ?? false }
+        nook.widgetsInUserView = { [weak self] in self?.nookWidgetsInUserView ?? [] }
+        // The volume and brightness keys go back to macOS while the closed
+        // notch cannot show what they did.
+        nook.volume.keys.canShowNotice = { [weak self] in
+            guard let self else { return false }
+            return self.notchStatus != .opened && self.nookDisplay.showsNotices
+        }
+        NookMirrorController.shared.onAspectRatioChange = { [weak self] in self?.refreshOverlayPlacementIfVisible() }
+        nook.presentRingLight = { [weak self] isLit in
+            NookRingLight.shared.setLit(isLit, on: self?.islandScreen)
+        }
+        NookRingLight.shared.onScreensChanged = { [weak self] in
+            guard let nook = self?.nook else { return }
+            nook.presentRingLight(nook.isMirrorOn && nook.isRingLightOn)
+        }
+        nook.start()
+        SystemMotionMonitor.shared.start()
         refreshOverlayDisplayConfiguration()
         ensureOverlayPanel()
         if shouldPerformBootAnimation {
@@ -1253,7 +1328,21 @@ final class AppModel {
     // MARK: - Overlay forwarding
 
     func toggleOverlay() { overlay.toggleOverlay() }
-    func notchOpen(reason: NotchOpenReason, surface: IslandSurface = .sessionList()) { overlay.notchOpen(reason: reason, surface: surface) }
+    /// `page` forces the page for this open: a file dragged to the island
+    /// opens it on the Nook page, where the tray is.
+    func notchOpen(
+        reason: NotchOpenReason,
+        surface: IslandSurface = .sessionList(),
+        page: NookOpenedPage? = nil
+    ) {
+        // Each open starts from the page setting; the header toggle only
+        // lasts for one open.
+        nook.pageOverride = page
+        overlay.notchOpen(reason: reason, surface: surface)
+    }
+
+    /// A click inside a hover-opened island keeps it open.
+    func pinHoverOpenedIsland() { overlay.pinHoverOpenedIsland() }
     func notchClose() { overlay.notchClose() }
 
     /// Whether click-outside (and similar accidental dismissals) should be
@@ -1277,6 +1366,261 @@ final class AppModel {
     }
     func refreshOverlayDisplayConfiguration() { overlay.refreshOverlayDisplayConfiguration() }
     func refreshOverlayPlacement() { overlay.refreshOverlayPlacement() }
+
+    private var isShowingNotificationCard: Bool {
+        notchOpenReason == .notification && islandSurface.sessionID != nil
+    }
+
+    /// The Nook choices for the kind of display the island is on right now.
+    var nookDisplay: NookDisplayPreferences {
+        nook.displayPreferences(for: activeAppearanceProfile)
+    }
+
+    /// What the Nook puts in the closed island on the current display.
+    var nookClosedActivity: NookClosedActivity? {
+        nook.closedActivity(for: nookDisplay)
+    }
+
+    static let nookTrackLabelLimit = 26
+
+    /// Center label for external displays: the track title while music is
+    /// what the island shows and this display asks for it, the agent label
+    /// otherwise. An agent waiting on the user always keeps the label.
+    func islandClosedLabelWithNook() -> String? {
+        guard nookDisplay.centerLabelShowsTrack,
+              islandClosedMode != .waiting,
+              nookClosedActivity?.showsArtwork == true,
+              let title = nook.nowPlaying?.title, !title.isEmpty else {
+            return islandClosedLabel() ?? nookNextEventLabel()
+        }
+        return Self.truncatedLabel(title, limit: Self.nookTrackLabelLimit)
+    }
+
+    /// "Standup · in 20 min" for the center label while the agents are quiet.
+    private func nookNextEventLabel() -> String? {
+        guard nookDisplay.centerLabelShowsNextEvent, let event = nook.nextEvent else { return nil }
+        let text = "\(event.title) · \(NookCompactBar.relativeStart(event))"
+        return Self.truncatedLabel(text, limit: Self.nookEventLabelLimit)
+    }
+
+    static let nookEventLabelLimit = 34
+
+    /// What the closed island's left shows on the current display. Nil
+    /// means the agent bars, either by choice or because the chosen item
+    /// has nothing to show (no battery, no event ahead).
+    var nookLeftSlotContent: NookSideSlotContent? {
+        let slot = nookDisplay.leftSlot
+        return slot == .agents ? nil : nookSideSlotContent(for: slot)
+    }
+
+    /// What the right side shows when this display overrides the island's
+    /// own right slot. Nil leaves that slot in charge.
+    var nookRightSlotContent: NookSideSlotContent? {
+        nookDisplay.rightSlot.flatMap(nookSideSlotContent(for:))
+    }
+
+    private func nookSideSlotContent(for slot: NookSideSlot) -> NookSideSlotContent? {
+        switch slot {
+        case .agents:
+            return .bars(islandClosedMode)
+        case .count:
+            return islandSlotContent(for: .count).map(NookSideSlotContent.agentSlot)
+        case .grid:
+            return islandSlotContent(for: .agents).map(NookSideSlotContent.agentSlot)
+        case .none:
+            return .hidden
+        case .date:
+            return .date(Calendar.current.component(.day, from: nook.calendar.lastTick))
+        case .battery:
+            return nook.power.batteryPercent.map { .battery(percent: $0, isCharging: nook.power.isCharging) }
+        case .countdown:
+            let now = nook.calendar.lastTick
+            guard let event = nook.upcomingEvents.first(where: { !$0.isAllDay && $0.start > now }),
+                  let text = NookSideSlotContent.countdownText(to: event.start, now: now) else { return nil }
+            return .countdown(text)
+        }
+    }
+
+    /// Widgets on the Nook page for the current display: the Nook tab's
+    /// list minus the ones this display hides.
+    var nookVisibleWidgets: [NookWidgetKind] {
+        nookWidgetPlacements.map(\.kind)
+    }
+
+    /// The same widgets in page order with the size each is drawn at.
+    var nookWidgetPlacements: [NookWidgetPlacement] {
+        nook.widgetPlacements(for: activeAppearanceProfile)
+    }
+
+    /// The screen the island is on, for the ring light.
+    private var islandScreen: NSScreen? {
+        guard let frame = overlay.overlayPanelController.windowFrame else { return NSScreen.main }
+        let center = CGPoint(x: frame.midX, y: frame.midY)
+        return NSScreen.screens.first { $0.frame.contains(center) } ?? NSScreen.main
+    }
+
+    /// Height of the mirror above the widgets on the current display: the
+    /// whole camera picture at the page's width. Nil while the mirror is
+    /// off or its tile is not on this page.
+    var nookMirrorHeight: CGFloat? { nookMirrorSize?.height }
+
+    /// The opened island's sizes on the display it is on, from that
+    /// display's look (D35).
+    var islandOpenedMetrics: IslandOpenedMetrics {
+        IslandOpenedMetrics.resolve(
+            look: nookDisplay.openedLook,
+            profile: activeAppearanceProfile,
+            screenWidth: islandScreen?.visibleFrame.width
+        )
+    }
+
+    /// The mirror's size above the widgets: the whole camera picture at the
+    /// page's width, or smaller on a screen too short for that. Nil while
+    /// the mirror is off or its tile is not on this page.
+    var nookMirrorSize: CGSize? {
+        guard NookMirrorLayout.isShown(isOn: nook.isMirrorOn, placements: nookWidgetPlacements) else { return nil }
+        let room = islandScreen.map { screen in
+            NookMirrorFit.room(
+                contentRoom: IslandOpenedLayout.nookContentRoom(
+                    screenMaxY: screen.frame.maxY,
+                    visibleMinY: screen.visibleFrame.minY,
+                    headerHeight: screen.islandClosedHeight,
+                    bottomPadding: 0,
+                    shadowBottomInset: IslandChromeMetrics.openedShadowBottomInset
+                ),
+                barsHeight: nookBarsHeight
+            )
+        }
+        return NookMirrorFit.size(
+            pageWidth: islandOpenedMetrics.pageWidth,
+            aspectRatio: NookMirrorController.shared.aspectRatio,
+            room: room
+        )
+    }
+
+    /// What the Nook page holds beyond its grid on the current display.
+    var nookPageExtras: NookPageExtras {
+        let placements = nookWidgetPlacements
+        // The small calendar lists no day, which leaves it nothing to grow.
+        let calendarGrows = placements.contains { $0.kind == .calendar && $0.size != .small }
+        let mirrorSize = nookMirrorSize
+        let mirrorHeight = mirrorSize?.height
+        // Only a mirror cut down for a short screen names its width.
+        let mirrorWidth = mirrorSize.flatMap { $0.width < islandOpenedMetrics.pageWidth ? $0.width : nil }
+        return NookPageExtras(
+            mirrorHeight: mirrorHeight,
+            mirrorWidth: mirrorWidth,
+            showsEventEditor: nook.isEventEditorOpen && !placements.isEmpty,
+            calendarExtraRows: calendarGrows ? nook.calendarExtraRows : 0,
+            showsJoinBar: nook.meetingPrompt != nil,
+            showsMirrorDecorationPicker: NookMirrorDecorationLayout.isPickerShown(
+                isDecorating: nook.isDecoratingMirror,
+                mirrorHeight: mirrorHeight
+            )
+        )
+    }
+
+    static func truncatedLabel(_ text: String, limit: Int) -> String {
+        guard text.count > limit else { return text }
+        return String(text.prefix(limit - 1)).trimmingCharacters(in: .whitespaces) + "…"
+    }
+
+    /// Which page the opened island shows. A notification card always wins;
+    /// then the header toggle's override for this open; then the setting,
+    /// where Auto means agents while any session is running or waiting and
+    /// the Nook the rest of the time.
+    var showsNookPage: Bool {
+        if isShowingNotificationCard { return false }
+        switch nook.pageOverride ?? nook.forcedPage ?? nookDisplay.openedPage {
+        case .agents:
+            return false
+        case .nook:
+            return true
+        case .auto:
+            return !surfacedSessions.contains { $0.phase.requiresAttention || $0.phase == .running }
+        }
+    }
+
+    /// The Nook widgets the user is looking at: the tiles of this display's
+    /// page, while the island is open on it and the user opened it. The
+    /// calendar and Reminders permissions wait for this.
+    var nookWidgetsInUserView: Set<NookWidgetKind> {
+        NookAccessTiming.widgetsInView(
+            status: notchStatus,
+            reason: notchOpenReason,
+            showsNookPage: showsNookPage,
+            pageWidgets: nook.widgetPlacements(for: activeAppearanceProfile).map(\.kind)
+        )
+    }
+
+    func showNookPage() {
+        nook.pageOverride = .nook
+        refreshOverlayPlacementIfVisible()
+    }
+
+    func showAgentsPage() {
+        nook.isEditingLayout = false
+        nook.isMirrorOn = false
+        nook.closeEventEditor(keepingDraft: true)
+        nook.pageOverride = .agents
+        refreshOverlayPlacementIfVisible()
+    }
+
+    func toggleNookPage() {
+        if showsNookPage { showAgentsPage() } else { showNookPage() }
+    }
+
+    /// Now-playing row under the agent list.
+    var showsNookCompactBar: Bool {
+        !showsNookPage && !isShowingNotificationCard && nookDisplay.showsCompactBar && nook.hasCompactBarContent
+    }
+
+    /// Agent summary row above the Nook widgets.
+    var showsNookAgentsBar: Bool {
+        showsNookPage && nookDisplay.showsAgentsBar && !surfacedSessions.isEmpty
+    }
+
+    // MARK: - Opened island layout and presentation (D16)
+
+    /// Heights the opened island animates to.
+    var islandOpenedLayout: IslandOpenedLayout { overlay.openedLayout }
+
+    /// What the opened island draws: live while open, the snapshot taken at
+    /// `notchClose()` while it fades out.
+    var openedPresentation: IslandOpenedPresentation {
+        if notchStatus == .opened { return liveOpenedPresentation() }
+        return overlay.closingPresentation ?? liveOpenedPresentation()
+    }
+
+    func liveOpenedPresentation() -> IslandOpenedPresentation {
+        IslandOpenedPresentation(
+            surface: islandSurface,
+            openReason: notchOpenReason,
+            showsNookPage: showsNookPage,
+            showsNookAgentsBar: showsNookAgentsBar,
+            showsNookCompactBar: showsNookCompactBar,
+            // A copy of the card's session, so the close fade keeps drawing
+            // the card as it was even after the session changes or goes.
+            session: state.session(id: islandSurface.sessionID)
+        )
+    }
+
+    /// Extra opened height the Nook bars add to the page content.
+    var nookBarsHeight: CGFloat {
+        if showsNookAgentsBar { return NookAgentsBar.outerHeight }
+        if showsNookCompactBar { return NookCompactBar.outerHeight }
+        return 0
+    }
+
+    /// Status dot drawn on the album art in the closed notch.
+    var nookAgentStatusTint: Color? {
+        guard nookDisplay.showsAgentDotOnArt, !surfacedSessions.isEmpty else { return nil }
+        switch islandClosedMode {
+        case .waiting: return IslandDesignPalette.Status.waitingAggregate
+        case .running: return IslandDesignPalette.Status.running
+        case .idle: return nil
+        }
+    }
     private func refreshOverlayPlacementIfVisible() { overlay.refreshOverlayPlacementIfVisible() }
     func notePointerInsideIslandSurface() { overlay.notePointerInsideIslandSurface() }
     func handlePointerExitedIslandSurface() { overlay.handlePointerExitedIslandSurface() }
@@ -1315,20 +1659,18 @@ final class AppModel {
             // the `CommandGroup(.appSettings)` button that opens the window.
             NSApp.sendAction(NSSelectorFromString("showSettingsWindow:"), to: nil, from: nil)
         }
-        if let window = NSApp.windows.first(where: { $0.title == "Open Island Settings" }) {
+        if let window = NSApp.windows.first(where: { $0.title == AppBrand.settingsWindowTitle }) {
             window.orderFrontRegardless()
             window.makeKey()
         }
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    /// Opens Settings on the Setup tab so the user can install hooks.
-    /// Used by every "Set up agents" CTA in the empty-state UI. A
-    /// dedicated first-run onboarding window will replace this in a
-    /// later PR; until then this is the canonical entry point.
+    /// Opens the welcome tour on its agents page, where hooks are
+    /// installed. Used by every "Set up agents" CTA in the empty-state UI.
+    /// The Setup tab stays one click away from that page.
     func showOnboarding() {
-        showSettings()
-        NotificationCenter.default.post(name: .openIslandSelectSetupTab, object: nil)
+        showWelcomeTour(startingAt: .agents)
     }
 
     func toggleSoundMuted() {
@@ -1339,6 +1681,7 @@ final class AppModel {
         guard let session = focusedSession else {
             return
         }
+        guard !approved || canApproveFromIsland(session) else { return }
 
         send(
             .resolvePermission(sessionID: session.id, resolution: permissionResolution(for: approved)),
@@ -1352,6 +1695,7 @@ final class AppModel {
         guard let session = focusedSession else {
             return
         }
+        guard canAnswerFromIsland(session) else { return }
 
         send(
             .answerQuestion(sessionID: session.id, response: QuestionPromptResponse(answer: answer)),
@@ -1411,13 +1755,15 @@ final class AppModel {
     }
 
     func approvePermission(for sessionID: String, approved: Bool) {
-        guard let session = state.session(id: sessionID) else {
+        guard let session = state.session(id: sessionID), isWaitingForApproval(session) else {
             return
         }
+        guard !approved || canApproveFromIsland(session) else { return }
 
         let resolution = permissionResolution(for: approved)
         dismissNotificationSurfaceIfPresent(for: sessionID)
         state.resolvePermission(sessionID: session.id, resolution: resolution)
+        let resolved = state.session(id: session.id)
         synchronizeSelection()
         refreshOverlayPlacementIfVisible()
 
@@ -1425,21 +1771,25 @@ final class AppModel {
             .resolvePermission(sessionID: session.id, resolution: resolution),
             userMessage: approved
                 ? "Approving permission for \(session.title)."
-                : "Denying permission for \(session.title)."
+                : "Denying permission for \(session.title).",
+            onFailure: { [weak self] error in
+                self?.agentApprovalWasNotDelivered(waiting: session, resolved: resolved, error: error)
+            }
         )
     }
 
     func approvePermission(for sessionID: String, action: ApprovalAction) {
-        guard let session = state.session(id: sessionID) else {
+        guard let session = state.session(id: sessionID), isWaitingForApproval(session) else {
             return
         }
+        guard !action.isApproval || canApproveFromIsland(session) else { return }
 
         let resolution: PermissionResolution
         let message: String
 
         switch action {
         case .deny:
-            resolution = .deny(message: "Permission denied in Open Island.", interrupt: false)
+            resolution = .deny(message: "Permission denied in Hangover.", interrupt: false)
             message = "Denying permission for \(session.title)."
         case .allowOnce:
             resolution = .allowOnce()
@@ -1451,25 +1801,54 @@ final class AppModel {
 
         dismissNotificationSurfaceIfPresent(for: sessionID)
         state.resolvePermission(sessionID: session.id, resolution: resolution)
+        let resolved = state.session(id: session.id)
         synchronizeSelection()
         refreshOverlayPlacementIfVisible()
 
         send(
             .resolvePermission(sessionID: session.id, resolution: resolution),
-            userMessage: message
+            userMessage: message,
+            onFailure: { [weak self] error in
+                self?.agentApprovalWasNotDelivered(waiting: session, resolved: resolved, error: error)
+            }
         )
     }
 
+    /// False for a request the agent wants approved where it runs: Claude
+    /// Code ignores an approval from the island for a call one of its ask
+    /// rules matches, and goes on waiting in the terminal. Such a request
+    /// is left as it is, on screen and unanswered. A denial still goes.
+    private func canApproveFromIsland(_ session: AgentSession) -> Bool {
+        agentApprovals.route(for: session).canApprove
+    }
+
+    /// True while the session still has a request to decide. An answer
+    /// that arrives after the request is over, from a device or a card that
+    /// is closing, must not record a decision nobody could make.
+    private func isWaitingForApproval(_ session: AgentSession) -> Bool {
+        session.phase == .waitingForApproval && session.permissionRequest != nil
+    }
+
     func dismissSession(_ sessionID: String) {
-        state.dismissSession(id: sessionID)
+        // Close a card for this session first: the close snapshot copies the
+        // session, and it must still exist then for the card to fade as is.
         dismissNotificationSurfaceIfPresent(for: sessionID)
+        state.dismissSession(id: sessionID)
         synchronizeSelection()
+    }
+
+    /// False for a question the agent wants answered where it runs. An
+    /// answer from the island, the watch or the phone would be ignored,
+    /// and the card would close on a question that is still open.
+    private func canAnswerFromIsland(_ session: AgentSession) -> Bool {
+        AgentQuestionReplyRoute.route(for: session) == .bridge
     }
 
     func answerQuestion(for sessionID: String, answer: QuestionPromptResponse) {
         guard let session = state.session(id: sessionID) else {
             return
         }
+        guard canAnswerFromIsland(session) else { return }
 
         dismissNotificationSurfaceIfPresent(for: sessionID)
         state.answerQuestion(sessionID: session.id, response: answer)
@@ -1497,11 +1876,17 @@ final class AppModel {
             self?.lastActionMessage = success
                 ? "Sent reply to \(session.title)."
                 : "Failed to send reply to \(session.title)."
+            self?.agentReplyWasSent(text, to: session, succeeded: success)
         }
     }
 
 
-    private func send(_ command: BridgeCommand, userMessage: String) {
+    /// `onFailure` runs when the command never reached the bridge.
+    private func send(
+        _ command: BridgeCommand,
+        userMessage: String,
+        onFailure: (@MainActor (any Error) -> Void)? = nil
+    ) {
         lastActionMessage = userMessage
 
         Task { [weak self] in
@@ -1513,6 +1898,7 @@ final class AppModel {
                 try await self.bridgeClient.send(command)
             } catch {
                 self.lastActionMessage = "Failed to send bridge command: \(error.localizedDescription)"
+                onFailure?(error)
             }
         }
     }
@@ -1522,7 +1908,7 @@ final class AppModel {
             return .allowOnce()
         }
 
-        return .deny(message: "Permission denied in Open Island.", interrupt: false)
+        return .deny(message: "Permission denied in Hangover.", interrupt: false)
     }
 
     func applyTrackedEvent(
@@ -1556,6 +1942,7 @@ final class AppModel {
         }
 
         state.apply(event)
+        noteAgentToolsEvent(event, ingress: ingress)
         reconcileIslandSurfaceAfterStateChange()
         if ingress == .bridge {
             monitoring.markSessionAttached(for: event)
@@ -1598,7 +1985,15 @@ final class AppModel {
             lastActionMessage = describe(event)
         }
 
-        if let surface = IslandSurface.notificationSurface(for: event) {
+        if let surface = IslandSurface.notificationSurface(for: event),
+           !nook.shouldSuppressNotification(for: event) {
+            // A finished agent flashes the halo green, under the same rules
+            // that decide whether its completion card shows.
+            if case .sessionCompleted = event,
+               !wasAlreadyCompleted,
+               notificationSurfaceIsEligibleForPresentation(surface, ingress: ingress) {
+                halo.noteCompletion()
+            }
             scheduleNotificationSurfacePresentationIfNeeded(
                 surface,
                 wasAlreadyCompleted: wasAlreadyCompleted,
@@ -1693,7 +2088,12 @@ final class AppModel {
             // marks first-launch as complete so onboarding does not appear
             // on upgrade. Must run after status reads and before any
             // install decision.
-            self.hooks.migrateIntentStoreIfNeeded()
+            let isFirstLaunch = OnboardingFirstLaunch.read(from: self.hooks.intentStore) {
+                self.hooks.migrateIntentStoreIfNeeded()
+            }
+            // A fresh install gets the welcome tour, once. The migration
+            // above marks an install that came before the tour as done.
+            self.offerWelcomeTour(isFirstLaunch: isFirstLaunch)
 
             // Pi and Oh My Pi load a runtime extension that talks to the
             // bridge socket directly, so they do not depend on the hooks

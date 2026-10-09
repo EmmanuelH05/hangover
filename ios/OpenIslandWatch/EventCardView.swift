@@ -40,12 +40,22 @@ struct EventCardView: View {
                     .truncationMode(.head)
             }
 
+            if payload.requiresTerminalApproval == true {
+                Text("Approve in the Mac's terminal")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
             HStack {
-                Button("Allow") {
-                    sessionManager.resolve(requestID: payload.requestID, action: "allow")
+                // The Mac refuses an approval of a request its agent keeps
+                // in the terminal. Only the denial is offered for one.
+                if payload.requiresTerminalApproval != true {
+                    Button("Allow") {
+                        sessionManager.resolve(requestID: payload.requestID, action: "allow")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
 
                 Button(role: .destructive) {
                     sessionManager.resolve(requestID: payload.requestID, action: "deny")

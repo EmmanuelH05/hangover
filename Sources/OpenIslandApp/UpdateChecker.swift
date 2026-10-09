@@ -10,7 +10,16 @@ import Sparkle
 @MainActor
 @Observable
 final class UpdateChecker: NSObject {
-    static let releasesURL = URL(string: "https://github.com/Octane0411/open-vibe-island/releases")!
+    /// Hangover's own releases page. Never the upstream project's, which
+    /// holds a different app.
+    nonisolated static let releasesURL = AppBrand.releasesURL
+
+    /// Hangover's update feed. There is none yet, which is why this is nil
+    /// and why Sparkle is never started: no check is made, by timer or by
+    /// hand, and nothing is fetched. A feed set here must be Hangover's
+    /// own. The upstream feed lists Open Island and would replace this app
+    /// with it. Neither bundle plist carries an `SUFeedURL` either.
+    nonisolated static let feedURL: URL? = nil
 
     private(set) var canCheckForUpdates = false
     private(set) var hasUpdate = false
@@ -31,38 +40,18 @@ final class UpdateChecker: NSObject {
         )
     }
 
-    /// Start Sparkle's automatic update checking schedule.
-    /// Call once after app launch.
+    /// Called once after app launch. Starts nothing: Hangover has no update
+    /// feed of its own (`feedURL`), and Sparkle never starts without one,
+    /// debug or release. `canCheckForUpdates` stays false, which keeps the
+    /// button in Settings off. Starting Sparkle is to be written together
+    /// with the feed (RELEASE.md, "Later").
     func startIfNeeded() {
-        #if DEBUG
-        // Dev builds run from a local branch that often carries fixes not yet in
-        // the upstream appcast. Letting Sparkle prompt the user to "update" to
-        // 1.0.21 would overwrite the bundle and silently discard those fixes.
-        // Skip the auto-check entirely in debug — release bundles still update.
-        print("[UpdateChecker] skipped in DEBUG build")
-        return
-        #else
-        let updater = updaterController.updater
-        updater.automaticallyChecksForUpdates = true
-        updater.updateCheckInterval = 60 * 60 // 1 hour
-        updater.automaticallyDownloadsUpdates = false
-
-        do {
-            try updater.start()
-        } catch {
-            print("[UpdateChecker] Failed to start Sparkle updater: \(error)")
-        }
-
-        cancellable = updater.publisher(for: \.canCheckForUpdates)
-            .receive(on: RunLoop.main)
-            .sink { [weak self] value in
-                self?.canCheckForUpdates = value
-            }
-        #endif
+        print("[UpdateChecker] off: Hangover has no update feed yet")
     }
 
     /// Manually trigger an update check (from Settings UI).
     func checkForUpdates() {
+        guard canCheckForUpdates else { return }
         updaterController.checkForUpdates(nil)
     }
 }

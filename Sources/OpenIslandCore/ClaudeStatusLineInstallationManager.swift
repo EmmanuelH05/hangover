@@ -69,7 +69,7 @@ public enum ClaudeStatusLineInstallationError: LocalizedError, Sendable {
         case .wrappableCommandMissing:
             return "No existing statusLine command was found to wrap."
         case let .wrapperWouldRecurse(command):
-            return "Refusing to wrap Open Island's own status line script (\(command)); the wrapper would call itself forever."
+            return "Refusing to wrap Hangover's own status line script (\(command)); the wrapper would call itself forever."
         }
     }
 }

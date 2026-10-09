@@ -9,113 +9,71 @@ import OpenIslandCore
 ///
 /// Everything else (idle behavior, per-tool agent colors, spinner, custom
 /// avatars) was cut in the v6 redesign round.
+///
+/// The pane itself only lays sections out. Each section is a small child view
+/// with narrow value inputs, so a click re-renders that section and not the
+/// whole tab, and the closed preview owns its own auto-cycle state.
 struct AppearanceSettingsPane: View {
     var model: AppModel
-    @State private var previewMode: UnifiedBars.Mode = .idle
-    @State private var previewAutoCycle: Bool = true
+    /// One namespace for every row of cards, so each row's selection ring
+    /// slides between that row's cards. The ring group tells the rows apart.
+    @Namespace private var ringNamespace
 
-    private static let autoCycleOrder: [UnifiedBars.Mode] = [.idle, .running, .waiting]
-    private static let autoCycleInterval: TimeInterval = 2.0
-
-    private var lang: LanguageManager { model.lang }
-    private var editingProfile: IslandAppearanceDisplayProfile { model.appearanceSettingsProfile }
+    var lang: LanguageManager { model.lang }
+    var editingProfile: IslandAppearanceDisplayProfile { model.appearanceSettingsProfile }
     private var editingPreferences: IslandAppearancePreferences {
         model.appearancePreferences(for: editingProfile)
     }
-    private var previewLayout: V6ClosedLayout {
-        editingProfile == .notch ? .macbook : .external
-    }
+    private var languageCode: String { lang.language.resolvedCode }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 32) {
-                displayProfilePart
-                notchPersonalizationPart
-                sessionListPersonalizationPart
-            }
-            .padding(24)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            contentColumn
         }
         .background(Color(red: 0.055, green: 0.055, blue: 0.06))
         .navigationTitle(lang.t("settings.tab.appearance"))
     }
 
+    /// Everything inside the scroll view. Internal so a render can draw it
+    /// without the `ScrollView`, which `ImageRenderer` leaves blank.
+    var contentColumn: some View {
+        VStack(alignment: .leading, spacing: 32) {
+            displayProfilePart
+            TemplatesSection(model: model, profile: editingProfile, ringNamespace: ringNamespace)
+            notchPersonalizationPart
+            sessionListPersonalizationPart
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
     // MARK: - Display profile
 
     private var displayProfilePart: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeader(
-                title: lang.t("settings.appearance.profile.title"),
-                note: lang.t("settings.appearance.profile.note")
-            )
-
-            HStack(spacing: 12) {
-                displayProfileCard(
-                    .topBar,
+        DisplayProfileSection(
+            header: lang.t("settings.appearance.profile.title"),
+            note: lang.t("settings.appearance.profile.note"),
+            items: [
+                .init(
+                    profile: .topBar,
                     icon: "display",
                     title: lang.t("settings.appearance.profile.external.title"),
                     note: lang.t("settings.appearance.profile.external.note")
-                )
-                displayProfileCard(
-                    .notch,
+                ),
+                .init(
+                    profile: .notch,
                     icon: "laptopcomputer",
                     title: lang.t("settings.appearance.profile.macbook.title"),
                     note: lang.t("settings.appearance.profile.macbook.note")
-                )
-            }
+                ),
+            ],
+            selected: editingProfile,
+            ringNamespace: ringNamespace
+        ) { [model] profile in
+            // The whole tab changes shape with the display, so this one morphs.
+            withMotion(Motion.morph) { model.appearanceSettingsProfile = profile }
         }
-    }
-
-    private func displayProfileCard(
-        _ profile: IslandAppearanceDisplayProfile,
-        icon: String,
-        title: String,
-        note: String
-    ) -> some View {
-        let selected = editingProfile == profile
-        return Button {
-            model.appearanceSettingsProfile = profile
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(selected ? V6Palette.paper : V6Palette.paper.opacity(0.55))
-                    .frame(width: 34, height: 34)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.white.opacity(selected ? 0.11 : 0.05))
-                    )
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(V6Palette.paper.opacity(0.94))
-                    Text(note)
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(V6Palette.paper.opacity(0.42))
-                        .lineLimit(2)
-                }
-
-                Spacer(minLength: 8)
-
-                if selected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(V6Palette.paper.opacity(0.9))
-                }
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.white.opacity(selected ? 0.075 : 0.025))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(selected ? V6Palette.paper.opacity(0.86) : Color.white.opacity(0.08), lineWidth: selected ? 1.5 : 1)
-            )
-        }
-        .buttonStyle(.plain)
+        .equatable()
     }
 
     // MARK: - Notch part
@@ -123,9 +81,18 @@ struct AppearanceSettingsPane: View {
     private var notchPersonalizationPart: some View {
         VStack(alignment: .leading, spacing: 18) {
             partHeader(title: lang.t("settings.appearance.notchPart.title"))
-            previewSection
+            ClosedPreviewSection(
+                model: model,
+                profile: editingProfile,
+                rightSlot: editingPreferences.rightSlot,
+                centerLabel: editingPreferences.centerLabel
+            )
             rightSlotSection
+            nookHost { nookRightSlotExtras }
             centerLabelSection
+            nookHost { nookLeftSlotSection }
+            nookHost { nookClosedSection }
+            nookHost { nookHaloSection }
         }
     }
 
@@ -135,366 +102,233 @@ struct AppearanceSettingsPane: View {
         VStack(alignment: .leading, spacing: 18) {
             partHeader(title: lang.t("settings.appearance.sessionListPart.title"))
             sessionListPreviewSection
+            nookHost { nookOpenedLookSection }
             usageDisplaySection
             stateIndicatorSection
             sessionGroupSection
             sessionSortSection
             staleThresholdSection
+            nookHost { nookOpenedSection }
         }
     }
 
-    // MARK: - Notch preview
-
-    @ViewBuilder
-    private var previewSection: some View {
-        sectionHeader(title: lang.t("settings.appearance.preview"), note: nil)
-
-        SettingsPreviewStage(contentTopPadding: 16, contentBottomPadding: 18) {
-            VStack(spacing: 14) {
-                previewStage
-                previewControls
-            }
-            .padding(.horizontal, 18)
-        }
-    }
-
-    private var previewStage: some View {
-        let physicalNotchW: CGFloat = 180
-        let pillHeight: CGFloat = 32
-
-        return ZStack(alignment: .top) {
-            if previewLayout == .macbook {
-                // Physical hardware notch mock — pinned to the TOP of the
-                // frame, same as the real physical cutout would sit at the
-                // top of the display.
-                V6ClosedPillShape()
-                    .fill(Color.black)
-                    .frame(width: physicalNotchW, height: pillHeight)
-            }
-
-            TimelineView(.periodic(from: .now, by: 0.25)) { context in
-                IslandPreviewPill(
-                    mode: previewMode,
-                    label: previewLabel,
-                    rightSlot: previewRightContent,
-                    layout: previewLayout,
-                    physicalNotchWidth: physicalNotchW,
-                    now: context.date
-                )
-            }
-        }
-        .frame(height: pillHeight)
-        .frame(maxWidth: .infinity, alignment: .center)
-    }
-
-    private var previewControls: some View {
-        HStack(spacing: 10) {
-            // Auto-cycle toggle (default on — drives the state chips).
-            monoChip(
-                title: previewAutoCycle
-                    ? lang.t("settings.appearance.state.auto.on")
-                    : lang.t("settings.appearance.state.auto.off"),
-                selected: previewAutoCycle
-            ) {
-                previewAutoCycle.toggle()
-            }
-
-            // Manual state chips — selecting one turns off auto-cycle.
-            ForEach([UnifiedBars.Mode.idle, .running, .waiting], id: \.self) { mode in
-                monoChip(title: title(for: mode), selected: !previewAutoCycle && previewMode == mode) {
-                    previewAutoCycle = false
-                    previewMode = mode
-                }
-            }
-
-            Spacer(minLength: 0)
-        }
-        .task(id: previewAutoCycle) {
-            await runAutoCycle()
-        }
+    /// Hosts one of the Nook extension's sections as its own view. What it
+    /// reads from the model is tracked here, so the pane does not re-run for
+    /// it, and an unrelated change to the pane leaves it alone.
+    private func nookHost<Content: View>(@ViewBuilder _ content: @escaping () -> Content) -> some View {
+        NookSectionHost(profile: editingProfile, languageCode: languageCode, content: content)
+            .equatable()
     }
 
     // MARK: - Session list preview
 
-    @ViewBuilder
     private var sessionListPreviewSection: some View {
-        sectionHeader(title: lang.t("settings.appearance.sessionPreview"), note: nil)
-
-        SettingsPreviewStage(contentTopPadding: 20, contentBottomPadding: 28) {
-            SessionListPanelPreview(
-                sections: previewSessionSections,
-                showsSections: editingPreferences.sessionGroup != .none,
-                indicator: editingPreferences.sessionStateIndicator,
-                profile: editingProfile,
-                lang: lang
-            )
-            .padding(.horizontal, 18)
-        }
-        .padding(.top, 8)
-    }
-
-    private func runAutoCycle() async {
-        guard previewAutoCycle else { return }
-
-        while !Task.isCancelled {
-            try? await Task.sleep(for: .milliseconds(Int(Self.autoCycleInterval * 1_000)))
-            guard !Task.isCancelled, previewAutoCycle else { return }
-
-            let order = Self.autoCycleOrder
-            let current = order.firstIndex(of: previewMode) ?? 0
-            let next = order[(current + 1) % order.count]
-            withAnimation(.timingCurve(0.4, 0, 0.2, 1, duration: 0.45)) {
-                previewMode = next
-            }
-        }
+        let preferences = editingPreferences
+        return SessionListPreviewSection(
+            lang: lang,
+            languageCode: languageCode,
+            profile: editingProfile,
+            look: model.nook.displayPreferences(for: editingProfile).openedLook,
+            group: preferences.sessionGroup,
+            sort: preferences.sessionSort,
+            staleThreshold: preferences.completedStaleThreshold,
+            indicator: preferences.sessionStateIndicator
+        )
+        .equatable()
     }
 
     // MARK: - 01 · Right slot
 
-    @ViewBuilder
     private var rightSlotSection: some View {
-        sectionHeader(
-            title: lang.t("settings.appearance.rightSlot.title"),
-            note: lang.t("settings.appearance.rightSlot.note")
-        )
-
-        HStack(spacing: 12) {
-            rightSlotCard(.count,  icon: { CountBadgePreview(count: 3) },
-                          title: lang.t("settings.appearance.rightSlot.count"))
-            rightSlotCard(.agents, icon: { AgentsMiniGridPreview() },
-                          title: lang.t("settings.appearance.rightSlot.agents"))
-            rightSlotCard(.none,   icon: { Text("—")
-                                      .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                                      .foregroundStyle(V6Palette.paper.opacity(0.5)) },
-                          title: lang.t("settings.appearance.rightSlot.none"))
-        }
-    }
-
-    private func rightSlotCard<Content: View>(
-        _ option: IslandRightSlot,
-        @ViewBuilder icon: () -> Content,
-        title: String
-    ) -> some View {
-        let selected = editingPreferences.rightSlot == option
-        return Button {
-            model.updateAppearancePreferences(for: editingProfile) { $0.rightSlot = option }
-        } label: {
-            VStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.04))
-                    icon()
+        // A Nook slot on the right takes the choice away from the island's own
+        // three cards, so none of them is selected then.
+        let nookSlotIsSet = model.nook.displayPreferences(for: editingProfile).rightSlot != nil
+        return AppearanceOptionSection(
+            header: lang.t("settings.appearance.rightSlot.title"),
+            note: lang.t("settings.appearance.rightSlot.note"),
+            items: [
+                .init(option: IslandRightSlot.count, title: lang.t("settings.appearance.rightSlot.count")),
+                .init(option: .agents, title: lang.t("settings.appearance.rightSlot.agents")),
+                .init(option: .none, title: lang.t("settings.appearance.rightSlot.none")),
+            ],
+            selected: nookSlotIsSet ? nil : editingPreferences.rightSlot,
+            ringNamespace: ringNamespace,
+            ringGroup: "rightSlot",
+            select: { [model] option in
+                withMotion(Motion.selection) {
+                    let profile = model.appearanceSettingsProfile
+                    model.nook.updateDisplayPreferences(for: profile) { $0.rightSlot = nil }
+                    model.updateAppearancePreferences(for: profile) { $0.rightSlot = option }
                 }
-                .frame(height: 56)
-
-                Text(title)
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.85))
+            },
+            icon: { option in
+                switch option {
+                case .count:
+                    CountBadgePreview(count: 3)
+                case .agents:
+                    AgentsMiniGridPreview()
+                case .none:
+                    Text("—")
+                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(V6Palette.paper.opacity(0.5))
+                }
             }
-            .padding(12)
-            .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.white.opacity(selected ? 0.07 : 0.02))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(
-                        selected ? V6Palette.paper.opacity(0.9) : Color.white.opacity(0.08),
-                        lineWidth: selected ? 1.5 : 1
-                    )
-            )
-        }
-        .buttonStyle(.plain)
+        )
+        .equatable()
     }
 
     // MARK: - 02 · Center label
 
-    @ViewBuilder
     private var centerLabelSection: some View {
-        sectionHeader(
-            title: lang.t("settings.appearance.centerLabel.title"),
-            note: lang.t("settings.appearance.centerLabel.note")
+        AppearanceOptionSection(
+            header: lang.t("settings.appearance.centerLabel.title"),
+            note: lang.t("settings.appearance.centerLabel.note"),
+            items: [
+                .init(option: IslandCenterLabel.agentAction, title: lang.t("settings.appearance.centerLabel.agentAction")),
+                .init(option: .sessionName, title: lang.t("settings.appearance.centerLabel.sessionName")),
+                .init(option: .off, title: lang.t("settings.appearance.centerLabel.off")),
+            ],
+            selected: editingPreferences.centerLabel,
+            ringNamespace: ringNamespace,
+            ringGroup: "centerLabel",
+            select: { [model] option in
+                Self.applyChoice(on: model) { $0.centerLabel = option }
+            },
+            icon: { option in
+                Text(Self.centerLabelSample(for: option))
+                    .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                    .foregroundStyle(V6Palette.paper.opacity(option == .off ? 0.4 : 0.9))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.horizontal, 12)
+            }
         )
-
-        HStack(spacing: 12) {
-            centerLabelCard(.agentAction, sample: "Claude · editing")
-            centerLabelCard(.sessionName,  sample: "open-island")
-            centerLabelCard(.off,          sample: "—")
-        }
+        .equatable()
     }
 
-    private func centerLabelCard(_ option: IslandCenterLabel, sample: String) -> some View {
-        let selected = editingPreferences.centerLabel == option
-        let title: String = switch option {
-        case .agentAction: lang.t("settings.appearance.centerLabel.agentAction")
-        case .sessionName: lang.t("settings.appearance.centerLabel.sessionName")
-        case .off:         lang.t("settings.appearance.centerLabel.off")
+    private static func centerLabelSample(for option: IslandCenterLabel) -> String {
+        switch option {
+        case .agentAction: "Claude · editing"
+        case .sessionName: "open-island"
+        case .off:         "—"
         }
-        return Button {
-            model.updateAppearancePreferences(for: editingProfile) { $0.centerLabel = option }
-        } label: {
-            VStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.04))
-                    Text(sample)
-                        .font(.system(size: 11.5, weight: .medium, design: .monospaced))
-                        .foregroundStyle(V6Palette.paper.opacity(option == .off ? 0.4 : 0.9))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .padding(.horizontal, 12)
-                }
-                .frame(height: 56)
-
-                Text(title)
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.85))
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.white.opacity(selected ? 0.07 : 0.02))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(
-                        selected ? V6Palette.paper.opacity(0.9) : Color.white.opacity(0.08),
-                        lineWidth: selected ? 1.5 : 1
-                    )
-            )
-        }
-        .buttonStyle(.plain)
     }
 
     // MARK: - 02 · Usage
 
-    @ViewBuilder
     private var usageDisplaySection: some View {
-        sectionHeader(
-            title: lang.t("settings.appearance.usageDisplay.title"),
-            note: lang.t("settings.appearance.usageDisplay.note")
+        let lang = lang
+        return AppearanceOptionSection(
+            header: lang.t("settings.appearance.usageDisplay.title"),
+            note: lang.t("settings.appearance.usageDisplay.note"),
+            items: IslandUsageDisplay.allCases.map { .init(option: $0, title: lang.appearanceTitle(for: $0)) },
+            selected: editingPreferences.usageDisplay,
+            ringNamespace: ringNamespace,
+            ringGroup: "usageDisplay",
+            select: { [model] option in
+                Self.applyChoice(on: model) { $0.usageDisplay = option }
+            },
+            icon: { UsageDisplayPreview(option: $0) }
         )
-
-        HStack(spacing: 12) {
-            ForEach(IslandUsageDisplay.allCases) { option in
-                optionCard(
-                    selected: editingPreferences.usageDisplay == option,
-                    title: title(for: option)
-                ) {
-                    model.updateAppearancePreferences(for: editingProfile) { $0.usageDisplay = option }
-                } icon: {
-                    UsageDisplayPreview(option: option)
-                }
-            }
-        }
+        .equatable()
     }
 
     // MARK: - 03 · Session state
 
-    @ViewBuilder
     private var stateIndicatorSection: some View {
-        sectionHeader(
-            title: lang.t("settings.appearance.stateIndicator.title"),
-            note: lang.t("settings.appearance.stateIndicator.note")
+        let lang = lang
+        return AppearanceOptionSection(
+            header: lang.t("settings.appearance.stateIndicator.title"),
+            note: lang.t("settings.appearance.stateIndicator.note"),
+            items: [IslandSessionStateIndicator.animatedDot, .bar, .glyph, .tint].map {
+                .init(option: $0, title: lang.appearanceTitle(for: $0))
+            },
+            selected: editingPreferences.sessionStateIndicator,
+            ringNamespace: ringNamespace,
+            ringGroup: "stateIndicator",
+            select: { [model] option in
+                Self.applyChoice(on: model) { $0.sessionStateIndicator = option }
+            },
+            icon: { StateIndicatorPreview(option: $0) }
         )
-
-        HStack(spacing: 12) {
-            stateIndicatorCard(.animatedDot)
-            stateIndicatorCard(.bar)
-            stateIndicatorCard(.glyph)
-            stateIndicatorCard(.tint)
-        }
-    }
-
-    private func stateIndicatorCard(_ option: IslandSessionStateIndicator) -> some View {
-        optionCard(
-            selected: editingPreferences.sessionStateIndicator == option,
-            title: title(for: option)
-        ) {
-            model.updateAppearancePreferences(for: editingProfile) { $0.sessionStateIndicator = option }
-        } icon: {
-            StateIndicatorPreview(option: option)
-        }
+        .equatable()
     }
 
     // MARK: - 04 · Session grouping
 
-    @ViewBuilder
     private var sessionGroupSection: some View {
-        sectionHeader(
-            title: lang.t("settings.appearance.sessionGroup.title"),
-            note: lang.t("settings.appearance.sessionGroup.note")
+        let lang = lang
+        return AppearanceOptionSection(
+            header: lang.t("settings.appearance.sessionGroup.title"),
+            note: lang.t("settings.appearance.sessionGroup.note"),
+            items: IslandSessionGroup.allCases.map { .init(option: $0, title: lang.appearanceTitle(for: $0)) },
+            selected: editingPreferences.sessionGroup,
+            ringNamespace: ringNamespace,
+            ringGroup: "sessionGroup",
+            select: { [model] option in
+                Self.applyChoice(on: model) { $0.sessionGroup = option }
+            },
+            icon: { SessionGroupPreview(option: $0) }
         )
-
-        HStack(spacing: 12) {
-            ForEach(IslandSessionGroup.allCases) { option in
-                optionCard(
-                    selected: editingPreferences.sessionGroup == option,
-                    title: title(for: option)
-                ) {
-                    model.updateAppearancePreferences(for: editingProfile) { $0.sessionGroup = option }
-                } icon: {
-                    SessionGroupPreview(option: option)
-                }
-            }
-        }
+        .equatable()
     }
 
     // MARK: - 05 · Session sorting
 
-    @ViewBuilder
     private var sessionSortSection: some View {
-        sectionHeader(
-            title: lang.t("settings.appearance.sessionSort.title"),
-            note: lang.t("settings.appearance.sessionSort.note")
+        let lang = lang
+        return AppearanceOptionSection(
+            header: lang.t("settings.appearance.sessionSort.title"),
+            note: lang.t("settings.appearance.sessionSort.note"),
+            items: IslandSessionSort.allCases.map { .init(option: $0, title: lang.appearanceTitle(for: $0)) },
+            selected: editingPreferences.sessionSort,
+            ringNamespace: ringNamespace,
+            ringGroup: "sessionSort",
+            select: { [model] option in
+                Self.applyChoice(on: model) { $0.sessionSort = option }
+            },
+            icon: { SessionSortPreview(option: $0) }
         )
-
-        HStack(spacing: 12) {
-            ForEach(IslandSessionSort.allCases) { option in
-                optionCard(
-                    selected: editingPreferences.sessionSort == option,
-                    title: title(for: option)
-                ) {
-                    model.updateAppearancePreferences(for: editingProfile) { $0.sessionSort = option }
-                } icon: {
-                    SessionSortPreview(option: option)
-                }
-            }
-        }
+        .equatable()
     }
 
     // MARK: - 06 · Done timeout
 
-    @ViewBuilder
     private var staleThresholdSection: some View {
-        sectionHeader(
-            title: lang.t("settings.appearance.staleThreshold.title"),
-            note: lang.t("settings.appearance.staleThreshold.note")
-        )
-
-        LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: 104), spacing: 12)],
-            alignment: .leading,
-            spacing: 12
-        ) {
-            ForEach(IslandCompletedStaleThreshold.allCases) { option in
-                optionCard(
-                    selected: editingPreferences.completedStaleThreshold == option,
-                    title: title(for: option)
-                ) {
-                    model.updateAppearancePreferences(for: editingProfile) { $0.completedStaleThreshold = option }
-                } icon: {
-                    Text(title(for: option))
-                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(V6Palette.paper.opacity(0.9))
-                }
+        let lang = lang
+        return AppearanceOptionSection(
+            header: lang.t("settings.appearance.staleThreshold.title"),
+            note: lang.t("settings.appearance.staleThreshold.note"),
+            items: IslandCompletedStaleThreshold.allCases.map { .init(option: $0, title: lang.appearanceTitle(for: $0)) },
+            selected: editingPreferences.completedStaleThreshold,
+            arrangement: .grid,
+            ringNamespace: ringNamespace,
+            ringGroup: "staleThreshold",
+            select: { [model] option in
+                Self.applyChoice(on: model) { $0.completedStaleThreshold = option }
+            },
+            icon: { option in
+                Text(lang.appearanceTitle(for: option))
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(V6Palette.paper.opacity(0.9))
             }
-        }
+        )
+        .equatable()
     }
 
     // MARK: - Helpers
+
+    /// Writes one choice for the display being edited, animated. The display
+    /// is read when the click lands: a section that did not re-render after a
+    /// display switch (its inputs were equal) must still write to the right one.
+    private static func applyChoice(
+        on model: AppModel,
+        _ update: (inout IslandAppearancePreferences) -> Void
+    ) {
+        withMotion(Motion.selection) {
+            model.updateAppearancePreferences(for: model.appearanceSettingsProfile, update)
+        }
+    }
 
     private func partHeader(title: String) -> some View {
         Text(title)
@@ -502,164 +336,261 @@ struct AppearanceSettingsPane: View {
             .foregroundStyle(.white.opacity(0.92))
     }
 
-    private func optionCard<Icon: View>(
+    /// A tile card for the Nook extension's rows. Pass a `ringGroup` to let
+    /// the selection ring slide between the cards that share it (the pane's
+    /// own rows use "rightSlot", "centerLabel" and so on).
+    func optionCard<Icon: View>(
         selected: Bool,
         title: String,
+        ringGroup: String? = nil,
         action: @escaping () -> Void,
         @ViewBuilder icon: () -> Icon
     ) -> some View {
-        Button(action: action) {
-            VStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.04))
-                    icon()
+        PersonalizationCard(
+            title: title,
+            selected: selected,
+            style: .tile,
+            ringNamespace: ringGroup == nil ? nil : ringNamespace,
+            ringGroup: ringGroup ?? "",
+            action: action,
+            icon: icon
+        )
+    }
+
+    func sectionHeader(title: String, note: String?) -> some View {
+        PersonalizationSectionHeader(title: title, note: note)
+    }
+
+    func monoChip(title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        MonoChip(title: title, selected: selected, action: action)
+    }
+
+    /// Sample content for the preview and the option cards.
+    static func sampleSideSlot(_ slot: NookSideSlot, mode: UnifiedBars.Mode = .running) -> NookSideSlotContent? {
+        switch slot {
+        case .agents: .bars(mode)
+        case .count: .agentSlot(.count(3))
+        case .grid: .agentSlot(.agents(Array(repeating: .session(color: .orange, state: .running), count: 3)))
+        case .date: .date(Calendar.current.component(.day, from: Date()))
+        case .battery: .battery(percent: 82, isCharging: false)
+        case .countdown: .countdown("42m")
+        case .none: .hidden
+        }
+    }
+}
+
+// MARK: - Sections
+
+/// The display profile cards. These are wide rows, so the section spaces them
+/// a little tighter than the tile sections below.
+private struct DisplayProfileSection: View, Equatable {
+    struct Item: Hashable, Sendable {
+        let profile: IslandAppearanceDisplayProfile
+        let icon: String
+        let title: String
+        let note: String
+    }
+
+    let header: String
+    let note: String
+    let items: [Item]
+    let selected: IslandAppearanceDisplayProfile
+    let ringNamespace: Namespace.ID
+    let select: (IslandAppearanceDisplayProfile) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            PersonalizationSectionHeader(title: header, note: note)
+
+            HStack(spacing: 12) {
+                ForEach(items, id: \.profile) { item in
+                    PersonalizationCard(
+                        title: item.title,
+                        selected: item.profile == selected,
+                        style: .row(note: item.note),
+                        ringNamespace: ringNamespace,
+                        ringGroup: "profile",
+                        action: { select(item.profile) }
+                    ) {
+                        Image(systemName: item.icon)
+                    }
                 }
-                .frame(height: 56)
-
-                Text(title)
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.85))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.white.opacity(selected ? 0.07 : 0.02))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(
-                        selected ? V6Palette.paper.opacity(0.9) : Color.white.opacity(0.08),
-                        lineWidth: selected ? 1.5 : 1
-                    )
-            )
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func sectionHeader(title: String, note: String?) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title.uppercased())
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .tracking(1.2)
-                .foregroundStyle(Color.white.opacity(0.55))
-            if let note {
-                Text(note)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(Color.white.opacity(0.38))
             }
         }
     }
 
-    private func monoChip(title: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .foregroundStyle(selected ? V6Palette.ink : V6Palette.paper.opacity(0.7))
-                .background(
-                    Capsule().fill(
-                        selected ? V6Palette.paper : Color.white.opacity(0.06)
-                    )
+    nonisolated static func == (lhs: DisplayProfileSection, rhs: DisplayProfileSection) -> Bool {
+        lhs.header == rhs.header
+            && lhs.note == rhs.note
+            && lhs.items == rhs.items
+            && lhs.selected == rhs.selected
+    }
+}
+
+/// A header and one set of selectable tiles. Two sections are equal when what
+/// they would draw is equal (the icon and the action are fixed per option), so
+/// a click in another section never touches this one.
+private struct AppearanceOptionSection<Option: Hashable & Sendable, Icon: View>: View, Equatable {
+    enum Arrangement: Sendable {
+        case row
+        case grid
+    }
+
+    struct Item: Hashable, Sendable {
+        let option: Option
+        let title: String
+    }
+
+    let header: String
+    let note: String?
+    let items: [Item]
+    /// Nil when none of the tiles is chosen.
+    let selected: Option?
+    var arrangement: Arrangement = .row
+    let ringNamespace: Namespace.ID
+    let ringGroup: String
+    let select: (Option) -> Void
+    @ViewBuilder let icon: (Option) -> Icon
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            PersonalizationSectionHeader(title: header, note: note)
+
+            switch arrangement {
+            case .row:
+                HStack(spacing: 12) { cards }
+            case .grid:
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 104), spacing: 12)],
+                    alignment: .leading,
+                    spacing: 12
+                ) { cards }
+            }
+        }
+    }
+
+    private var cards: some View {
+        ForEach(items, id: \.option) { item in
+            PersonalizationCard(
+                title: item.title,
+                selected: item.option == selected,
+                style: .tile,
+                ringNamespace: ringNamespace,
+                ringGroup: ringGroup,
+                action: { select(item.option) }
+            ) {
+                icon(item.option)
+            }
+        }
+    }
+
+    nonisolated static func == (lhs: AppearanceOptionSection, rhs: AppearanceOptionSection) -> Bool {
+        lhs.header == rhs.header
+            && lhs.note == rhs.note
+            && lhs.items == rhs.items
+            && lhs.selected == rhs.selected
+            && lhs.arrangement == rhs.arrangement
+            && lhs.ringGroup == rhs.ringGroup
+    }
+}
+
+/// Hosts a section the Nook extension builds, so its reads of the model are
+/// tracked on this view. Equal while the display and the language are.
+///
+/// The extension's sections are several views in a row (header, cards,
+/// toggles). The stack gives them the same spacing they had as direct
+/// children of the part, which an equatable wrapper would not do on its own.
+private struct NookSectionHost<Content: View>: View, Equatable {
+    let profile: IslandAppearanceDisplayProfile
+    let languageCode: String
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            content()
+        }
+    }
+
+    nonisolated static func == (lhs: NookSectionHost, rhs: NookSectionHost) -> Bool {
+        lhs.profile == rhs.profile && lhs.languageCode == rhs.languageCode
+    }
+}
+
+/// The session list preview and what it draws from. It takes the four
+/// preferences that shape the list, so it ignores every other click.
+private struct SessionListPreviewSection: View, Equatable {
+    let lang: LanguageManager
+    let languageCode: String
+    let profile: IslandAppearanceDisplayProfile
+    let look: IslandOpenedLook
+    let group: IslandSessionGroup
+    let sort: IslandSessionSort
+    let staleThreshold: IslandCompletedStaleThreshold
+    let indicator: IslandSessionStateIndicator
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            PersonalizationSectionHeader(title: lang.t("settings.appearance.sessionPreview"), note: nil)
+
+            SettingsPreviewStage(contentTopPadding: 20, contentBottomPadding: 28) {
+                SessionListPanelPreview(
+                    sections: sections,
+                    showsSections: group != .none,
+                    indicator: indicator,
+                    profile: profile,
+                    look: look,
+                    lang: lang
                 )
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func title(for mode: UnifiedBars.Mode) -> String {
-        switch mode {
-        case .idle:    lang.t("settings.appearance.state.idle")
-        case .running: lang.t("settings.appearance.state.running")
-        case .waiting: lang.t("settings.appearance.state.waiting")
-        }
-    }
-
-    private func title(for option: IslandSessionStateIndicator) -> String {
-        switch option {
-        case .animatedDot: lang.t("settings.appearance.stateIndicator.animatedDot")
-        case .bar:         lang.t("settings.appearance.stateIndicator.bar")
-        case .glyph:       lang.t("settings.appearance.stateIndicator.glyph")
-        case .tint:        lang.t("settings.appearance.stateIndicator.tint")
-        }
-    }
-
-    private func title(for option: IslandUsageDisplay) -> String {
-        switch option {
-        case .hidden:  lang.t("settings.appearance.usageDisplay.hidden")
-        case .compact: lang.t("settings.appearance.usageDisplay.compact")
-        }
-    }
-
-    private func title(for option: IslandSessionGroup) -> String {
-        switch option {
-        case .none:    lang.t("settings.appearance.sessionGroup.none")
-        case .state:   lang.t("settings.appearance.sessionGroup.state")
-        case .agent:   lang.t("settings.appearance.sessionGroup.agent")
-        case .project: lang.t("settings.appearance.sessionGroup.project")
-        }
-    }
-
-    private func title(for option: IslandSessionSort) -> String {
-        switch option {
-        case .attention:  lang.t("settings.appearance.sessionSort.attention")
-        case .lastUpdate: lang.t("settings.appearance.sessionSort.lastUpdate")
-        }
-    }
-
-    private func title(for option: IslandCompletedStaleThreshold) -> String {
-        switch option {
-        case .twoMinutes:    lang.t("settings.appearance.staleThreshold.twoMinutes")
-        case .fiveMinutes:   lang.t("settings.appearance.staleThreshold.fiveMinutes")
-        case .tenMinutes:    lang.t("settings.appearance.staleThreshold.tenMinutes")
-        case .twentyMinutes: lang.t("settings.appearance.staleThreshold.twentyMinutes")
-        case .never:         lang.t("settings.appearance.staleThreshold.never")
-        }
-    }
-
-    private var previewAgentCells: [AgentGridCell] {
-        // Three Claude sessions, with one waiting when the preview mode is
-        // `waiting` so the breathing tile is visible in the live preview.
-        let claude = Color(hex: AgentTool.claudeCode.brandColorHex) ?? .white
-        let waitingIdx = previewMode == .waiting ? 1 : -1
-        return (0..<3).map { idx in
-            if idx == waitingIdx {
-                return .session(color: claude, state: .waiting)
+                .equatable()
+                .padding(.horizontal, 18)
             }
-            return .session(color: claude, state: .running)
+            .padding(.top, 8)
         }
     }
 
-    private var previewLabel: String? {
-        guard previewLayout == .external,
-              editingPreferences.centerLabel != .off else { return nil }
-        switch (previewMode, editingPreferences.centerLabel) {
-        case (.idle, _):               return nil
-        case (.waiting, _):            return lang.t("settings.appearance.preview.permissionNeeded")
-        case (.running, .agentAction): return lang.t("settings.appearance.preview.agentEditing")
-        case (.running, .sessionName): return "open-island"
-        case (.running, .off):         return nil
-        }
+    nonisolated static func == (lhs: SessionListPreviewSection, rhs: SessionListPreviewSection) -> Bool {
+        lhs.languageCode == rhs.languageCode
+            && lhs.profile == rhs.profile
+            && lhs.look == rhs.look
+            && lhs.group == rhs.group
+            && lhs.sort == rhs.sort
+            && lhs.staleThreshold == rhs.staleThreshold
+            && lhs.indicator == rhs.indicator
     }
 
-    private var previewRightContent: IslandRightSlotContent? {
-        switch editingPreferences.rightSlot {
-        case .none: return nil
-        case .count: return .count(3)
-        case .agents:
-            return .agents(previewAgentCells)
-        }
+    private var sections: [AppearanceSessionPreviewSection] {
+        SessionListPreviewSamples.sections(lang: lang, group: group, sort: sort, staleThreshold: staleThreshold)
+    }
+}
+
+/// The sample sessions the previews list, grouped and sorted the way a setup
+/// asks. Shared by the session list preview and the preview stage.
+@MainActor
+struct SessionListPreviewSamples {
+    let lang: LanguageManager
+    let group: IslandSessionGroup
+    let sort: IslandSessionSort
+    let staleThreshold: IslandCompletedStaleThreshold
+    /// Keeps only the first sessions in list order. Nil keeps all five.
+    var limit: Int? = nil
+
+    static func sections(
+        lang: LanguageManager,
+        group: IslandSessionGroup,
+        sort: IslandSessionSort,
+        staleThreshold: IslandCompletedStaleThreshold,
+        limit: Int? = nil
+    ) -> [AppearanceSessionPreviewSection] {
+        SessionListPreviewSamples(
+            lang: lang, group: group, sort: sort, staleThreshold: staleThreshold, limit: limit
+        ).sections
     }
 
-    private var previewSessionSections: [AppearanceSessionPreviewSection] {
-        let items = sortedPreviewSessionItems
+    var sections: [AppearanceSessionPreviewSection] {
+        var items = sortedItems
+        if let limit { items = Array(items.prefix(limit)) }
 
-        switch editingPreferences.sessionGroup {
+        switch group {
         case .none:
             return [
                 AppearanceSessionPreviewSection(
@@ -698,21 +629,21 @@ struct AppearanceSettingsPane: View {
         }
     }
 
-    private var sortedPreviewSessionItems: [AppearanceSessionPreviewItem] {
-        switch editingPreferences.sessionSort {
+    private var sortedItems: [AppearanceSessionPreviewItem] {
+        switch sort {
         case .attention:
-            return previewSessionItems.sorted { lhs, rhs in
+            return items.sorted { lhs, rhs in
                 if lhs.attentionRank == rhs.attentionRank {
                     return lhs.updatedRank < rhs.updatedRank
                 }
                 return lhs.attentionRank < rhs.attentionRank
             }
         case .lastUpdate:
-            return previewSessionItems.sorted { $0.updatedRank < $1.updatedRank }
+            return items.sorted { $0.updatedRank < $1.updatedRank }
         }
     }
 
-    private var previewSessionItems: [AppearanceSessionPreviewItem] {
+    private var items: [AppearanceSessionPreviewItem] {
         [
             .init(
                 id: "approval",
@@ -773,7 +704,7 @@ struct AppearanceSettingsPane: View {
                 branch: "main",
                 prompt: lang.t("settings.appearance.preview.promptSummarizeDesignBundle"),
                 terminal: "WezTerm",
-                age: title(for: editingPreferences.completedStaleThreshold),
+                age: lang.appearanceTitle(for: staleThreshold),
                 phase: .done,
                 attentionRank: 3,
                 updatedRank: 1
@@ -798,15 +729,61 @@ struct AppearanceSettingsPane: View {
     }
 }
 
+// MARK: - Titles
+
+private extension LanguageManager {
+    func appearanceTitle(for option: IslandSessionStateIndicator) -> String {
+        switch option {
+        case .animatedDot: t("settings.appearance.stateIndicator.animatedDot")
+        case .bar:         t("settings.appearance.stateIndicator.bar")
+        case .glyph:       t("settings.appearance.stateIndicator.glyph")
+        case .tint:        t("settings.appearance.stateIndicator.tint")
+        }
+    }
+
+    func appearanceTitle(for option: IslandUsageDisplay) -> String {
+        switch option {
+        case .hidden:  t("settings.appearance.usageDisplay.hidden")
+        case .compact: t("settings.appearance.usageDisplay.compact")
+        }
+    }
+
+    func appearanceTitle(for option: IslandSessionGroup) -> String {
+        switch option {
+        case .none:    t("settings.appearance.sessionGroup.none")
+        case .state:   t("settings.appearance.sessionGroup.state")
+        case .agent:   t("settings.appearance.sessionGroup.agent")
+        case .project: t("settings.appearance.sessionGroup.project")
+        }
+    }
+
+    func appearanceTitle(for option: IslandSessionSort) -> String {
+        switch option {
+        case .attention:  t("settings.appearance.sessionSort.attention")
+        case .lastUpdate: t("settings.appearance.sessionSort.lastUpdate")
+        }
+    }
+
+    func appearanceTitle(for option: IslandCompletedStaleThreshold) -> String {
+        switch option {
+        case .twoMinutes:    t("settings.appearance.staleThreshold.twoMinutes")
+        case .fiveMinutes:   t("settings.appearance.staleThreshold.fiveMinutes")
+        case .tenMinutes:    t("settings.appearance.staleThreshold.tenMinutes")
+        case .twentyMinutes: t("settings.appearance.staleThreshold.twentyMinutes")
+        case .never:         t("settings.appearance.staleThreshold.never")
+        }
+    }
+}
+
 // MARK: - Small preview ornaments
 
-private struct AppearanceSessionPreviewSection: Identifiable {
+struct AppearanceSessionPreviewSection: Identifiable, Equatable {
     let id: String
     let title: String
     let items: [AppearanceSessionPreviewItem]
 }
 
-private struct AppearanceSessionPreviewItem: Identifiable {
+struct AppearanceSessionPreviewItem: Identifiable, Equatable {
     enum Phase {
         case approval
         case answer
@@ -831,7 +808,8 @@ private struct AppearanceSessionPreviewItem: Identifiable {
     let updatedRank: Int
 }
 
-private struct SettingsPreviewStage<Content: View>: View {
+/// The dark wallpaper frame the Personalization previews sit on.
+struct SettingsPreviewStage<Content: View>: View {
     var contentTopPadding: CGFloat = 20
     var contentBottomPadding: CGFloat = 24
     let content: Content
@@ -887,12 +865,50 @@ private struct SettingsPreviewWallpaper: View {
     }
 }
 
-private struct SessionListPanelPreview: View {
+/// Equal when the value inputs are, so an unrelated change on the tab does not
+/// re-diff the panel. `lang` is for translating; the language itself is what
+/// takes part in equality (the section titles already carry the strings).
+struct SessionListPanelPreview: View, Equatable {
     let sections: [AppearanceSessionPreviewSection]
     let showsSections: Bool
     let indicator: IslandSessionStateIndicator
     let profile: IslandAppearanceDisplayProfile
+    /// The display's opened look: how wide the panel is drawn and what its
+    /// corners look like.
+    let look: IslandOpenedLook
     let lang: LanguageManager
+    /// The now-playing row under the list, with a sample track.
+    let showsNowPlayingRow: Bool
+    private let languageCode: String
+
+    init(
+        sections: [AppearanceSessionPreviewSection],
+        showsSections: Bool,
+        indicator: IslandSessionStateIndicator,
+        profile: IslandAppearanceDisplayProfile,
+        look: IslandOpenedLook = .standard,
+        lang: LanguageManager,
+        showsNowPlayingRow: Bool = false
+    ) {
+        self.sections = sections
+        self.showsSections = showsSections
+        self.indicator = indicator
+        self.profile = profile
+        self.look = look
+        self.lang = lang
+        self.showsNowPlayingRow = showsNowPlayingRow
+        self.languageCode = lang.language.resolvedCode
+    }
+
+    nonisolated static func == (lhs: SessionListPanelPreview, rhs: SessionListPanelPreview) -> Bool {
+        lhs.sections == rhs.sections
+            && lhs.showsSections == rhs.showsSections
+            && lhs.indicator == rhs.indicator
+            && lhs.profile == rhs.profile
+            && lhs.look == rhs.look
+            && lhs.showsNowPlayingRow == rhs.showsNowPlayingRow
+            && lhs.languageCode == rhs.languageCode
+    }
 
     private var items: [AppearanceSessionPreviewItem] {
         sections.flatMap(\.items)
@@ -916,15 +932,23 @@ private struct SessionListPanelPreview: View {
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
-            panel(width: preferredPanelWidth)
-            panel(width: 500)
-            panel(width: 460)
+            ForEach(Self.panelWidths(for: metrics.panelWidth), id: \.self) { width in
+                panel(width: width)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    private var preferredPanelWidth: CGFloat {
-        profile == .notch ? 540 : 520
+    private var metrics: IslandOpenedMetrics {
+        IslandOpenedMetrics.resolve(look: look, profile: profile)
+    }
+
+    /// The widths the preview tries, widest first: the look's own, then
+    /// narrower ones for a settings window that has no room for it. The
+    /// standard look tries what it always has.
+    nonisolated static func panelWidths(for preferred: CGFloat) -> [CGFloat] {
+        let narrower: [CGFloat] = preferred > 540 ? [700, 640, 600, 540, 500, 460] : [500, 460]
+        return [preferred] + narrower.filter { $0 < preferred }
     }
 
     private func panel(width: CGFloat) -> some View {
@@ -936,6 +960,12 @@ private struct SessionListPanelPreview: View {
             VStack(spacing: 0) {
                 panelHead
                 listBody
+                if showsNowPlayingRow {
+                    NookSampleCompactBar()
+                        .padding(.horizontal, sideInset)
+                        .padding(.top, 8)
+                        .padding(.bottom, 4)
+                }
                 panelFoot
             }
             .clipShape(surfaceShape)
@@ -945,11 +975,15 @@ private struct SessionListPanelPreview: View {
     }
 
     private var surfaceShape: OpenedIslandSurfaceShape {
-        OpenedIslandSurfaceShape(topProfile: profile == .notch ? .notch : .topBar)
+        OpenedIslandSurfaceShape(
+            topProfile: profile == .notch ? .notch : .topBar,
+            topCornerRadius: metrics.topRadius,
+            bottomCornerRadius: metrics.bottomRadius
+        )
     }
 
     private var sideInset: CGFloat {
-        profile == .notch ? 46 : 16
+        metrics.sideInset
     }
 
     private var panelHead: some View {

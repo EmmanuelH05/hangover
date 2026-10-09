@@ -3,11 +3,14 @@
 set -euo pipefail
 
 
-skip_setup=false
+# Nook fork: agent hook installation is opt-in (--with-setup) so launching
+# never rewrites ~/.claude/settings.json or other agent configs.
+skip_setup=true
 regenerate_icons=false
 for arg in "$@"; do
   case "$arg" in
     --skip-setup) skip_setup=true ;;
+    --with-setup) skip_setup=false ;;
     --regenerate-icons) regenerate_icons=true ;;
   esac
 done
@@ -77,6 +80,14 @@ if [ -d "$sparkle_framework" ]; then
     command cp -R "$sparkle_framework" "$bundle_dir/Contents/Frameworks/"
 fi
 
+# MediaRemote adapter (Nook now-playing): built from the vendored sources,
+# loaded by /usr/bin/perl at runtime. See scripts/build-mediaremote-adapter.sh.
+zsh "$repo_root/scripts/build-mediaremote-adapter.sh" >/dev/null
+adapter_dir="$repo_root/.build/mediaremote-adapter"
+rm -rf "$bundle_dir/Contents/Frameworks/MediaRemoteAdapter.framework"
+command cp -R "$adapter_dir/MediaRemoteAdapter.framework" "$bundle_dir/Contents/Frameworks/"
+command cp "$adapter_dir/mediaremote-adapter.pl" "$bundle_dir/Contents/Helpers/mediaremote-adapter.pl"
+
 cat > "$plist_path" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -96,6 +107,18 @@ cat > "$plist_path" <<EOF
     <string>Open Island Dev</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>app.openisland.dev.links</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>hangover</string>
+                <string>openisland</string>
+            </array>
+        </dict>
+    </array>
     <key>CFBundleShortVersionString</key>
     <string>0.1</string>
     <key>CFBundleVersion</key>
@@ -103,15 +126,23 @@ cat > "$plist_path" <<EOF
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Open Island needs automation access to focus Terminal and iTerm sessions for jump-back.</string>
+    <string>Hangover uses automation to find your agent's terminal window, jump back to it and send your reply there.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>The Nook mirror shows your camera inside the notch, and its photo booth takes pictures only when you start it.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>The Nook shows your upcoming calendar events.</string>
+    <key>NSRemindersFullAccessUsageDescription</key>
+    <string>The Nook todo list reads and writes your Reminders.</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Hangover lets a paired iPhone or Apple Watch on your network see and answer agent requests, only while you have that turned on.</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_openisland._tcp</string>
+    </array>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
-    <key>SUFeedURL</key>
-    <string>https://raw.githubusercontent.com/Octane0411/open-vibe-island/main/appcast.xml</string>
-    <key>SUPublicEDKey</key>
-    <string>3IF8txq9RRNanzE2FNhyGRcwhslTucCcJHpTkpxcgBQ=</string>
 </dict>
 </plist>
 EOF
@@ -141,7 +172,9 @@ fi
 # scripts/setup-dev-signing.sh for a one-time setup that creates this
 # identity locally with zero Apple Developer Program involvement.
 sign_identity="-"
-if security find-identity -p codesigning -v "$HOME/Library/Keychains/login.keychain-db" 2>/dev/null \
+if [ -n "${OPEN_ISLAND_ADHOC_SIGN:-}" ]; then
+    echo "Ad-hoc signing (OPEN_ISLAND_ADHOC_SIGN set)."
+elif security find-identity -p codesigning -v "$HOME/Library/Keychains/login.keychain-db" 2>/dev/null \
        | grep -q '"Open Island Dev Local"'; then
     sign_identity="Open Island Dev Local"
 else
@@ -152,6 +185,13 @@ else
     echo
 fi
 
-codesign --force --deep --sign "$sign_identity" "$bundle_dir" 2>/dev/null || true
+# Leftover .cstemp files from an interrupted signing run make codesign fail.
+find "$bundle_dir" -name "*.cstemp" -delete 2>/dev/null || true
+if codesign --force --deep --sign "$sign_identity" "$bundle_dir" 2>/dev/null; then
+    [ "$sign_identity" != "-" ] && echo "Signed with \"$sign_identity\" (permissions survive rebuilds)."
+elif [ "$sign_identity" != "-" ]; then
+    echo "⚠ Signing with \"$sign_identity\" failed. Falling back to ad-hoc, which resets permissions this build."
+    codesign --force --deep --sign - "$bundle_dir" 2>/dev/null || true
+fi
 
 open -na "$bundle_dir"

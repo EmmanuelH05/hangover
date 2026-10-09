@@ -7,10 +7,59 @@ final class OpenIslandAppDelegate: NSObject, NSApplicationDelegate {
     private let harnessLaunchConfiguration = HarnessLaunchConfiguration()
     private let launchedAt = Date()
     private lazy var harnessRuntimeMonitor = HarnessRuntimeMonitor(launchedAt: launchedAt)
+    private let focusKeeper = IslandFocusKeeper()
+    /// Links that arrived before the model was up, the one that launched
+    /// the app among them.
+    private var pendingLinks: [URL] = []
+    private var isReadyForLinks = false
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // `hangover://` links from other apps arrive as an Apple event.
+        // Taking the event here keeps a link from summoning the Settings
+        // window.
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handleGetURLEvent(_:replyEvent:)),
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL)
+        )
+        focusKeeper.start()
+    }
+
+    @objc private func handleGetURLEvent(_ event: NSAppleEventDescriptor, replyEvent: NSAppleEventDescriptor) {
+        let text = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue
+        guard let url = text.flatMap(URL.init(string:)) else {
+            // Nothing to act on. The event still brought the app forward,
+            // and the keyboard goes back as it does for any ignored link.
+            model.noteUnreadableLink(text)
+            focusKeeper.giveBack()
+            return
+        }
+        receive([url])
+    }
+
+    /// The same links, should the system hand them over this way instead.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        receive(urls)
+    }
+
+    private func receive(_ links: [URL]) {
+        guard isReadyForLinks else {
+            pendingLinks += links
+            return
+        }
+        for link in links {
+            // An action that shows the island keeps the keyboard. Anything
+            // else, an ignored link included, gives it back.
+            if model.handleIncomingURL(link)?.opensIsland != true {
+                focusKeeper.giveBack()
+            }
+        }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         ProcessInfo.processInfo.disableAutomaticTermination(
-            "Open Island should remain active while monitoring local agent sessions."
+            "\(AppBrand.name) should remain active while monitoring local agent sessions."
         )
         ProcessInfo.processInfo.disableSuddenTermination()
         NSApp.setActivationPolicy(model.showDockIcon ? .regular : .accessory)
@@ -31,6 +80,11 @@ final class OpenIslandAppDelegate: NSObject, NSApplicationDelegate {
             )
             harnessRuntimeMonitor.recordMilestone("modelStarted")
 
+            // Global shortcuts belong to a real launch, not a harness run.
+            if harnessLaunchConfiguration.scenario == nil {
+                model.agentHotkeys.activate(registrar: CarbonHotkeyRegistrar())
+            }
+
             if let scenario = harnessLaunchConfiguration.scenario {
                 model.loadDebugSnapshot(
                     scenario.snapshot(),
@@ -42,6 +96,11 @@ final class OpenIslandAppDelegate: NSObject, NSApplicationDelegate {
             OpenIslandAppDelegate.hideAllAppWindows()
 
             harnessRuntimeMonitor.recordMilestone("bootstrapCompleted")
+
+            isReadyForLinks = true
+            let waiting = pendingLinks
+            pendingLinks = []
+            receive(waiting)
 
             if let captureDelay = harnessLaunchConfiguration.captureDelay,
                harnessLaunchConfiguration.artifactDirectoryURL != nil {
@@ -96,10 +155,13 @@ struct OpenIslandApp: App {
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
-        Window("Open Island Settings", id: "settings") {
+        Window(AppBrand.settingsWindowTitle, id: "settings") {
             SettingsWindowContent(model: appDelegate.model)
         }
         .windowResizability(.contentMinSize)
+        // A link from another app is an action for the island, never a
+        // reason to bring up Settings.
+        .handlesExternalEvents(matching: [])
         .commands {
             CommandGroup(replacing: .appSettings) {
                 Button("Settings…") {

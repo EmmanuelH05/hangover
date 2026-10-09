@@ -372,7 +372,8 @@ final class ConnectionManager: ObservableObject {
                 }
                 WatchConnectivityManager.shared.sendEvent(.permissionRequest(.init(
                     requestID: e.requestID, sessionID: e.sessionID, agentTool: e.agentTool,
-                    title: e.title, summary: e.summary, workingDirectory: e.workingDirectory
+                    title: e.title, summary: e.summary, workingDirectory: e.workingDirectory,
+                    requiresTerminalApproval: e.requiresTerminalApproval
                 )))
                 Self.logger.info("Permission requested: \(e.title)")
             } else {

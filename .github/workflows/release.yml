@@ -1,9 +1,12 @@
 name: Release
 
+# Hangover 1.0 is packaged by hand (RELEASE.md). This workflow is the
+# upstream project's: it needs Developer ID and notary secrets that
+# Hangover does not have, and it still builds and publishes under the name
+# Open Island. It no longer runs when a tag is pushed, only when started by
+# hand, and must be rewritten for Hangover before it is used.
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write

@@ -89,6 +89,9 @@ struct HarnessArtifactReport: Codable {
     let selectedSessionID: String?
     let islandSurface: String
     let notchStatus: String
+    /// Times the island window frame was set after the panel existed. A
+    /// smooth run changes it only when the content height changes.
+    let frameChangeCount: Int
     let runtime: HarnessRuntimeArtifacts?
     let sessions: [SessionSnapshot]
 }
@@ -165,6 +168,7 @@ enum HarnessArtifactRecorder {
             selectedSessionID: model.selectedSessionID,
             islandSurface: surfaceDescription(model.islandSurface),
             notchStatus: notchStatusDescription(model.notchStatus),
+            frameChangeCount: model.overlay.overlayPanelController.frameChangeCount,
             runtime: runtimeArtifacts,
             sessions: model.sessions.map {
                 HarnessArtifactReport.SessionSnapshot(

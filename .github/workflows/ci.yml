@@ -28,7 +28,10 @@ jobs:
   package-verify:
     runs-on: macos-26
     steps:
+      # The package holds the now playing adapter, which is a submodule.
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Install dependencies
         run: |

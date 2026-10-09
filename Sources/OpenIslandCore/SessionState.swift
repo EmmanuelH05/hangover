@@ -285,9 +285,9 @@ public struct SessionState: Equatable, Sendable {
             session.phase = .completed
             switch session.tool {
             case .claudeCode, .geminiCLI, .qoder, .qwenCode, .factory, .codebuddy, .kimiCLI:
-                session.summary = "Permission denied in Open Island."
+                session.summary = "Permission denied in Hangover."
             case .openCode:
-                session.summary = "Permission denied in Open Island."
+                session.summary = "Permission denied in Hangover."
             default:
                 session.summary = "Permission denied. Review the session in the terminal."
             }

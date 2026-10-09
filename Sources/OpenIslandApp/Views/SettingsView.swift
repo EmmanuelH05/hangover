@@ -10,6 +10,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     case display
     case sound
     case appearance
+    case nook
     case watch
     case shortcuts
     case lab
@@ -22,6 +23,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .general:    lang.t("settings.tab.general")
         case .setup:      lang.t("settings.tab.setup")
         case .appearance: lang.t("settings.tab.appearance")
+        case .nook:       "Nook"
         case .display:    lang.t("settings.tab.display")
         case .sound:      lang.t("settings.tab.sound")
         case .watch:      "Watch"
@@ -36,6 +38,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .general:    "gearshape.fill"
         case .setup:      "arrow.down.circle.fill"
         case .appearance: "paintbrush.fill"
+        case .nook:       "music.note.house.fill"
         case .display:    "textformat.size"
         case .sound:      "speaker.wave.2.fill"
         case .watch:      "applewatch"
@@ -50,6 +53,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .general:    .gray
         case .setup:      .orange
         case .appearance: .purple
+        case .nook:       .mint
         case .display:    .blue
         case .sound:      .green
         case .watch:      .cyan
@@ -61,7 +65,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 
     var section: SettingsSection {
         switch self {
-        case .general, .setup, .display, .sound, .appearance, .watch: .system
+        case .general, .setup, .display, .sound, .appearance, .nook, .watch: .system
         case .shortcuts, .lab:                                        .advanced
         case .about:                                                  .app
         }
@@ -77,7 +81,7 @@ enum SettingsSection: String, CaseIterable {
         switch self {
         case .system:   lang.t("settings.section.system")
         case .advanced: lang.t("settings.section.advanced")
-        case .app:      "Open Island"
+        case .app:      AppBrand.name
         }
     }
 
@@ -142,6 +146,8 @@ struct SettingsView: View {
                 SetupSettingsPane(model: model)
             case .appearance:
                 AppearanceSettingsPane(model: model)
+            case .nook:
+                NookSettingsPane(model: model) { selectedTab = .appearance }
             case .display:
                 DisplaySettingsPane(model: model)
             case .sound:
@@ -216,10 +222,35 @@ struct GeneralSettingsPane: View {
                     get: { model.showDockIcon },
                     set: { model.showDockIcon = $0 }
                 ))
+                Toggle(lang.t("settings.general.linksFromOtherApps"), isOn: Binding(
+                    get: { model.allowsLinksFromOtherApps },
+                    set: { model.allowsLinksFromOtherApps = $0 }
+                ))
+                Text(lang.t("settings.general.linksFromOtherApps.note"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Picker(lang.t(IslandOpenTrigger.settingTitleKey), selection: Binding(
+                    get: { model.islandOpenTrigger },
+                    set: { model.islandOpenTrigger = $0 }
+                )) {
+                    ForEach(IslandOpenTrigger.allCases) { trigger in
+                        Text(lang.t(trigger.titleKey)).tag(trigger)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(lang.t(model.islandOpenTrigger.noteKey))
+                    Text(lang.t(IslandOpenTrigger.filesNoteKey))
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 Toggle(lang.t("settings.general.hapticFeedback"), isOn: Binding(
                     get: { model.hapticFeedbackEnabled },
                     set: { model.hapticFeedbackEnabled = $0 }
                 ))
+                // The haptic tap marks a hover-open, which click mode never does.
+                .disabled(model.islandOpenTrigger == .click)
                 Toggle(lang.t("settings.general.completionReply"), isOn: Binding(
                     get: { model.completionReplyEnabled },
                     set: { model.completionReplyEnabled = $0 }
@@ -230,6 +261,7 @@ struct GeneralSettingsPane: View {
                 ))
             }
 
+            AgentHotkeySettingsSection(hotkeys: model.agentHotkeys, lang: lang)
         }
         .formStyle(.grouped)
         .navigationTitle(lang.t("settings.tab.general"))
@@ -367,6 +399,49 @@ struct AboutSettingsPane: View {
 
                 Section {
                     aboutActionRow(
+                        title: lang.t("onboarding.settings.show"),
+                        systemImage: "sparkles",
+                        tint: primaryInk,
+                        action: {
+                            model.showWelcomeTour()
+                        }
+                    )
+                    .accessibilityIdentifier("settings.about.showWelcomeTour")
+                }
+
+                // The GNU GPL asks an app with a window to say what it is
+                // based on, that it is free software with no warranty, and
+                // where its source and its license are.
+                Section {
+                    Text(lang.t("settings.about.credit"))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.vertical, 2)
+                        .accessibilityIdentifier("settings.about.credit")
+
+                    aboutLinkRow(
+                        title: lang.t("settings.about.sourceCode"),
+                        systemImage: "chevron.left.forwardslash.chevron.right",
+                        url: AppBrand.sourceCodeURL,
+                        identifier: "settings.about.sourceCode"
+                    )
+                    aboutLinkRow(
+                        title: lang.t("settings.about.license"),
+                        systemImage: "doc.text",
+                        url: AppBrand.licenseURL(bundledCopy: AppBrand.bundledLicenseURL),
+                        identifier: "settings.about.license"
+                    )
+                    aboutLinkRow(
+                        title: lang.t("settings.about.upstream"),
+                        systemImage: "arrow.triangle.branch",
+                        url: AppBrand.upstreamURL,
+                        identifier: "settings.about.upstream"
+                    )
+                }
+
+                Section {
+                    aboutActionRow(
                         title: lang.t("settings.about.quitApp"),
                         systemImage: "rectangle.portrait.and.arrow.right",
                         tint: Color(red: 1.0, green: 0.29, blue: 0.29),
@@ -383,6 +458,20 @@ struct AboutSettingsPane: View {
         }
         .frame(maxWidth: .infinity)
         .navigationTitle(lang.t("settings.tab.about"))
+    }
+
+    /// A row that opens a link, or the license copy inside the app.
+    private func aboutLinkRow(
+        title: String,
+        systemImage: String,
+        url: URL,
+        identifier: String
+    ) -> some View {
+        aboutActionRow(title: title, systemImage: systemImage, tint: primaryInk) {
+            NSWorkspace.shared.open(url)
+        }
+        .help(url.isFileURL ? url.lastPathComponent : url.absoluteString)
+        .accessibilityIdentifier(identifier)
     }
 
     private func aboutActionRow(
@@ -490,7 +579,7 @@ struct SetupSettingsPane: View {
                     }
                     Button(lang.t("settings.general.cancel"), role: .cancel) {}
                 } message: {
-                    Text("This will remove the Open Island plugin from ~/.config/opencode/plugins/.")
+                    Text("This will remove the Hangover plugin from ~/.config/opencode/plugins/.")
                 }
 
                 hookRow(
@@ -507,7 +596,7 @@ struct SetupSettingsPane: View {
                     }
                     Button(lang.t("settings.general.cancel"), role: .cancel) {}
                 } message: {
-                    Text("This will remove Open Island hooks from ~/.qoder/settings.json.")
+                    Text("This will remove Hangover hooks from ~/.qoder/settings.json.")
                 }
 
                 hookRow(
@@ -524,7 +613,7 @@ struct SetupSettingsPane: View {
                     }
                     Button(lang.t("settings.general.cancel"), role: .cancel) {}
                 } message: {
-                    Text("This will remove Open Island hooks from ~/.qwen/settings.json.")
+                    Text("This will remove Hangover hooks from ~/.qwen/settings.json.")
                 }
 
                 hookRow(
@@ -541,7 +630,7 @@ struct SetupSettingsPane: View {
                     }
                     Button(lang.t("settings.general.cancel"), role: .cancel) {}
                 } message: {
-                    Text("This will remove Open Island hooks from ~/.factory/settings.json.")
+                    Text("This will remove Hangover hooks from ~/.factory/settings.json.")
                 }
 
                 hookRow(
@@ -558,7 +647,7 @@ struct SetupSettingsPane: View {
                     }
                     Button(lang.t("settings.general.cancel"), role: .cancel) {}
                 } message: {
-                    Text("This will remove Open Island hooks from ~/.codebuddy/settings.json.")
+                    Text("This will remove Hangover hooks from ~/.codebuddy/settings.json.")
                 }
 
                 hookRow(
@@ -576,7 +665,7 @@ struct SetupSettingsPane: View {
                     }
                     Button(lang.t("settings.general.cancel"), role: .cancel) {}
                 } message: {
-                    Text("This will remove the Open Island hooks from ~/.cursor/hooks.json.")
+                    Text("This will remove the Hangover hooks from ~/.cursor/hooks.json.")
                 }
 
                 hookRow(
@@ -593,7 +682,7 @@ struct SetupSettingsPane: View {
                     }
                     Button(lang.t("settings.general.cancel"), role: .cancel) {}
                 } message: {
-                    Text("This will remove Open Island hooks from ~/.gemini/settings.json.")
+                    Text("This will remove Hangover hooks from ~/.gemini/settings.json.")
                 }
 
                 hookRow(
@@ -610,7 +699,7 @@ struct SetupSettingsPane: View {
                     }
                     Button(lang.t("settings.general.cancel"), role: .cancel) {}
                 } message: {
-                    Text("This will remove Open Island hooks from ~/.kimi/config.toml.")
+                    Text("This will remove Hangover hooks from ~/.kimi/config.toml.")
                 }
 
                 hookRow(
@@ -628,7 +717,7 @@ struct SetupSettingsPane: View {
                     }
                     Button(lang.t("settings.general.cancel"), role: .cancel) {}
                 } message: {
-                    Text("This will remove Open Island hooks from ~/.grok/hooks/open-island.json.")
+                    Text("This will remove Hangover hooks from ~/.grok/hooks/open-island.json.")
                 }
 
                 hookRow(
@@ -646,7 +735,7 @@ struct SetupSettingsPane: View {
                     }
                     Button(lang.t("settings.general.cancel"), role: .cancel) {}
                 } message: {
-                    Text("This will remove the Open Island extension from ~/.pi/agent/extensions/.")
+                    Text("This will remove the Hangover extension from ~/.pi/agent/extensions/.")
                 }
 
                 hookRow(
@@ -664,7 +753,7 @@ struct SetupSettingsPane: View {
                     }
                     Button(lang.t("settings.general.cancel"), role: .cancel) {}
                 } message: {
-                    Text("This will remove the Open Island extension from ~/.omp/agent/extensions/.")
+                    Text("This will remove the Hangover extension from ~/.omp/agent/extensions/.")
                 }
             }
 
@@ -1178,7 +1267,7 @@ struct RemoteConnectionSection: View {
                 remoteSetupStep(
                     number: "1",
                     title: "Deploy hooks to remote server",
-                    description: "Run from the Open Island repo directory:",
+                    description: "Run from the Hangover repo directory:",
                     command: setupCommand
                 )
 

@@ -14,6 +14,9 @@ enum WatchMessage: Codable, Sendable {
         let title: String
         let summary: String
         let workingDirectory: String?
+        /// The agent takes an approval of this request only in its
+        /// terminal on the Mac. Nil from a phone app that does not send it.
+        var requiresTerminalApproval: Bool? = nil
     }
 
     struct QuestionPayload: Codable, Sendable {

@@ -84,7 +84,7 @@ enum OverlayPlacementMode: String, Equatable {
     case topBar = "Top bar fallback"
 }
 
-struct OverlayPlacementDiagnostics {
+struct OverlayPlacementDiagnostics: Equatable {
     let targetScreenID: String
     let targetScreenName: String
     let selectionSummary: String
@@ -93,6 +93,19 @@ struct OverlayPlacementDiagnostics {
     let visibleFrame: NSRect
     let safeAreaInsets: NSEdgeInsets
     let overlayFrame: NSRect
+
+    /// Written by hand because `NSEdgeInsets` is not Equatable. Lets the
+    /// coordinator assign the diagnostics only when something changed.
+    static func == (lhs: OverlayPlacementDiagnostics, rhs: OverlayPlacementDiagnostics) -> Bool {
+        lhs.targetScreenID == rhs.targetScreenID
+            && lhs.targetScreenName == rhs.targetScreenName
+            && lhs.selectionSummary == rhs.selectionSummary
+            && lhs.mode == rhs.mode
+            && lhs.screenFrame == rhs.screenFrame
+            && lhs.visibleFrame == rhs.visibleFrame
+            && NSEdgeInsetsEqual(lhs.safeAreaInsets, rhs.safeAreaInsets)
+            && lhs.overlayFrame == rhs.overlayFrame
+    }
 
     var targetDescription: String {
         "\(targetScreenName) · \(selectionSummary)"

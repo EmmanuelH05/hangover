@@ -12,6 +12,10 @@ struct WatchPermissionEvent: Codable, Sendable {
     var primaryAction: String
     var secondaryAction: String
     var requestID: String
+    /// The agent takes an approval of this request only in its terminal on
+    /// the Mac, and the Mac refuses one sent from here. Nil from a Mac
+    /// app that does not send it yet.
+    var requiresTerminalApproval: Bool?
 }
 
 struct WatchQuestionEvent: Codable, Sendable {
@@ -76,7 +80,8 @@ struct WatchEvent: Identifiable {
 
     enum Kind {
         case permissionRequested(title: String, summary: String, requestID: String,
-                                 primaryAction: String, secondaryAction: String)
+                                 primaryAction: String, secondaryAction: String,
+                                 requiresTerminalApproval: Bool)
         case questionAsked(title: String, options: [String], requestID: String)
         case sessionCompleted(summary: String)
     }
@@ -84,7 +89,7 @@ struct WatchEvent: Identifiable {
     /// The requestID associated with actionable events (permission/question), nil for completion.
     var requestID: String? {
         switch kind {
-        case let .permissionRequested(_, _, requestID, _, _):
+        case let .permissionRequested(_, _, requestID, _, _, _):
             return requestID
         case let .questionAsked(_, _, requestID):
             return requestID
@@ -95,7 +100,7 @@ struct WatchEvent: Identifiable {
 
     var title: String {
         switch kind {
-        case let .permissionRequested(title, _, _, _, _):
+        case let .permissionRequested(title, _, _, _, _, _):
             return title
         case let .questionAsked(title, _, _):
             return title
@@ -106,7 +111,7 @@ struct WatchEvent: Identifiable {
 
     var subtitle: String? {
         switch kind {
-        case let .permissionRequested(_, summary, _, _, _):
+        case let .permissionRequested(_, summary, _, _, _, _):
             return summary
         case let .questionAsked(_, options, _):
             return options.joined(separator: " / ")
@@ -141,7 +146,8 @@ struct WatchEvent: Identifiable {
                 summary: event.summary,
                 requestID: event.requestID,
                 primaryAction: event.primaryAction,
-                secondaryAction: event.secondaryAction
+                secondaryAction: event.secondaryAction,
+                requiresTerminalApproval: event.requiresTerminalApproval ?? false
             ),
             agentTool: event.agentTool,
             sessionID: event.sessionID,

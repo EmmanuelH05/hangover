@@ -39,3 +39,14 @@ enum V6Palette {
     static let ink = Color(red: 0x0d / 255.0, green: 0x0d / 255.0, blue: 0x0f / 255.0)
     static let paper = Color(red: 0xf1 / 255.0, green: 0xea / 255.0, blue: 0xd9 / 255.0)
 }
+
+extension V6Palette {
+    /// The pill's fill. Pure black on a MacBook so it merges with the
+    /// hardware notch; ink on an external display, where the pill stands alone.
+    static func surface(for layout: V6ClosedLayout) -> Color {
+        switch layout {
+        case .macbook: Color.black
+        case .external: ink
+        }
+    }
+}

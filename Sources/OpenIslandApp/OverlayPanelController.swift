@@ -6,10 +6,42 @@ import OpenIslandCore
 
 private let overlayLog = Logger(subsystem: "app.openisland", category: "overlay")
 
+/// `OPEN_ISLAND_TRACE_OVERLAY=1` logs every requested and performed layout
+/// refresh and every window frame change. The signposts are always on; they
+/// cost nothing unless Instruments is recording.
+enum OverlayTrace {
+    static let isEnabled = ProcessInfo.processInfo.environment["OPEN_ISLAND_TRACE_OVERLAY"] == "1"
+    static let signposter = OSSignposter(subsystem: "app.openisland", category: "overlay")
+
+    /// Logs `message` when tracing is on. The message is not built otherwise.
+    static func log(_ message: @autoclosure () -> String) {
+        guard isEnabled else { return }
+        let text = message()
+        overlayLog.notice("\(text, privacy: .public)")
+    }
+}
+
+/// Where the island window goes on a screen and how tall the opened island
+/// is there. Resolving it has no side effects.
+struct IslandPlacement {
+    let screen: NSScreen
+    let screenID: String
+    let layout: IslandOpenedLayout
+    /// Target window frame: `layout.windowHeight` tall, top-anchored.
+    let frame: NSRect
+}
+
+/// What one `updatePlacement` call found and did.
+struct IslandPlacementUpdate {
+    let placement: IslandPlacement
+    let diagnostics: OverlayPlacementDiagnostics?
+}
+
 @MainActor
 final class OverlayPanelController {
-    private static let preferredNotchOpenedPanelWidth: CGFloat = 540
-    private static let preferredTopBarOpenedPanelWidth: CGFloat = 520
+    /// Width the text of a card is measured at under the standard opened
+    /// look. A card is as wide as the island at every look (D35); a wider
+    /// look adds its extra page width to this measure.
     private static let preferredNotificationPanelWidth: CGFloat = 620
     private static let openedContentWidthPadding: CGFloat = 0
     private static let openedContentBottomPadding: CGFloat = 0
@@ -22,7 +54,7 @@ final class OverlayPanelController {
     private static let openedContentVerticalInsets: CGFloat = 84
     private static let notificationMeasuredContentPadding: CGFloat = 8
     private static let notificationEstimatedVerticalInsets: CGFloat = 36
-    private static let openedEmptyStateHeight: CGFloat = 108
+    private static let openedEmptyStateHeight: CGFloat = IslandOpenedLayout.minimumContentHeight
     private static let questionCardBaseHeight: CGFloat = 110
     private static let questionCardMaxHeight: CGFloat = 420
     // Completion card chrome breakdown (everything except the scrollable text):
@@ -39,11 +71,62 @@ final class OverlayPanelController {
     private var lastStrayClickRepair: Date = .distantPast
     private var hoverTimer: DispatchWorkItem?
     private var hoverCancelGrace: DispatchWorkItem?
+    /// Set when a click on the notch closed the island, until the pointer
+    /// has left the closed island once (`IslandPointerRules.hoverOpens`).
+    private(set) var isHoverSuppressedUntilExit = false
+    /// Tells a file drag from any other drag for the press in progress.
+    private(set) var fileDrag = IslandFileDragTracker()
+    /// True while the closed panel takes mouse events only to be offered a
+    /// file drop on the pill.
+    private(set) var isClosedPanelDragReceptive = false
+    private var pendingDragReceptiveRestore: DispatchWorkItem?
     weak var model: AppModel?
     private(set) var notchRect: NSRect = .zero
 
+    /// A window shrink waiting for the shape to finish animating (see
+    /// `scheduleShrink`). Cancelled by a grow, a screen change or a refresh
+    /// that finds nothing to shrink.
+    private var pendingShrink: DispatchWorkItem?
+    /// A narrower frame waiting for a close fade to end.
+    private var pendingWidthChange: DispatchWorkItem?
+    /// The window height the pending shrink was asked for. A refresh that
+    /// asks for the same height keeps the deadline instead of restarting it.
+    private(set) var pendingShrinkTargetHeight: CGFloat?
+    /// When the pending shrink is due, by `clock`. Nil when none is pending.
+    private(set) var pendingShrinkDeadline: Date?
+
+    /// Test seam for time: the shrink deadline is computed from it.
+    var clock: () -> Date = { Date() }
+    /// Test seam for the synthetic click, which would otherwise be posted
+    /// to the real screen.
+    var mouseDownReposter: ((NSPoint) -> Void)?
+    /// Test seams for the drag pasteboard. Only its change count and its
+    /// types are ever read, never what is on it.
+    var dragPasteboardChangeCount: () -> Int = { NSPasteboard(name: .drag).changeCount }
+    var dragPasteboardTypes: () -> [String] = { NSPasteboard(name: .drag).types?.map(\.rawValue) ?? [] }
+    /// The display the last placement asked for, so a delayed shrink can
+    /// resolve the same screen.
+    private var lastPreferredScreenID: String?
+
+    /// How many times the window frame was set after the panel existed.
+    /// `HarnessArtifactRecorder` writes it into report.json.
+    private(set) var frameChangeCount = 0
+
+    /// Called after a delayed shrink changed the frame, so the coordinator
+    /// can refresh the diagnostics that carry the frame height.
+    var onDeferredFrameChange: (@MainActor () -> Void)?
+
     var isVisible: Bool {
         panel?.isVisible == true
+    }
+
+    var hasPanel: Bool {
+        panel != nil
+    }
+
+    /// The island window's current frame, nil before the panel exists.
+    var windowFrame: NSRect? {
+        panel?.frame
     }
 
     nonisolated static func shouldActivatePanel(for reason: NotchOpenReason?) -> Bool {
@@ -56,9 +139,10 @@ final class OverlayPanelController {
 
     func ensurePanel(model: AppModel, preferredScreenID: String?) {
         self.model = model
+        lastPreferredScreenID = preferredScreenID
         let panel = self.panel ?? makePanel(model: model)
         self.panel = panel
-        positionPanel(panel, preferredScreenID: preferredScreenID, animated: false)
+        positionPanel(preferredScreenID: preferredScreenID)
         panel.orderFrontRegardless()
         panel.ignoresMouseEvents = true
         panel.acceptsMouseMovedEvents = false
@@ -67,9 +151,10 @@ final class OverlayPanelController {
 
     func show(model: AppModel, preferredScreenID: String?) -> OverlayPlacementDiagnostics? {
         self.model = model
+        lastPreferredScreenID = preferredScreenID
         let panel = self.panel ?? makePanel(model: model)
         self.panel = panel
-        let diagnostics = positionPanel(panel, preferredScreenID: preferredScreenID, animated: true)
+        let diagnostics = positionPanel(preferredScreenID: preferredScreenID)
         presentPanel(panel, activates: Self.shouldActivatePanel(for: model.notchOpenReason))
         panel.ignoresMouseEvents = false
         panel.acceptsMouseMovedEvents = true
@@ -95,14 +180,6 @@ final class OverlayPanelController {
         }
     }
 
-    func reposition(preferredScreenID: String?) -> OverlayPlacementDiagnostics? {
-        guard let panel else {
-            return placementDiagnostics(preferredScreenID: preferredScreenID)
-        }
-
-        return positionPanel(panel, preferredScreenID: preferredScreenID, animated: true)
-    }
-
     func placementDiagnostics(preferredScreenID: String?) -> OverlayPlacementDiagnostics? {
         let panelSize = panel?.frame.size ?? OverlayDisplayResolver.defaultPanelSize
         return OverlayDisplayResolver.diagnostics(preferredScreenID: preferredScreenID, panelSize: panelSize)
@@ -111,8 +188,7 @@ final class OverlayPanelController {
     // MARK: - Panel creation
 
     private func makePanel(model: AppModel) -> NotchPanel {
-        let screen = resolveTargetScreen() ?? NSScreen.main
-        let windowFrame = screen.map { panelFrame(for: model, on: $0) } ?? .zero
+        let windowFrame = resolvePlacement(model: model, preferredScreenID: lastPreferredScreenID)?.frame ?? .zero
 
         let panel = NotchPanel(
             contentRect: windowFrame,
@@ -147,39 +223,274 @@ final class OverlayPanelController {
         panel.contentView = hostingView
         panel.notchController = self
 
-        computeNotchRect(screen: resolveTargetScreen())
+        computeNotchRect(screen: resolveTargetScreen(preferredScreenID: lastPreferredScreenID))
         return panel
     }
 
     // MARK: - Positioning
 
+    private enum FrameChange: String {
+        case grow
+        case shrink
+        case screen
+    }
+
     @discardableResult
-    private func positionPanel(
-        _ panel: NSPanel,
-        preferredScreenID: String?,
-        animated: Bool
-    ) -> OverlayPlacementDiagnostics? {
+    private func positionPanel(preferredScreenID: String?) -> OverlayPlacementDiagnostics? {
+        updatePlacement(model: model, preferredScreenID: preferredScreenID)?.diagnostics
+    }
+
+    /// Resolves the placement for `model` and, when a panel exists, applies
+    /// the window frame: a taller target at once (before the shape grows
+    /// into it), a shorter one after `Motion.islandResizeSettle` (after the
+    /// shape has shrunk), and a different screen or width exactly and at
+    /// once. Returns nil only when no display is connected.
+    func updatePlacement(model: AppModel?, preferredScreenID: String?) -> IslandPlacementUpdate? {
+        lastPreferredScreenID = preferredScreenID
+        guard let placement = resolvePlacement(model: model ?? self.model, preferredScreenID: preferredScreenID) else {
+            return nil
+        }
+
+        if let panel {
+            applyFrame(for: placement, to: panel)
+            computeNotchRect(screen: placement.screen)
+        }
+
+        return IslandPlacementUpdate(
+            placement: placement,
+            diagnostics: placementDiagnostics(preferredScreenID: preferredScreenID)
+        )
+    }
+
+    /// The screen, the opened layout and the window frame for `model`. No
+    /// side effects, so the coordinator can call it to learn the target
+    /// before it publishes the layout.
+    func resolvePlacement(model: AppModel?, preferredScreenID: String?) -> IslandPlacement? {
         guard let screen = resolveTargetScreen(preferredScreenID: preferredScreenID) else {
             return nil
         }
 
-        let windowFrame = panelFrame(for: model, on: screen)
-
-        // Always set the panel frame instantly — no AppKit animation.
-        // All visual transitions (shape, size, opacity, corner radius) are
-        // driven by SwiftUI's .animation() modifier on the content view.
-        // Mixing NSAnimationContext with SwiftUI spring animations caused
-        // visible jank because the two systems have different timing curves,
-        // durations, and start times (AppKit was deferred by one runloop).
-        if panel.frame != windowFrame {
-            panel.setFrame(windowFrame, display: true)
-        }
-        computeNotchRect(screen: screen)
-
-        return OverlayDisplayResolver.diagnostics(
-            preferredScreenID: preferredScreenID,
-            panelSize: panel.frame.size
+        let layout = openedLayout(for: model, on: screen)
+        return IslandPlacement(
+            screen: screen,
+            screenID: OverlayDisplayResolver.screenID(for: screen),
+            layout: layout,
+            frame: panelFrame(for: layout, on: screen)
         )
+    }
+
+    private func applyFrame(for placement: IslandPlacement, to panel: NSPanel) {
+        let current = panel.frame
+        let target = placement.frame
+
+        guard IslandPanelSizing.isHeightOnlyChange(from: current, to: target) else {
+            // A narrower look chosen while the island fades out: the fading
+            // shape still has the old width, and a window cut to the new
+            // one would clip its sides. Wait for the fade and come back.
+            if let model, model.notchStatus != .opened, model.overlay.closingPresentation != nil,
+               IslandPanelSizing.isNarrowing(from: current, to: target) {
+                armWidthChange()
+                return
+            }
+            // Another screen or width with nothing mid-animation that the
+            // old frame has to protect: apply the exact frame now.
+            cancelPendingShrink()
+            cancelPendingWidthChange()
+            if current != target {
+                setFrame(target, change: .screen, on: panel)
+            }
+            return
+        }
+        cancelPendingWidthChange()
+
+        switch IslandPanelSizing.resizeStep(current: current.height, target: target.height) {
+        case .grow:
+            cancelPendingShrink()
+            // Grow before the shape animates so it never draws past the window.
+            panel.disableScreenUpdatesUntilFlush()
+            setFrame(target, change: .grow, on: panel)
+        case .shrink:
+            scheduleShrink(toHeight: target.height)
+        case .none:
+            cancelPendingShrink()
+        }
+    }
+
+    /// Gives the space back `Motion.islandResizeSettle` after the shape has
+    /// started shrinking. A refresh that asks for a different height
+    /// restarts the wait, so a run of small steps (a resize grip drag)
+    /// shrinks the window once. A refresh that asks for the same height
+    /// keeps the deadline: agent events arrive faster than the settle delay,
+    /// and restarting on each of them would hold the old, taller window
+    /// (and its transparent strip) for as long as they keep coming.
+    private func scheduleShrink(toHeight targetHeight: CGFloat) {
+        if pendingShrink != nil,
+           !Self.shouldRestartShrinkTimer(pendingTarget: pendingShrinkTargetHeight, newTarget: targetHeight) {
+            OverlayTrace.log("shrink to \(targetHeight) already pending, deadline kept")
+            return
+        }
+
+        armShrink(after: Motion.islandResizeSettle, targetHeight: targetHeight)
+    }
+
+    private func armShrink(after delay: TimeInterval, targetHeight: CGFloat) {
+        pendingShrink?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            self?.performPendingShrink()
+        }
+        pendingShrink = item
+        pendingShrinkTargetHeight = targetHeight
+        pendingShrinkDeadline = clock().addingTimeInterval(delay)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+    }
+
+    /// Comes back for a narrower frame once the close fade has had time to
+    /// unmount the opened surface.
+    private func armWidthChange() {
+        pendingWidthChange?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            guard let self, let panel = self.panel, let model = self.model,
+                  let placement = self.resolvePlacement(model: model, preferredScreenID: self.lastPreferredScreenID)
+            else { return }
+            self.pendingWidthChange = nil
+            self.applyFrame(for: placement, to: panel)
+            self.onDeferredFrameChange?()
+        }
+        pendingWidthChange = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + Motion.openedSurfaceUnmountDelay, execute: item)
+    }
+
+    private func cancelPendingWidthChange() {
+        pendingWidthChange?.cancel()
+        pendingWidthChange = nil
+    }
+
+    private func cancelPendingShrink() {
+        pendingShrink?.cancel()
+        pendingShrink = nil
+        pendingShrinkTargetHeight = nil
+        pendingShrinkDeadline = nil
+    }
+
+    /// Whether a refresh that still wants to shrink to `newTarget` must
+    /// restart the settle wait: yes with nothing pending or a different
+    /// target, no for the same target (within the resize dead zone).
+    nonisolated static func shouldRestartShrinkTimer(
+        pendingTarget: CGFloat?,
+        newTarget: CGFloat
+    ) -> Bool {
+        guard let pendingTarget else { return true }
+        return abs(pendingTarget - newTarget) > IslandPanelSizing.deadZone
+    }
+
+    /// What a due shrink should do given what the view still draws.
+    enum ShrinkDecision: Equatable {
+        /// Set the window to this height.
+        case apply(height: CGFloat)
+        /// A close fade still draws the opened layout: try again after it
+        /// has unmounted.
+        case deferUntilCloseFadeEnds
+        /// Nothing to shrink.
+        case skip
+    }
+
+    /// Decides a due shrink. The window never goes below the published
+    /// layout while the island is open or fading out, because the view is
+    /// still drawing that layout. While it only fades out (not open, a
+    /// close snapshot is held) nothing is applied at all.
+    nonisolated static func shrinkDecision(
+        currentHeight: CGFloat,
+        resolvedTargetHeight: CGFloat,
+        publishedWindowHeight: CGFloat,
+        isOpened: Bool,
+        hasClosingPresentation: Bool
+    ) -> ShrinkDecision {
+        guard IslandPanelSizing.resizeStep(current: currentHeight, target: resolvedTargetHeight) == .shrink else {
+            return .skip
+        }
+
+        if !isOpened && hasClosingPresentation {
+            return .deferUntilCloseFadeEnds
+        }
+
+        let drawsPublishedLayout = isOpened || hasClosingPresentation
+        let targetHeight = drawsPublishedLayout
+            ? max(resolvedTargetHeight, publishedWindowHeight)
+            : resolvedTargetHeight
+        guard IslandPanelSizing.resizeStep(current: currentHeight, target: targetHeight) == .shrink else {
+            return .skip
+        }
+
+        return .apply(height: targetHeight)
+    }
+
+    /// `frame` with a different height, still hanging from the same top edge.
+    nonisolated static func frame(_ frame: NSRect, withHeight height: CGFloat) -> NSRect {
+        NSRect(x: frame.minX, y: frame.maxY - height, width: frame.width, height: height)
+    }
+
+    /// Re-resolves the latest target and shrinks only if it is still a
+    /// shrink and the view is done with the taller layout. If the content
+    /// grew back meanwhile, the refresh that noticed already cancelled this
+    /// work item or applied the grow.
+    func performPendingShrink() {
+        cancelPendingShrink()
+        guard let panel,
+              let model,
+              let placement = resolvePlacement(model: model, preferredScreenID: lastPreferredScreenID),
+              IslandPanelSizing.isHeightOnlyChange(from: panel.frame, to: placement.frame)
+        else {
+            return
+        }
+
+        let decision = Self.shrinkDecision(
+            currentHeight: panel.frame.height,
+            resolvedTargetHeight: placement.frame.height,
+            publishedWindowHeight: model.islandOpenedLayout.windowHeight,
+            isOpened: model.notchStatus == .opened,
+            hasClosingPresentation: model.overlay.closingPresentation != nil
+        )
+
+        switch decision {
+        case .skip:
+            return
+        case .deferUntilCloseFadeEnds:
+            // No refresh restarts the timer after a close, so ask again for
+            // when the opened surface has unmounted.
+            OverlayTrace.log("shrink deferred, a close fade still draws the opened layout")
+            armShrink(after: Motion.openedSurfaceUnmountDelay, targetHeight: placement.frame.height)
+        case .apply(let height):
+            setFrame(Self.frame(placement.frame, withHeight: height), change: .shrink, on: panel)
+            onDeferredFrameChange?()
+        }
+    }
+
+    /// Applies a waiting shrink at once, down to the published layout, and
+    /// drops the timer. For a click that landed in the leftover strip.
+    private func applyPendingShrinkNow(on panel: NSPanel) {
+        cancelPendingShrink()
+        guard let model else { return }
+
+        let height = model.islandOpenedLayout.windowHeight
+        guard IslandPanelSizing.resizeStep(current: panel.frame.height, target: height) == .shrink else {
+            return
+        }
+
+        setFrame(Self.frame(panel.frame, withHeight: height), change: .shrink, on: panel)
+        onDeferredFrameChange?()
+    }
+
+    private func setFrame(_ frame: NSRect, change: FrameChange, on panel: NSPanel) {
+        let fromHeight = panel.frame.height
+        let signpost = OverlayTrace.signposter.beginInterval("SetFrame")
+        defer { OverlayTrace.signposter.endInterval("SetFrame", signpost) }
+
+        // The frame is always set instantly, never through AppKit animation.
+        // The shape animates inside the window through SwiftUI, so mixing in
+        // NSAnimationContext would give two systems with different timing.
+        panel.setFrame(frame, display: true)
+        frameChangeCount += 1
+        OverlayTrace.log("frame \(change.rawValue) from \(fromHeight) to \(frame.height)")
     }
 
     private func presentPanel(_ panel: NSPanel, activates: Bool) {
@@ -242,17 +553,33 @@ final class OverlayPanelController {
             self?.handleMouseMoved(location)
         } mouseDownHandler: { [weak self] location, isLocalEvent in
             self?.handleMouseDown(location, isLocalEvent: isLocalEvent)
+        } mouseDragHandler: { [weak self] location in
+            self?.handleMouseDragged(location)
+        } mouseUpHandler: { [weak self] in
+            self?.handleMouseUp()
         }
     }
 
-    private func handleMouseMoved(_ screenLocation: NSPoint) {
+    func handleMouseMoved(_ screenLocation: NSPoint) {
         guard let model else { return }
+
+        // The pointer only moves freely with no button down. A file drag
+        // whose mouse-up was never seen ends here.
+        if fileDrag.hasReachedIsland {
+            handleMouseUp()
+        }
 
         let inClosedSurfaceArea = isPointInClosedSurfaceArea(screenLocation)
 
         if model.notchStatus == .closed && inClosedSurfaceArea {
-            scheduleHoverOpen()
+            if IslandPointerRules.hoverOpens(
+                trigger: model.islandOpenTrigger,
+                isSuppressed: isHoverSuppressedUntilExit
+            ) {
+                scheduleHoverOpen()
+            }
         } else if model.notchStatus == .closed && !inClosedSurfaceArea {
+            isHoverSuppressedUntilExit = false
             cancelHoverOpen()
         }
 
@@ -274,33 +601,216 @@ final class OverlayPanelController {
     ///   only observe — the clicked app already received the event — so the
     ///   synthetic repost must be skipped there or it lands as a duplicate
     ///   click (double-click word selection, double activation).
-    private func handleMouseDown(_ screenLocation: NSPoint, isLocalEvent: Bool) {
+    func handleMouseDown(_ screenLocation: NSPoint, isLocalEvent: Bool) {
         guard let model else { return }
 
-        let inClosedSurfaceArea = isPointInClosedSurfaceArea(screenLocation)
+        let isOpened = model.notchStatus == .opened
+        let inExpandedArea = isPointInExpandedArea(screenLocation)
 
-        if model.notchStatus == .closed && inClosedSurfaceArea {
+        // A press on the island closes any share picker the tray put up,
+        // whether or not the picker said it closed.
+        if isOpened && inExpandedArea {
+            model.nook.tray.sharePickerDidClose()
+        }
+
+        // A new press means the last one is over, even if its mouse-up was
+        // never seen.
+        if fileDrag.hasReachedIsland {
+            handleMouseUp()
+        }
+
+        // Every press starts a fresh look at the drag pasteboard. A press
+        // on the open island is a tray file going out or a widget moving,
+        // never a file coming in.
+        fileDrag.mouseDown(
+            changeCount: dragPasteboardChangeCount(),
+            insideIsland: isOpened && inExpandedArea
+        )
+
+        let context = IslandClickContext(
+            status: model.notchStatus,
+            reason: model.notchOpenReason,
+            isInClosedSurface: isPointInClosedSurfaceArea(screenLocation),
+            isInExpandedArea: inExpandedArea,
+            isOnNotch: isOpened && isPointOnNotch(screenLocation, model: model),
+            // Keep the island open while a permission/question is pending
+            // when the user opted into “keep open until decision” (#547).
+            blocksDismiss: isOpened && model.shouldBlockDismissWhileAwaitingDecision,
+            hasOpenPicker: isOpened && model.nook.tray.isSharePickerOpen
+        )
+
+        switch IslandPointerRules.clickAction(context) {
+        case .open:
             cancelHoverOpenImmediately()
             model.notchOpen(reason: .click)
-        } else if model.notchStatus == .opened {
-            if !isPointInExpandedArea(screenLocation) {
-                // Keep the island open while a permission/question is pending
-                // when the user opted into “keep open until decision” (#547).
-                if model.shouldBlockDismissWhileAwaitingDecision {
-                    return
-                }
-                model.notchClose()
-                // Repost only when our panel actually swallowed the original
-                // click: the event entered this app and landed inside the
-                // panel frame, so nothing under the cursor received it. When
-                // another app got the click (notification opened while the
-                // user works elsewhere), reposting injects a second click on
-                // top of the real one and the user's next click “jumps”.
-                if isLocalEvent, let panel, NSPointInRect(screenLocation, panel.frame) {
-                    repostMouseDown(at: screenLocation)
-                }
+        case .holdForDecision:
+            passThroughClickInSettleStrip(at: screenLocation, isLocalEvent: isLocalEvent)
+        case .dismiss:
+            model.notchClose()
+            // Repost only when our panel actually swallowed the original
+            // click: the event entered this app and landed inside the
+            // panel frame, which means nothing under the cursor received it. When
+            // another app got the click (notification opened while the
+            // user works elsewhere), reposting injects a second click on
+            // top of the real one and the user's next click “jumps”.
+            if isLocalEvent, let panel, NSPointInRect(screenLocation, panel.frame) {
+                repostMouseDown(at: screenLocation)
             }
+        case .pin:
+            // Observe only: the click still reaches the control under it.
+            model.pinHoverOpenedIsland()
+        case .closeFromNotch:
+            // The pointer is still on the notch. Without this, hover mode
+            // would open the island again under it.
+            isHoverSuppressedUntilExit = true
+            model.notchClose()
+        case .none:
+            break
         }
+    }
+
+    // MARK: - Files dragged to the island
+
+    /// How long the closed panel keeps taking mouse events after the button
+    /// comes up. A drop on the pill is delivered around the mouse-up, and
+    /// the panel must still be taking events when it arrives.
+    private static let fileDropSettleDelay: TimeInterval = 0.3
+
+    /// Mouse-moved events stop while a button is held, which means a drag
+    /// never triggers hover-open. This is what opens the island for a
+    /// dragged file instead (`IslandFileDragTracker`).
+    func handleMouseDragged(_ screenLocation: NSPoint) {
+        guard let model else { return }
+
+        let step = fileDrag.dragged(
+            isPointerOverIsland: isPointInFileDragZone(screenLocation),
+            changeCount: dragPasteboardChangeCount,
+            types: dragPasteboardTypes
+        )
+        applyFileDragStep(step)
+
+        // A placement refresh in the middle of the drag puts the closed
+        // panel back to passing events through. Take them again while the
+        // files are still over the pill.
+        if isClosedPanelDragReceptive, model.notchStatus != .opened,
+           let panel, panel.ignoresMouseEvents {
+            panel.ignoresMouseEvents = false
+        }
+    }
+
+    func handleMouseUp() {
+        applyFileDragStep(fileDrag.mouseUp())
+    }
+
+    private func applyFileDragStep(_ step: IslandFileDragTracker.Step) {
+        guard let model else { return }
+
+        switch step {
+        case .entered:
+            model.nook.tray.isFileDragOverIsland = true
+
+            switch IslandPointerRules.fileDragArrival(
+                status: model.notchStatus,
+                reason: model.notchOpenReason,
+                showsNookPage: model.showsNookPage,
+                trayIsOnPage: model.nookVisibleWidgets.contains(.tray)
+            ) {
+            case .openOnNook:
+                // Opened like a hover: once the drag is over, the island
+                // closes when the pointer leaves it.
+                cancelHoverOpenImmediately()
+                model.notchOpen(reason: .hover, page: .nook)
+            case .turnToNook:
+                withMotion(Motion.pageSwitch) { model.showNookPage() }
+            case .acceptOnClosedPill:
+                setClosedPanelDragReceptive(true)
+            case .none:
+                break
+            }
+        case .left:
+            model.nook.tray.isFileDragOverIsland = false
+            setClosedPanelDragReceptive(false)
+        case .ended:
+            model.nook.tray.isFileDragOverIsland = false
+            scheduleDragReceptiveRestore()
+        case .none:
+            break
+        }
+    }
+
+    /// A closed panel passes every mouse event through, and macOS never
+    /// offers a drop to a window that does. While files hover over the
+    /// closed pill the panel takes events, and it goes back to passing them
+    /// through as soon as the drag moves off or ends. No click can land in
+    /// between: the button is down for the whole drag.
+    private func setClosedPanelDragReceptive(_ receptive: Bool) {
+        pendingDragReceptiveRestore?.cancel()
+        pendingDragReceptiveRestore = nil
+
+        guard isClosedPanelDragReceptive != receptive else { return }
+        isClosedPanelDragReceptive = receptive
+
+        // An open island already takes events, and closing it restores the
+        // pass-through by itself.
+        guard let panel, model?.notchStatus != .opened else { return }
+        panel.ignoresMouseEvents = !receptive
+    }
+
+    private func scheduleDragReceptiveRestore() {
+        guard isClosedPanelDragReceptive else { return }
+
+        let item = DispatchWorkItem { [weak self] in
+            self?.setClosedPanelDragReceptive(false)
+        }
+        pendingDragReceptiveRestore?.cancel()
+        pendingDragReceptiveRestore = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.fileDropSettleDelay, execute: item)
+    }
+
+    /// Where a dragged file counts as over the island: the visible shape
+    /// while it is open, the closed surface with some room around it
+    /// otherwise.
+    func isPointInFileDragZone(_ screenPoint: NSPoint) -> Bool {
+        guard let model else { return false }
+
+        if model.notchStatus == .opened {
+            return isPointInExpandedArea(screenPoint)
+        }
+
+        let closedSurface = closedSurfaceRect(for: model) ?? notchRect
+        return Self.rectContainsIncludingEdges(
+            IslandPointerRules.fileDragZone(closedSurface: closedSurface),
+            point: screenPoint
+        )
+    }
+
+    private func isPointOnNotch(_ screenPoint: NSPoint, model: AppModel) -> Bool {
+        Self.rectContainsIncludingEdges(
+            IslandPointerRules.notchToggleRect(
+                notchRect: notchRect,
+                headerHeight: model.islandOpenedLayout.headerHeight
+            ),
+            point: screenPoint
+        )
+    }
+
+    /// The island stays open for a pending decision, but a click in the
+    /// leftover strip (inside the window, below the visible shape) must not
+    /// vanish: the panel's hit test refuses it, so the app below would never
+    /// see it. Give the strip back at once by shrinking to the published
+    /// layout, then repost the click if it now falls outside the panel.
+    /// Never repost while the point is still inside the panel: the posted
+    /// event would land on the panel again and loop.
+    private func passThroughClickInSettleStrip(at screenLocation: NSPoint, isLocalEvent: Bool) {
+        // A click another app received needs nothing from us.
+        guard isLocalEvent, let panel, NSPointInRect(screenLocation, panel.frame) else {
+            return
+        }
+
+        applyPendingShrinkNow(on: panel)
+
+        guard !NSPointInRect(screenLocation, panel.frame) else { return }
+        repostMouseDown(at: screenLocation)
     }
 
     /// Grace period before a hover-open timer is cancelled.  Prevents
@@ -390,8 +900,8 @@ final class OverlayPanelController {
             return false
         }
 
-        // The window is always at opened size, but the visible content area
-        // is the inner content rect (excluding shadow insets).
+        // The window can be taller than the island (a shrink waits for the
+        // shape), so only the visible shape counts as inside.
         guard let contentRect = contentRect(for: model, in: panel.frame) else {
             return false
         }
@@ -400,23 +910,61 @@ final class OverlayPanelController {
     }
 
     func openedPanelWidth(for screen: NSScreen?) -> CGFloat {
-        guard let screen else { return Self.preferredTopBarOpenedPanelWidth }
-        let preferredWidth = screen.safeAreaInsets.top > 0
-            ? Self.preferredNotchOpenedPanelWidth
-            : Self.preferredTopBarOpenedPanelWidth
-        return max(360, min(preferredWidth, screen.visibleFrame.width - 32))
+        openedMetrics(for: screen).panelWidth
     }
 
-    func notificationPanelWidth(for screen: NSScreen?) -> CGFloat {
-        guard let screen else {
-            return Self.preferredNotificationPanelWidth
-        }
-
-        return min(Self.preferredNotificationPanelWidth, screen.visibleFrame.width - 32)
+    /// The opened island's sizes on `screen`, from the look saved for that
+    /// kind of display (D35). The window, the click area and the text
+    /// measures below all come through here.
+    func openedMetrics(for screen: NSScreen?) -> IslandOpenedMetrics {
+        let profile = Self.displayProfile(for: screen)
+        return IslandOpenedMetrics.resolve(
+            look: openedLook(for: profile),
+            profile: profile,
+            screenWidth: screen?.visibleFrame.width
+        )
     }
 
+    private func openedLook(for profile: IslandAppearanceDisplayProfile) -> IslandOpenedLook {
+        model?.nook.displayPreferences(for: profile).openedLook ?? .standard
+    }
+
+    /// A screen with a notch takes the notch profile, every other screen
+    /// and no screen at all the top bar's.
+    private static func displayProfile(for screen: NSScreen?) -> IslandAppearanceDisplayProfile {
+        (screen?.safeAreaInsets.top ?? 0) > 0 ? .notch : .topBar
+    }
+
+    /// Width the text of a completion card is measured at on the island's
+    /// screen: the standard measure plus what the opened look adds.
+    private var cardTextMeasureWidth: CGFloat {
+        // The island's own screen, which with two displays is not always
+        // the first one with a notch.
+        let screen = resolveTargetScreen(preferredScreenID: lastPreferredScreenID)
+        let profile = Self.displayProfile(for: screen)
+        let gain = IslandOpenedMetrics.pageWidthGain(
+            look: openedLook(for: profile),
+            profile: profile,
+            screenWidth: screen?.visibleFrame.width
+        )
+        return Self.preferredNotificationPanelWidth - 96 + gain
+    }
+
+    /// The part of `bounds` (the window, bottom-up) that takes hits. While
+    /// the island is open that is the visible shape: a top-anchored rect of
+    /// `openedLayout.shapeHeight`, inset by the shadow on both sides. Closed,
+    /// it is the whole window above the bottom shadow inset, as before.
     func contentRect(for model: AppModel, in bounds: NSRect) -> NSRect? {
         let insets = panelShadowInsets
+
+        if model.notchStatus == .opened {
+            return IslandPanelSizing.visibleShapeRect(
+                in: bounds,
+                shapeHeight: model.islandOpenedLayout.shapeHeight,
+                horizontalInset: insets.horizontal
+            )
+        }
+
         return NSRect(
             x: bounds.minX + insets.horizontal,
             y: bounds.minY + insets.bottom,
@@ -476,42 +1024,56 @@ final class OverlayPanelController {
         )
     }
 
-    private func panelFrame(for model: AppModel?, on screen: NSScreen) -> NSRect {
-        let size = panelSize(for: model, on: screen)
-        return NSRect(
-            x: screen.frame.midX - size.width / 2,
-            y: screen.frame.maxY - size.height,
-            width: size.width,
-            height: size.height
+    /// The window frame for `layout` on `screen`: top-anchored and centered,
+    /// as tall as the shape plus the transparent inset under it.
+    private func panelFrame(for layout: IslandOpenedLayout, on screen: NSScreen) -> NSRect {
+        IslandPanelSizing.windowFrame(
+            panelWidth: openedPanelWidth(for: screen) + Self.openedContentWidthPadding,
+            windowHeight: layout.windowHeight,
+            screenFrame: screen.frame,
+            horizontalInset: panelShadowInsets.horizontal
         )
     }
 
-    /// Always returns the maximum (opened) panel size so the window never
-    /// needs to resize.  All visual transitions are driven purely by SwiftUI
-    /// inside this fixed-size window.
-    private func panelSize(for model: AppModel?, on screen: NSScreen) -> CGSize {
-        let insets = panelShadowInsets
+    /// The opened island's heights on `screen`. The header is the closed
+    /// island height on both the window and the view side, so an external
+    /// display has no extra black space above its content.
+    private func openedLayout(for model: AppModel?, on screen: NSScreen) -> IslandOpenedLayout {
+        let headerHeight = screen.islandClosedHeight
 
         guard let model else {
-            return CGSize(
-                width: openedPanelWidth(for: screen) + Self.openedContentWidthPadding + (insets.horizontal * 2),
-                height: screen.notchSize.height + Self.openedEmptyStateHeight + Self.openedContentBottomPadding + insets.bottom
+            return IslandOpenedLayout(
+                headerHeight: headerHeight,
+                contentHeight: Self.openedEmptyStateHeight,
+                bottomPadding: Self.openedContentBottomPadding
             )
         }
 
-        let panelWidth = openedPanelWidth(for: screen)
-        let contentHeight = openedContentHeight(for: model)
-        // Use at least the empty-state height so the window doesn't shrink
-        // when sessions come and go while opened.
-        let height = screen.notchSize.height + max(contentHeight, Self.openedEmptyStateHeight) + Self.openedContentBottomPadding + insets.bottom
+        // Large widgets can make the Nook page taller than the screen.
+        // Stop at the bottom of the visible area; the grid scrolls.
+        let nookRoom: CGFloat? = model.showsNookPage
+            ? IslandOpenedLayout.nookContentRoom(
+                screenMaxY: screen.frame.maxY,
+                visibleMinY: screen.visibleFrame.minY,
+                headerHeight: headerHeight,
+                bottomPadding: Self.openedContentBottomPadding,
+                shadowBottomInset: panelShadowInsets.bottom
+            )
+            : nil
 
-        return CGSize(
-            width: panelWidth + Self.openedContentWidthPadding + (insets.horizontal * 2),
-            height: height
+        // At least the empty-state height, so the island doesn't shrink
+        // when sessions come and go while opened.
+        return IslandOpenedLayout(
+            headerHeight: headerHeight,
+            contentHeight: IslandOpenedLayout.clampedContentHeight(
+                requested: openedContentHeight(for: model),
+                nookRoom: nookRoom
+            ),
+            bottomPadding: Self.openedContentBottomPadding
         )
     }
 
-    /// Constant insets — always opened size since the window never shrinks.
+    /// Insets around the opened shape for its shadow and the status halo.
     private var panelShadowInsets: (horizontal: CGFloat, bottom: CGFloat) {
         (
             horizontal: IslandChromeMetrics.openedShadowHorizontalInset,
@@ -530,6 +1092,18 @@ final class OverlayPanelController {
     }
 
     private func openedContentHeight(for model: AppModel) -> CGFloat {
+        if model.showsNookPage {
+            return NookPanelView.preferredHeight(
+                for: model.nookWidgetPlacements,
+                calendarStyle: model.nookDisplay.calendarStyle,
+                isEditing: model.nook.isEditingLayout,
+                extras: model.nookPageExtras
+            ) + model.nookBarsHeight
+        }
+        return agentsContentHeight(for: model) + model.nookBarsHeight
+    }
+
+    private func agentsContentHeight(for model: AppModel) -> CGFloat {
         let now = Date.now
         let visibleSessions = openedVisibleSessions(
             sessions: model.islandListSessions
@@ -566,6 +1140,7 @@ final class OverlayPanelController {
                     + actionableBodyHeight(for: session, model: model)
             }
             return session.estimatedIslandRowHeight(at: now)
+                + model.agentTurnSummaryRowHeight(for: session, at: now)
         }
 
         let rowsHeight = rowHeights.reduce(CGFloat.zero, +)
@@ -580,7 +1155,7 @@ final class OverlayPanelController {
     private func actionableBodyHeight(for session: AgentSession, model: AppModel) -> CGFloat {
         switch session.phase {
         case .waitingForApproval:
-            return 118
+            return 118 + model.agentApprovalExtraHeight(for: session)
         case .waitingForAnswer:
             return questionCardHeight(for: session.questionPrompt) - 44
         case .completed:
@@ -601,7 +1176,7 @@ final class OverlayPanelController {
             return headerHeight
         }
 
-        let availableWidth = Self.preferredNotificationPanelWidth - 96
+        let availableWidth = cardTextMeasureWidth
         let font = NSFont.systemFont(ofSize: 13.5, weight: .medium)
         let textSize = (text as NSString).boundingRect(
             with: NSSize(width: availableWidth, height: .greatestFiniteMagnitude),
@@ -611,7 +1186,8 @@ final class OverlayPanelController {
         let markdownHeight = min(260, ceil(textSize.height) + 20)
         // Reply input: divider (1) + input bar padding+content (~52)
         let replyInputHeight: CGFloat = TerminalTextSender.canReply(to: session, enabled: model.completionReplyEnabled) ? 53 : 0
-        return headerHeight + 1 + markdownHeight + replyInputHeight
+        let summaryHeight: CGFloat = model.agentTurnSummary(for: session) == nil ? 0 : AgentTurnSummaryMetrics.cardHeight
+        return headerHeight + 1 + markdownHeight + replyInputHeight + summaryHeight
     }
 
     /// Estimates the question card height based on prompt content (question count,
@@ -669,7 +1245,7 @@ final class OverlayPanelController {
         // Estimate text height using NSString measurement with the actual font.
         // Available text width ≈ notificationPanelWidth - card horizontal chrome
         // Card chrome: openedContent padding (18*2) + card padding (16*2) + text padding (14*2) = 96
-        let availableWidth = Self.preferredNotificationPanelWidth - 96
+        let availableWidth = cardTextMeasureWidth
         let font = NSFont.systemFont(ofSize: 13.5, weight: .medium)
         let textSize = (text as NSString).boundingRect(
             with: NSSize(width: availableWidth, height: .greatestFiniteMagnitude),
@@ -734,6 +1310,11 @@ final class OverlayPanelController {
     /// not invoke this for clicks another app already received — the window
     /// under the cursor would see two clicks and treat them as a double click.
     private func repostMouseDown(at screenPoint: NSPoint) {
+        if let mouseDownReposter {
+            mouseDownReposter(screenPoint)
+            return
+        }
+
         let flippedY = NSScreen.main.map { $0.frame.height - screenPoint.y } ?? screenPoint.y
 
         guard let event = CGEvent(
@@ -881,6 +1462,10 @@ final class NotchEventMonitors {
     private var localMoveMonitor: Any?
     private var globalClickMonitor: Any?
     private var localClickMonitor: Any?
+    private var globalDragMonitor: Any?
+    private var localDragMonitor: Any?
+    private var globalUpMonitor: Any?
+    private var localUpMonitor: Any?
     private var lastMoveTime: TimeInterval = 0
 
     var isActive: Bool { globalMoveMonitor != nil }
@@ -889,9 +1474,14 @@ final class NotchEventMonitors {
     /// event destinations. The click handler receives `isLocalEvent: true`
     /// from the local monitor (event delivered to this app) and `false` from
     /// the global monitor (event delivered to another app, observe-only).
+    /// Drag and mouse-up monitors follow a press to its end, which is how a
+    /// file dragged to the island is noticed. They are mouse monitors like
+    /// the others and need no permission the app does not already use.
     func start(
         mouseMoveHandler: @MainActor @escaping @Sendable (NSPoint) -> Void,
-        mouseDownHandler: @MainActor @escaping @Sendable (NSPoint, _ isLocalEvent: Bool) -> Void
+        mouseDownHandler: @MainActor @escaping @Sendable (NSPoint, _ isLocalEvent: Bool) -> Void,
+        mouseDragHandler: @MainActor @escaping @Sendable (NSPoint) -> Void,
+        mouseUpHandler: @MainActor @escaping @Sendable () -> Void
     ) {
         let throttleInterval: TimeInterval = 0.05
 
@@ -924,6 +1514,34 @@ final class NotchEventMonitors {
             Task { @MainActor in mouseDownHandler(location, true) }
             return event
         }
+
+        nonisolated(unsafe) var sharedLastDrag: TimeInterval = 0
+
+        globalDragMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDragged) { _ in
+            let now = ProcessInfo.processInfo.systemUptime
+            guard now - sharedLastDrag >= throttleInterval else { return }
+            sharedLastDrag = now
+            let location = NSEvent.mouseLocation
+            Task { @MainActor in mouseDragHandler(location) }
+        }
+
+        localDragMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDragged) { event in
+            let now = ProcessInfo.processInfo.systemUptime
+            guard now - sharedLastDrag >= throttleInterval else { return event }
+            sharedLastDrag = now
+            let location = NSEvent.mouseLocation
+            Task { @MainActor in mouseDragHandler(location) }
+            return event
+        }
+
+        globalUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { _ in
+            Task { @MainActor in mouseUpHandler() }
+        }
+
+        localUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { event in
+            Task { @MainActor in mouseUpHandler() }
+            return event
+        }
     }
 
     func stop() {
@@ -931,10 +1549,18 @@ final class NotchEventMonitors {
         if let m = localMoveMonitor { NSEvent.removeMonitor(m) }
         if let m = globalClickMonitor { NSEvent.removeMonitor(m) }
         if let m = localClickMonitor { NSEvent.removeMonitor(m) }
+        if let m = globalDragMonitor { NSEvent.removeMonitor(m) }
+        if let m = localDragMonitor { NSEvent.removeMonitor(m) }
+        if let m = globalUpMonitor { NSEvent.removeMonitor(m) }
+        if let m = localUpMonitor { NSEvent.removeMonitor(m) }
         globalMoveMonitor = nil
         localMoveMonitor = nil
         globalClickMonitor = nil
         localClickMonitor = nil
+        globalDragMonitor = nil
+        localDragMonitor = nil
+        globalUpMonitor = nil
+        localUpMonitor = nil
     }
 }
 

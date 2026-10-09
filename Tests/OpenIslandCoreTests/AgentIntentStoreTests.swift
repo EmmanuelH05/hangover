@@ -100,12 +100,36 @@ struct AgentIntentStoreTests {
 
     // MARK: - Helpers
 
-    /// Creates a store backed by an ephemeral UserDefaults suite so each test
-    /// gets a clean slate without touching production preferences.
+    /// Creates a store backed by settings that live in memory, which gives
+    /// each test a clean slate without touching production preferences.
     private func makeStore() -> (AgentIntentStore, UserDefaults) {
-        let suiteName = "open-island-intent-tests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
+        let defaults = IntentTestDefaults()
         return (AgentIntentStore(defaults: defaults), defaults)
+    }
+}
+
+/// Settings that live in memory only. A `UserDefaults(suiteName:)` with a
+/// fresh name per test left one file per test per run in
+/// `~/Library/Preferences`. The typed reads and writes all go through the
+/// three methods below, and nothing reaches `super`.
+private final class IntentTestDefaults: UserDefaults, @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String: Any] = [:]
+
+    init() {
+        // The name is only what `super` asks for. It is never written to.
+        super.init(suiteName: "open-island-intent-tests.memory")!
+    }
+
+    override func object(forKey defaultName: String) -> Any? {
+        lock.withLock { values[defaultName] }
+    }
+
+    override func set(_ value: Any?, forKey defaultName: String) {
+        lock.withLock { values[defaultName] = value }
+    }
+
+    override func removeObject(forKey defaultName: String) {
+        lock.withLock { values[defaultName] = nil }
     }
 }

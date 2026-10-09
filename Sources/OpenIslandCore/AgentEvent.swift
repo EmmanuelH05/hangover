@@ -52,22 +52,61 @@ public struct SessionStarted: Equatable, Codable, Sendable {
     }
 }
 
+/// One tool call an agent's hook saw through to its end. Only a hook that
+/// fires after the tool ran, and did not report a failure, makes one. Every
+/// field is the hook's own value in full, never a clipped preview.
+public struct AgentToolFinish: Equatable, Codable, Sendable {
+    /// The tool's name as the agent gives it: "Bash", "Edit".
+    public var toolName: String
+    /// The whole path of the file the tool wrote, when it named one.
+    public var filePath: String?
+    /// The whole shell command, when the tool ran one.
+    public var command: String?
+    /// `true` when the tool only started its work and handed it to the
+    /// background. The work itself was not seen to its end.
+    public var ranInBackground: Bool?
+
+    public init(
+        toolName: String,
+        filePath: String? = nil,
+        command: String? = nil,
+        ranInBackground: Bool? = nil
+    ) {
+        self.toolName = toolName
+        self.filePath = filePath
+        self.command = command
+        self.ranInBackground = ranInBackground
+    }
+}
+
 public struct SessionActivityUpdated: Equatable, Codable, Sendable {
     public var sessionID: String
     public var summary: String
     public var phase: SessionPhase
     public var timestamp: Date
+    /// `true` when this update is the user handing the agent a new prompt
+    /// (a prompt hook, or the agent's own turn-start signal). Everything the
+    /// session does from here until the next one belongs to that prompt.
+    /// Absent on every other update.
+    public var startsTurn: Bool?
+    /// The tool call this update reports as finished. Absent on every other
+    /// update, and on a tool that was denied or failed.
+    public var finishedTool: AgentToolFinish?
 
     public init(
         sessionID: String,
         summary: String,
         phase: SessionPhase,
-        timestamp: Date
+        timestamp: Date,
+        startsTurn: Bool? = nil,
+        finishedTool: AgentToolFinish? = nil
     ) {
         self.sessionID = sessionID
         self.summary = summary
         self.phase = phase
         self.timestamp = timestamp
+        self.startsTurn = startsTurn
+        self.finishedTool = finishedTool
     }
 }
 

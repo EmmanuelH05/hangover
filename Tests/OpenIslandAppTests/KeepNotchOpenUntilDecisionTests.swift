@@ -33,6 +33,9 @@ struct KeepNotchOpenUntilDecisionTests {
 
     @Test
     func preferenceIsOffByDefaultSoClickOutsideStillDismisses() {
+        // Cleared here and not only in init: another suite's test can switch
+        // the saved preference on between this suite's init and this body.
+        UserDefaults.standard.removeObject(forKey: "app.keepNotchOpenUntilDecision")
         let model = AppModel()
         #expect(model.keepNotchOpenUntilDecision == false)
 

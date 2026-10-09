@@ -37,6 +37,13 @@ final class AppDelegate: NSObject, WKApplicationDelegate {
             intentIdentifiers: []
         )
 
+        // A request the agent only takes an approval for in its terminal: Deny alone
+        let denyOnlyCategory = UNNotificationCategory(
+            identifier: "PERMISSION_REQUEST_DENY_ONLY",
+            actions: [denyAction],
+            intentIdentifiers: []
+        )
+
         // Question category: handled dynamically, just register a base
         let questionCategory = UNNotificationCategory(
             identifier: "QUESTION",
@@ -51,7 +58,7 @@ final class AppDelegate: NSObject, WKApplicationDelegate {
             intentIdentifiers: []
         )
 
-        center.setNotificationCategories([permissionCategory, questionCategory, completionCategory])
+        center.setNotificationCategories([permissionCategory, denyOnlyCategory, questionCategory, completionCategory])
         center.delegate = WatchSessionManager.shared
     }
 }

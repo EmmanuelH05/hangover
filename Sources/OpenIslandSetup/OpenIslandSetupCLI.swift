@@ -147,7 +147,7 @@ private struct SetupCommand {
         let manager = CodexHookInstallationManager(codexDirectory: codexDirectory)
         let status = try manager.install(hooksBinaryURL: hooksBinary)
 
-        print("Installed Open Island Codex hooks.")
+        print("Installed Hangover Codex hooks.")
         print("Codex dir: \(status.codexDirectory.path)")
         print("Hooks binary: \(hooksBinary.path)")
         if status.manifest?.enabledCodexHooksFeature == true {
@@ -161,7 +161,7 @@ private struct SetupCommand {
         let manager = CodexHookInstallationManager(codexDirectory: codexDirectory)
         let status = try manager.uninstall()
 
-        print("Removed Open Island Codex hooks.")
+        print("Removed Hangover Codex hooks.")
         print("Codex dir: \(status.codexDirectory.path)")
         if FileManager.default.fileExists(atPath: status.hooksURL.path) {
             print("Preserved unrelated hooks.json entries.")
@@ -194,11 +194,11 @@ private struct SetupCommand {
         let manager = ClaudeHookInstallationManager(claudeDirectory: claudeDirectory)
         let status = try manager.install(hooksBinaryURL: hooksBinary)
 
-        print("Installed Open Island Claude hooks.")
+        print("Installed Hangover Claude hooks.")
         print("Claude dir: \(status.claudeDirectory.path)")
         print("Hooks binary: \(hooksBinary.path)")
         if status.hasClaudeIslandHooks {
-            print("Note: claude-island hooks are still present alongside Open Island hooks.")
+            print("Note: claude-island hooks are still present alongside Hangover hooks.")
         }
     }
 
@@ -206,7 +206,7 @@ private struct SetupCommand {
         let manager = ClaudeHookInstallationManager(claudeDirectory: claudeDirectory)
         let status = try manager.uninstall()
 
-        print("Removed Open Island Claude hooks.")
+        print("Removed Hangover Claude hooks.")
         print("Claude dir: \(status.claudeDirectory.path)")
         if status.hasClaudeIslandHooks {
             print("Preserved claude-island hooks.")
@@ -239,7 +239,7 @@ private struct SetupCommand {
         let manager = KimiHookInstallationManager(kimiDirectory: kimiDirectory)
         let status = try manager.install(hooksBinaryURL: hooksBinary)
 
-        print("Installed Open Island Kimi hooks.")
+        print("Installed Hangover Kimi hooks.")
         print("Kimi dir: \(status.kimiDirectory.path)")
         print("Hooks binary: \(hooksBinary.path)")
     }
@@ -248,7 +248,7 @@ private struct SetupCommand {
         let manager = KimiHookInstallationManager(kimiDirectory: kimiDirectory)
         let status = try manager.uninstall()
 
-        print("Removed Open Island Kimi hooks.")
+        print("Removed Hangover Kimi hooks.")
         print("Kimi dir: \(status.kimiDirectory.path)")
         if FileManager.default.fileExists(atPath: status.configURL.path) {
             print("Preserved unrelated [[hooks]] entries in config.toml.")
@@ -280,7 +280,7 @@ private struct SetupCommand {
         let manager = GrokHookInstallationManager(grokDirectory: grokDirectory)
         let status = try manager.install(hooksBinaryURL: hooksBinary)
 
-        print("Installed Open Island Grok hooks.")
+        print("Installed Hangover Grok hooks.")
         print("Grok dir: \(status.grokDirectory.path)")
         print("Hooks file: \(status.hooksURL.path)")
         print("Hooks binary: \(hooksBinary.path)")
@@ -290,7 +290,7 @@ private struct SetupCommand {
         let manager = GrokHookInstallationManager(grokDirectory: grokDirectory)
         let status = try manager.uninstall()
 
-        print("Removed Open Island Grok hooks.")
+        print("Removed Hangover Grok hooks.")
         print("Grok dir: \(status.grokDirectory.path)")
         if FileManager.default.fileExists(atPath: status.hooksURL.path) {
             print("Note: hooks file still present.")

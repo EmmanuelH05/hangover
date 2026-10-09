@@ -248,11 +248,11 @@ final class HookInstallationCoordinator {
         }
 
         if status.managedStatusLineNeedsRepair {
-            return "Open Island detected a missing managed Claude status line script and will repair it automatically."
+            return "Hangover detected a missing managed Claude status line script and will repair it automatically."
         }
 
         if status.hasConflictingStatusLine {
-            return "Open Island will not overwrite an existing Claude status line automatically."
+            return "Hangover will not overwrite an existing Claude status line automatically."
         }
 
         return "Install a managed Claude status line to cache 5h and 7d usage locally."
@@ -554,7 +554,16 @@ final class HookInstallationCoordinator {
         }
     }
 
-    /// Attempts to auto-repair repairable issues by re-installing hooks.
+    /// A repair re-runs an install, which is only right for an agent the
+    /// user asked to have. One that was never chosen, or was removed, is
+    /// left alone: a missing OpenCode plugin is not broken when nobody
+    /// asked for it.
+    nonisolated static func mayRepair(intent: AgentHookIntent, hasRepairableIssues: Bool) -> Bool {
+        intent == .installed && hasRepairableIssues
+    }
+
+    /// Attempts to auto-repair repairable issues by re-installing hooks,
+    /// for the agents the user asked to have installed.
     /// Returns true if any repairs were attempted.
     @discardableResult
     func repairHooksIfNeeded() async -> Bool {
@@ -574,21 +583,30 @@ final class HookInstallationCoordinator {
         openCodeHealthReport = openCodeReport
 
         // Repair Claude hooks if there are repairable issues
-        if !claudeReport.repairableIssues.isEmpty, hooksBinaryURL != nil {
+        if Self.mayRepair(
+            intent: intentStore.intent(for: .claudeCode),
+            hasRepairableIssues: !claudeReport.repairableIssues.isEmpty
+        ), hooksBinaryURL != nil {
             onStatusMessage?("Repairing Claude hooks: \(claudeReport.repairableIssues.map(\.description).joined(separator: "; "))")
             installClaudeHooks()
             repaired = true
         }
 
         // Repair Codex hooks if there are repairable issues
-        if !codexReport.repairableIssues.isEmpty, hooksBinaryURL != nil {
+        if Self.mayRepair(
+            intent: intentStore.intent(for: .codex),
+            hasRepairableIssues: !codexReport.repairableIssues.isEmpty
+        ), hooksBinaryURL != nil {
             onStatusMessage?("Repairing Codex hooks: \(codexReport.repairableIssues.map(\.description).joined(separator: "; "))")
             installCodexHooks()
             repaired = true
         }
 
         // Repair OpenCode plugin if there are repairable issues
-        if !openCodeReport.repairableIssues.isEmpty {
+        if Self.mayRepair(
+            intent: intentStore.intent(for: .openCode),
+            hasRepairableIssues: !openCodeReport.repairableIssues.isEmpty
+        ) {
             onStatusMessage?("Repairing OpenCode plugin: \(openCodeReport.repairableIssues.map(\.description).joined(separator: "; "))")
             installOpenCodePlugin()
             repaired = true

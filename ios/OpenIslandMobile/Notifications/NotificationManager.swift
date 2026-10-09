@@ -15,6 +15,8 @@ final class NotificationManager: NSObject, ObservableObject {
     // MARK: - Category Identifiers
 
     static let permissionCategoryID = "PERMISSION_REQUEST"
+    /// A request the agent only takes an approval for in its terminal.
+    static let denyOnlyPermissionCategoryID = "PERMISSION_REQUEST_DENY_ONLY"
     static let sessionCompletedCategoryID = "SESSION_COMPLETED"
     /// Question categories are dynamically generated: "QUESTION_<requestID>"
     static let questionCategoryPrefix = "QUESTION_"
@@ -61,13 +63,19 @@ final class NotificationManager: NSObject, ObservableObject {
             intentIdentifiers: []
         )
 
+        let denyOnlyCategory = UNNotificationCategory(
+            identifier: Self.denyOnlyPermissionCategoryID,
+            actions: [denyAction],
+            intentIdentifiers: []
+        )
+
         let completedCategory = UNNotificationCategory(
             identifier: Self.sessionCompletedCategoryID,
             actions: [],
             intentIdentifiers: []
         )
 
-        center.setNotificationCategories([permissionCategory, completedCategory])
+        center.setNotificationCategories([permissionCategory, denyOnlyCategory, completedCategory])
         Self.logger.info("Registered static notification categories")
     }
 
@@ -81,7 +89,9 @@ final class NotificationManager: NSObject, ObservableObject {
         content.subtitle = event.workingDirectory ?? ""
         content.body = "\(event.title): \(event.summary)"
         content.sound = .default
-        content.categoryIdentifier = Self.permissionCategoryID
+        content.categoryIdentifier = event.requiresTerminalApproval == true
+            ? Self.denyOnlyPermissionCategoryID
+            : Self.permissionCategoryID
         content.userInfo = [
             "requestID": event.requestID,
             "sessionID": event.sessionID,

@@ -78,7 +78,7 @@ struct EventDetailView: View {
     @ViewBuilder
     private var detailSection: some View {
         switch event.kind {
-        case let .permissionRequested(title, summary, _, primaryAction, secondaryAction):
+        case let .permissionRequested(title, summary, _, primaryAction, secondaryAction, requiresTerminalApproval):
             Section("权限请求") {
                 LabeledContent("操作", value: title)
                 LabeledContent("摘要", value: summary)
@@ -88,10 +88,13 @@ struct EventDetailView: View {
                 HStack {
                     Text("可选操作")
                     Spacer()
-                    Text(primaryAction)
-                        .foregroundStyle(.green)
-                    Text("/")
-                        .foregroundStyle(.secondary)
+                    // An approval the Mac would refuse is not listed.
+                    if !requiresTerminalApproval {
+                        Text(primaryAction)
+                            .foregroundStyle(.green)
+                        Text("/")
+                            .foregroundStyle(.secondary)
+                    }
                     Text(secondaryAction)
                         .foregroundStyle(.red)
                 }
@@ -124,11 +127,19 @@ struct EventDetailView: View {
     private var actionSection: some View {
         Section {
             switch event.kind {
-            case let .permissionRequested(_, _, requestID, primaryAction, secondaryAction):
-                Button {
-                    postResolution(requestID: requestID, action: primaryAction.lowercased())
-                } label: {
-                    Label(primaryAction, systemImage: "checkmark.circle")
+            case let .permissionRequested(_, _, requestID, primaryAction, secondaryAction, requiresTerminalApproval):
+                if requiresTerminalApproval {
+                    // The Mac refuses an approval of this request. Only the
+                    // denial is offered.
+                    Label("需要在 Mac 的终端里批准，这里只能拒绝。", systemImage: "terminal")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button {
+                        postResolution(requestID: requestID, action: primaryAction.lowercased())
+                    } label: {
+                        Label(primaryAction, systemImage: "checkmark.circle")
+                    }
                 }
 
                 Button(role: .destructive) {

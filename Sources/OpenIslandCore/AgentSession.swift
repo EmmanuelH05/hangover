@@ -203,6 +203,9 @@ public struct PermissionRequest: Equatable, Identifiable, Codable, Sendable {
     public var toolName: String?
     public var toolUseID: String?
     public var suggestedUpdates: [ClaudePermissionUpdate]
+    /// The agent takes an approval of this request only where it runs, and
+    /// still takes a denial from the island. Claude Code does this for a
+    /// call one of its ask rules matches.
     public var requiresTerminalApproval: Bool
 
     public init(
@@ -275,28 +278,55 @@ public struct QuestionPrompt: Equatable, Identifiable, Codable, Sendable {
     public var title: String
     public var options: [String]
     public var questions: [QuestionPromptItem]
+    /// The agent takes an answer to this question only where it runs.
+    /// Claude Code does this when one of its ask rules matches the
+    /// question tool: an answer handed back through its hook is ignored.
+    public var requiresTerminalAnswer: Bool
 
     public init(
         id: UUID = UUID(),
         title: String,
         options: [String],
-        questions: [QuestionPromptItem] = []
+        questions: [QuestionPromptItem] = [],
+        requiresTerminalAnswer: Bool = false
     ) {
         self.id = id
         self.title = title
         self.options = options
         self.questions = questions
+        self.requiresTerminalAnswer = requiresTerminalAnswer
     }
 
     public init(
         id: UUID = UUID(),
         title: String,
-        questions: [QuestionPromptItem]
+        questions: [QuestionPromptItem],
+        requiresTerminalAnswer: Bool = false
     ) {
         self.id = id
         self.title = title
         self.questions = questions
         self.options = questions.first?.options.map(\.label) ?? []
+        self.requiresTerminalAnswer = requiresTerminalAnswer
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case options
+        case questions
+        case requiresTerminalAnswer
+    }
+
+    // The mark is new. A prompt written before it has none and is read
+    // as one the island can answer.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        options = try container.decode([String].self, forKey: .options)
+        questions = try container.decode([QuestionPromptItem].self, forKey: .questions)
+        requiresTerminalAnswer = try container.decodeIfPresent(Bool.self, forKey: .requiresTerminalAnswer) ?? false
     }
 }
 
@@ -354,6 +384,12 @@ public enum ApprovalAction: Sendable {
     case deny
     case allowOnce
     case allowWithUpdates([ClaudePermissionUpdate])
+
+    /// True for every answer that lets the tool call run.
+    public var isApproval: Bool {
+        if case .deny = self { return false }
+        return true
+    }
 }
 
 public enum PermissionResolution: Equatable, Codable, Sendable {

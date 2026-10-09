@@ -30,7 +30,7 @@ public enum GrokHookInstallerError: Error, LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case .managedFileNotOwnedByOpenIsland:
-            "Refusing to uninstall \(GrokHookInstaller.managedHooksFileName): the file is not an Open Island managed Grok hooks file."
+            "Refusing to uninstall \(GrokHookInstaller.managedHooksFileName): the file is not a Hangover managed Grok hooks file."
         }
     }
 }

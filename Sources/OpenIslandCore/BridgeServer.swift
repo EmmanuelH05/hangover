@@ -42,6 +42,9 @@ public final class BridgeServer: @unchecked Sendable {
 
         let clientID: UUID
         let kind: Kind
+        /// One of Claude Code's ask rules matches the call. It ignores an
+        /// approval from a hook for it and honors a denial.
+        var approvesInTerminalOnly = false
     }
 
     private struct PendingOpenCodeInteraction {
@@ -66,6 +69,7 @@ public final class BridgeServer: @unchecked Sendable {
     }
 
     private let socketURL: URL
+    private let claudeAskRules: ClaudeAskRuleSource?
     private let queue = DispatchQueue(label: "app.openisland.bridge.server")
     private let queueKey = DispatchSpecificKey<Void>()
 
@@ -90,10 +94,14 @@ public final class BridgeServer: @unchecked Sendable {
     /// overwritten whenever AppModel pushes a fresh snapshot.
     private var localState = SessionState()
 
+    /// `claudeAskRules` reads Claude Code's ask rules. Nil reads none, and
+    /// every request is then one the island can approve.
     public init(
-        socketURL: URL = BridgeSocketLocation.defaultURL
+        socketURL: URL = BridgeSocketLocation.defaultURL,
+        claudeAskRules: ClaudeAskRuleSource? = nil
     ) {
         self.socketURL = socketURL
+        self.claudeAskRules = claudeAskRules
         queue.setSpecific(key: queueKey, value: ())
     }
 
@@ -337,7 +345,13 @@ public final class BridgeServer: @unchecked Sendable {
             send(.response(.acknowledged), to: clientID)
 
         case let .resolvePermission(sessionID, resolution):
-            if pendingClaudeInteractions[sessionID] != nil {
+            if let pending = pendingClaudeInteractions[sessionID] {
+                // Claude Code would ignore this approval and go on waiting.
+                // The hook stays open, which keeps a denial possible.
+                if pending.approvesInTerminalOnly, case .allowOnce = resolution {
+                    send(.response(.acknowledged), to: clientID)
+                    return
+                }
                 resolvePendingClaudeInteraction(sessionID: sessionID, resolution: resolution)
                 send(.response(.acknowledged), to: clientID)
                 return
@@ -360,7 +374,7 @@ public final class BridgeServer: @unchecked Sendable {
                     phase = .running
                 case let .deny(message, _):
                     directive = CursorHookDirective(continue: true, permission: .deny, agentMessage: message)
-                    summary = message ?? "Permission denied in Open Island."
+                    summary = message ?? "Permission denied in Hangover."
                     phase = .completed
                 }
 
@@ -407,10 +421,10 @@ public final class BridgeServer: @unchecked Sendable {
                 : "Permission approved. Codex continued the command."
             let deniedSummary: String = {
                 if case let .deny(message, _) = resolution {
-                    return message ?? "Permission denied in Open Island."
+                    return message ?? "Permission denied in Hangover."
                 }
 
-                return "Permission denied in Open Island."
+                return "Permission denied in Hangover."
             }()
 
             localState.resolvePermission(sessionID: sessionID, resolution: resolution)
@@ -436,7 +450,13 @@ public final class BridgeServer: @unchecked Sendable {
             send(.response(.acknowledged), to: clientID)
 
         case let .answerQuestion(sessionID, response):
-            if pendingClaudeInteractions[sessionID] != nil {
+            if let pending = pendingClaudeInteractions[sessionID] {
+                // Claude Code would ignore this answer and go on waiting.
+                // The hook stays open for the answer given in the terminal.
+                if pending.approvesInTerminalOnly {
+                    send(.response(.acknowledged), to: clientID)
+                    return
+                }
                 resolvePendingClaudeQuestion(sessionID: sessionID, response: response)
                 send(.response(.acknowledged), to: clientID)
                 return
@@ -524,7 +544,8 @@ public final class BridgeServer: @unchecked Sendable {
                         sessionID: payload.sessionID,
                         summary: "Prompt: \(prompt)",
                         phase: .running,
-                        timestamp: .now
+                        timestamp: .now,
+                        startsTurn: true
                     )
                 )
             )
@@ -600,7 +621,8 @@ public final class BridgeServer: @unchecked Sendable {
                         sessionID: payload.sessionID,
                         summary: summary,
                         phase: .running,
-                        timestamp: .now
+                        timestamp: .now,
+                        finishedTool: payload.finishedTool
                     )
                 )
             )
@@ -674,7 +696,8 @@ public final class BridgeServer: @unchecked Sendable {
                         sessionID: payload.sessionID,
                         summary: payload.promptPreview.map { "Prompt: \($0)" } ?? payload.implicitStartSummary,
                         phase: .running,
-                        timestamp: .now
+                        timestamp: .now,
+                        startsTurn: true
                     )
                 )
             )
@@ -733,7 +756,11 @@ public final class BridgeServer: @unchecked Sendable {
             synchronizeClaudeJumpTarget(for: payload)
             synchronizeClaudeMetadata(for: payload)
 
-            if let prompt = payload.questionPrompt {
+            if var prompt = payload.questionPrompt {
+                // An ask rule on the question tool keeps the answer in the
+                // terminal the same way it keeps an approval there.
+                let answersInTerminalOnly = claudeAskRules?.matchingRule(for: payload) != nil
+                prompt.requiresTerminalAnswer = answersInTerminalOnly
                 emit(
                     .questionAsked(
                         QuestionAsked(
@@ -746,10 +773,12 @@ public final class BridgeServer: @unchecked Sendable {
 
                 pendingClaudeInteractions[payload.sessionID] = PendingClaudeInteraction(
                     clientID: clientID,
-                    kind: .question(payload, prompt)
+                    kind: .question(payload, prompt),
+                    approvesInTerminalOnly: answersInTerminalOnly
                 )
             } else {
                 let suggestions = payload.permissionSuggestions ?? []
+                let approvesInTerminalOnly = claudeAskRules?.matchingRule(for: payload) != nil
 
                 emit(
                     .permissionRequested(
@@ -763,7 +792,8 @@ public final class BridgeServer: @unchecked Sendable {
                                 secondaryActionTitle: "Deny",
                                 toolName: payload.toolName,
                                 toolUseID: claudeToolUseID(for: payload),
-                                suggestedUpdates: suggestions
+                                suggestedUpdates: suggestions,
+                                requiresTerminalApproval: approvesInTerminalOnly
                             ),
                             timestamp: .now
                         )
@@ -772,7 +802,8 @@ public final class BridgeServer: @unchecked Sendable {
 
                 pendingClaudeInteractions[payload.sessionID] = PendingClaudeInteraction(
                     clientID: clientID,
-                    kind: .permission(payload)
+                    kind: .permission(payload),
+                    approvesInTerminalOnly: approvesInTerminalOnly
                 )
             }
 
@@ -817,7 +848,8 @@ public final class BridgeServer: @unchecked Sendable {
                         sessionID: payload.sessionID,
                         summary: summary,
                         phase: .running,
-                        timestamp: .now
+                        timestamp: .now,
+                        finishedTool: payload.finishedTool
                     )
                 )
             )
@@ -1066,7 +1098,8 @@ public final class BridgeServer: @unchecked Sendable {
                         sessionID: payload.sessionID,
                         summary: payload.promptPreview.map { "Prompt: \($0)" } ?? payload.implicitStartSummary,
                         phase: .running,
-                        timestamp: .now
+                        timestamp: .now,
+                        startsTurn: true
                     )
                 )
             )
@@ -1233,7 +1266,8 @@ public final class BridgeServer: @unchecked Sendable {
                         sessionID: payload.sessionID,
                         summary: payload.promptPreview.map { "Prompt: \($0)" } ?? payload.implicitStartSummary,
                         phase: .running,
-                        timestamp: .now
+                        timestamp: .now,
+                        startsTurn: true
                     )
                 )
             )
@@ -1325,7 +1359,8 @@ public final class BridgeServer: @unchecked Sendable {
                         sessionID: payload.sessionID,
                         summary: promptSummary.map { "Prompt: \($0)" } ?? payload.implicitStartSummary,
                         phase: .running,
-                        timestamp: .now
+                        timestamp: .now,
+                        startsTurn: true
                     )
                 )
             )
@@ -1466,7 +1501,8 @@ public final class BridgeServer: @unchecked Sendable {
                         sessionID: payload.sessionID,
                         summary: payload.implicitSummary,
                         phase: .running,
-                        timestamp: .now
+                        timestamp: .now,
+                        startsTurn: true
                     )
                 )
             )
@@ -1695,7 +1731,8 @@ public final class BridgeServer: @unchecked Sendable {
                         sessionID: payload.sessionID,
                         summary: payload.implicitSummary,
                         phase: .running,
-                        timestamp: .now
+                        timestamp: .now,
+                        startsTurn: true
                     )
                 )
             )
@@ -1842,7 +1879,7 @@ public final class BridgeServer: @unchecked Sendable {
             .actionableStateResolved(
                 ActionableStateResolved(
                     sessionID: sessionID,
-                    summary: "Approval was handled outside Open Island.",
+                    summary: "Approval was handled outside Hangover.",
                     timestamp: .now
                 )
             )
@@ -1940,7 +1977,7 @@ public final class BridgeServer: @unchecked Sendable {
             .actionableStateResolved(
                 ActionableStateResolved(
                     sessionID: sessionID,
-                    summary: "Approval was handled outside Open Island.",
+                    summary: "Approval was handled outside Hangover.",
                     timestamp: .now
                 )
             )
@@ -2180,8 +2217,8 @@ public final class BridgeServer: @unchecked Sendable {
             phase = .running
 
         case let (.permission(_), .deny(message, _)):
-            directive = .deny(reason: message ?? "Permission denied in Open Island.")
-            summary = message ?? "Permission denied in Open Island."
+            directive = .deny(reason: message ?? "Permission denied in Hangover.")
+            summary = message ?? "Permission denied in Hangover."
             phase = .completed
 
         case (.question, .allowOnce):
@@ -2256,7 +2293,7 @@ public final class BridgeServer: @unchecked Sendable {
             .actionableStateResolved(
                 ActionableStateResolved(
                     sessionID: sessionID,
-                    summary: "Approval was handled outside Open Island.",
+                    summary: "Approval was handled outside Hangover.",
                     timestamp: .now
                 )
             )
@@ -2929,12 +2966,12 @@ public final class BridgeServer: @unchecked Sendable {
         case (.preToolUse, .allowOnce):
             response = .acknowledged
         case let (.preToolUse, .deny(message, _)):
-            response = .codexHookDirective(.deny(reason: message ?? "Permission denied in Open Island."))
+            response = .codexHookDirective(.deny(reason: message ?? "Permission denied in Hangover."))
         case (.permissionRequest, .allowOnce):
             response = .codexHookDirective(.permissionRequest(.allow))
         case let (.permissionRequest, .deny(message, _)):
             response = .codexHookDirective(
-                .permissionRequest(.deny(message: message ?? "Permission denied in Open Island."))
+                .permissionRequest(.deny(message: message ?? "Permission denied in Hangover."))
             )
         case (.sessionStart, _), (.postToolUse, _), (.userPromptSubmit, _), (.stop, _):
             assertionFailure("Unexpected Codex hook waiting for permission.")
@@ -2967,9 +3004,9 @@ public final class BridgeServer: @unchecked Sendable {
 
         case let (.permission(_), .deny(message, interrupt)):
             directive = .permissionRequest(
-                .deny(message: message ?? "Permission denied in Open Island.", interrupt: interrupt)
+                .deny(message: message ?? "Permission denied in Hangover.", interrupt: interrupt)
             )
-            summary = message ?? "Permission denied in Open Island."
+            summary = message ?? "Permission denied in Hangover."
             phase = .completed
 
         case let (.question(payload, _), .allowOnce(updatedInput, updatedPermissions)):

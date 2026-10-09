@@ -47,3 +47,15 @@ Current design direction:
 - shell: black glass face with a cool metallic rim
 - mark: white `Scout` mascot with the three-square punctuation column from the chosen icon reference
 - internal surfaces: simplified mascot-only versions without punctuation when space is tight
+
+## Hangover's icon
+
+The app icon is made from `Source/hangover-icon-source.png` by
+`scripts/make-hangover-icon.swift`, which cuts the tile out of the artwork,
+lays it on the macOS icon grid and writes `app-icon-v6.png`, both icon sets
+and `OpenIsland.icns`. Run it from the repo root after changing the artwork:
+
+    swift scripts/make-hangover-icon.swift
+
+The file names keep the app's internal name, which the packaging scripts
+look for. The DMG background is still the upstream project's.

@@ -22,9 +22,27 @@ public final class WatchNotificationRelay: @unchecked Sendable {
         case question
     }
 
-    // Maps requestID → (sessionID, kind) for pending requests
+    /// A request a device may answer.
+    private struct PendingRequest {
+        var sessionID: String
+        var kind: PendingRequestKind
+        /// The two button titles the device was sent. It answers with one
+        /// of them, lowercased, or with "allow" or "deny".
+        var primaryAction: String?
+        var secondaryAction: String?
+        /// The agent takes the approval only where it runs.
+        var requiresTerminalApproval = false
+    }
+
+    /// The two answers a permission request has.
+    enum PermissionAnswer: Equatable, Sendable {
+        case approve
+        case deny
+    }
+
+    // Maps requestID → the pending request
     private let queue = DispatchQueue(label: "app.openisland.watch.relay")
-    private var pendingRequests: [String: (sessionID: String, kind: PendingRequestKind)] = [:]
+    private var pendingRequests: [String: PendingRequest] = [:]
 
     public init(endpoint: WatchHTTPEndpoint = WatchHTTPEndpoint()) {
         self.endpoint = endpoint
@@ -39,8 +57,17 @@ public final class WatchNotificationRelay: @unchecked Sendable {
         switch event {
         case let .permissionRequested(payload):
             guard let session else { return }
+            // The app answers a session's newest request only. An older
+            // card still open on a device must not decide this one.
+            retirePendingRequests(forSession: payload.sessionID)
             let requestID = payload.request.id.uuidString
-            trackPendingRequest(requestID: requestID, sessionID: payload.sessionID, kind: .permission)
+            trackPendingRequest(requestID: requestID, PendingRequest(
+                sessionID: payload.sessionID,
+                kind: .permission,
+                primaryAction: payload.request.primaryActionTitle,
+                secondaryAction: payload.request.secondaryActionTitle,
+                requiresTerminalApproval: payload.request.requiresTerminalApproval
+            ))
 
             let sseEvent = WatchSSEEvent.permissionRequested(WatchPermissionEvent(
                 sessionID: payload.sessionID,
@@ -50,27 +77,44 @@ public final class WatchNotificationRelay: @unchecked Sendable {
                 workingDirectory: session.jumpTarget?.workingDirectory,
                 primaryAction: payload.request.primaryActionTitle,
                 secondaryAction: payload.request.secondaryActionTitle,
-                requestID: requestID
+                requestID: requestID,
+                requiresTerminalApproval: payload.request.requiresTerminalApproval
             ))
             endpoint.pushEvent(sseEvent)
             Self.logger.info("Pushed permissionRequested for session \(payload.sessionID)")
 
         case let .questionAsked(payload):
             guard let session else { return }
+            retirePendingRequests(forSession: payload.sessionID)
             let requestID = payload.prompt.id.uuidString
-            trackPendingRequest(requestID: requestID, sessionID: payload.sessionID, kind: .question)
+            trackPendingRequest(requestID: requestID, PendingRequest(
+                sessionID: payload.sessionID,
+                kind: .question,
+                requiresTerminalApproval: payload.prompt.requiresTerminalAnswer
+            ))
 
+            // A question answered only in the terminal goes out with no
+            // options: a device then has nothing to send back.
             let sseEvent = WatchSSEEvent.questionAsked(WatchQuestionEvent(
                 sessionID: payload.sessionID,
                 agentTool: session.tool.displayName,
                 title: payload.prompt.title,
-                options: payload.prompt.options,
+                options: payload.prompt.requiresTerminalAnswer ? [] : payload.prompt.options,
                 requestID: requestID
             ))
             endpoint.pushEvent(sseEvent)
             Self.logger.info("Pushed questionAsked for session \(payload.sessionID)")
 
+        case let .activityUpdated(payload):
+            // An answer given on the Mac moves the session on without an
+            // "actionable state resolved" event. The request is over all
+            // the same, and its id must stop working on the devices.
+            if payload.phase != .waitingForApproval, payload.phase != .waitingForAnswer {
+                retirePendingRequests(forSession: payload.sessionID)
+            }
+
         case let .sessionCompleted(payload):
+            retirePendingRequests(forSession: payload.sessionID)
             guard let session else { return }
             let sseEvent = WatchSSEEvent.sessionCompleted(WatchCompletionEvent(
                 sessionID: payload.sessionID,
@@ -118,15 +162,112 @@ public final class WatchNotificationRelay: @unchecked Sendable {
 
     // MARK: - Private
 
-    private func trackPendingRequest(requestID: String, sessionID: String, kind: PendingRequestKind) {
-        queue.sync {
-            pendingRequests[requestID] = (sessionID: sessionID, kind: kind)
+    /// Forgets every request still waiting for a session and tells the
+    /// devices each one is over.
+    private func retirePendingRequests(forSession sessionID: String) {
+        for requestID in removeAllPendingRequests(forSession: sessionID) {
+            endpoint.pushEvent(.actionableStateResolved(WatchResolvedEvent(
+                requestID: requestID,
+                sessionID: sessionID
+            )))
         }
     }
 
-    private func lookupPendingRequest(requestID: String) -> (sessionID: String, kind: PendingRequestKind)? {
+    private func trackPendingRequest(requestID: String, _ request: PendingRequest) {
         queue.sync {
-            pendingRequests.removeValue(forKey: requestID)
+            pendingRequests[requestID] = request
+        }
+    }
+
+    /// Reads a device's answer to a permission request. The phone's own
+    /// buttons send the title they show, lowercased ("allow once"), and
+    /// its notification and the watch send "allow" or "deny". Anything
+    /// else is no answer: text this cannot read must never deny a request.
+    static func permissionAnswer(
+        for action: String,
+        primaryAction: String?,
+        secondaryAction: String?
+    ) -> PermissionAnswer? {
+        let action = action.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !action.isEmpty else { return nil }
+        func matches(_ title: String?) -> Bool {
+            title?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == action
+        }
+        // The two plain words first: a title can never turn "deny" into
+        // an approval.
+        if action == "allow" { return .approve }
+        if action == "deny" { return .deny }
+        if matches(primaryAction) { return .approve }
+        if matches(secondaryAction) { return .deny }
+        return nil
+    }
+
+    /// What to do with a device's answer, and the request it used up. The
+    /// request stays waiting unless the answer is taken: an approval this
+    /// refuses leaves the device able to deny afterwards.
+    func resolve(_ resolution: WatchResolutionRequest) -> WatchResolutionOutcome {
+        enum Step {
+            case finished(WatchResolutionOutcome)
+            case permission(sessionID: String, approved: Bool)
+            case question(sessionID: String)
+        }
+
+        let known: Step? = queue.sync {
+            guard let pending = pendingRequests[resolution.requestID] else { return nil }
+            switch pending.kind {
+            case .permission:
+                guard let answer = Self.permissionAnswer(
+                    for: resolution.action,
+                    primaryAction: pending.primaryAction,
+                    secondaryAction: pending.secondaryAction
+                ) else {
+                    return .finished(.unknownAction)
+                }
+                if answer == .approve, pending.requiresTerminalApproval {
+                    return .finished(.needsTerminal)
+                }
+                pendingRequests.removeValue(forKey: resolution.requestID)
+                return .permission(sessionID: pending.sessionID, approved: answer == .approve)
+            case .question:
+                if pending.requiresTerminalApproval { return .finished(.needsTerminal) }
+                pendingRequests.removeValue(forKey: resolution.requestID)
+                return .question(sessionID: pending.sessionID)
+            }
+        }
+
+        let step: Step
+        if let known {
+            step = known
+        } else if let found = sessionLookup?(resolution.requestID) {
+            // A request this relay never pushed. Nothing is known about
+            // its buttons, and only the two plain words are read.
+            switch found.kind {
+            case .permission:
+                guard let answer = Self.permissionAnswer(for: resolution.action, primaryAction: nil, secondaryAction: nil) else {
+                    step = .finished(.unknownAction)
+                    break
+                }
+                step = .permission(sessionID: found.sessionID, approved: answer == .approve)
+            case .question:
+                step = .question(sessionID: found.sessionID)
+            }
+        } else {
+            Self.logger.warning("Resolution for unknown requestID: \(resolution.requestID)")
+            return .unknownRequest
+        }
+
+        switch step {
+        case let .finished(outcome):
+            Self.logger.info("Did not take a device's answer for \(resolution.requestID): \(String(describing: outcome), privacy: .public)")
+            return outcome
+        case let .permission(sessionID, approved):
+            Self.logger.info("Resolving permission for session \(sessionID): \(approved ? "approve" : "deny", privacy: .public)")
+            onResolvePermission?(sessionID, approved)
+            return .accepted
+        case let .question(sessionID):
+            Self.logger.info("Answering question for session \(sessionID)")
+            onAnswerQuestion?(sessionID, resolution.action)
+            return .accepted
         }
     }
 
@@ -156,24 +297,7 @@ public final class WatchNotificationRelay: @unchecked Sendable {
 
     private func setupResolutionHandler() {
         endpoint.onResolution = { [weak self] resolution in
-            guard let self else { return }
-
-            guard let pending = self.lookupPendingRequest(requestID: resolution.requestID)
-                    ?? self.sessionLookup?(resolution.requestID) else {
-                Self.logger.warning("Resolution for unknown requestID: \(resolution.requestID)")
-                return
-            }
-
-            switch pending.kind {
-            case .permission:
-                let approved = resolution.action.lowercased() == "allow"
-                Self.logger.info("Resolving permission for session \(pending.sessionID): \(resolution.action)")
-                self.onResolvePermission?(pending.sessionID, approved)
-
-            case .question:
-                Self.logger.info("Answering question for session \(pending.sessionID): \(resolution.action)")
-                self.onAnswerQuestion?(pending.sessionID, resolution.action)
-            }
+            self?.resolve(resolution) ?? .unknownRequest
         }
     }
 }

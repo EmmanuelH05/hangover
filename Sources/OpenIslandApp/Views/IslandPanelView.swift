@@ -73,10 +73,16 @@ extension AgentSession {
 
 // MARK: - Animations
 
-private let openAnimation = Animation.spring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)
-private let closeAnimation = Animation.smooth(duration: 0.3)
-private let popAnimation = Animation.spring(response: 0.3, dampingFraction: 0.5)
-private let openedSurfaceUnmountDelay: TimeInterval = 0.36
+// Every animation here comes from `Motion` (Motion/Motion.swift).
+
+/// Blur that clears as the opened content is revealed. Radius 0 is at rest.
+private struct OpenedRevealBlur: ViewModifier {
+    let radius: CGFloat
+
+    func body(content: Content) -> some View {
+        content.blur(radius: radius)
+    }
+}
 
 private struct ConditionalDrawingGroup: ViewModifier {
     let enabled: Bool
@@ -95,11 +101,14 @@ private struct ConditionalDrawingGroup: ViewModifier {
 struct IslandPanelView: View {
     private static let headerControlButtonSize: CGFloat = 22
     private static let headerControlSpacing: CGFloat = 8
-    private static let headerHorizontalPadding: CGFloat = 18
     private static let headerTopPadding: CGFloat = 2
-    private static let notchHeaderHorizontalPadding: CGFloat = 46
     private static let notchLaneSafetyInset: CGFloat = 12
     private static let minimumRightUsageLaneWidth: CGFloat = 58
+    /// Scale of the closed island while it pops to draw attention.
+    private static let poppingScale: CGFloat = 1.04
+    /// The opened content starts this scale and blur and settles to 1 and 0.
+    private static let revealStartScale: CGFloat = 0.97
+    private static let revealStartBlurRadius: CGFloat = 6
 
     var model: AppModel
     private var lang: LanguageManager { model.lang }
@@ -108,6 +117,7 @@ struct IslandPanelView: View {
     @State private var showingQuitConfirmation = false
     @State private var keepsOpenedSurfaceMounted = false
     @State private var openedSurfaceMountGeneration: UInt64 = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isOpened: Bool {
         model.notchStatus == .opened
@@ -125,13 +135,28 @@ struct IslandPanelView: View {
         model.notchStatus == .popping
     }
 
+    /// What the opened island is drawing: live while open, a snapshot of what
+    /// was on screen while it fades out (so a closing notification card does
+    /// not turn into the list or the Nook page mid-fade).
+    private var presentation: IslandOpenedPresentation {
+        model.openedPresentation
+    }
+
     /// Single animation selection based on the current notch status.
     private var notchTransitionAnimation: Animation {
+        let animation: Animation
         switch model.notchStatus {
-        case .opened:  return openAnimation
-        case .closed:  return closeAnimation
-        case .popping: return popAnimation
+        case .opened:  animation = Motion.islandOpen
+        case .closed:  animation = Motion.islandClose
+        case .popping: animation = Motion.islandPop
         }
+        return Motion.resolved(animation, reduceMotion: reduceMotion)
+    }
+
+    /// Scale of the closed island: the pop wins over the hover.
+    private var closedScale: CGFloat {
+        if isPopping { return Self.poppingScale }
+        return isHovering ? IslandChromeMetrics.closedHoverScale : 1
     }
 
     private var targetOverlayScreen: NSScreen? {
@@ -159,12 +184,29 @@ struct IslandPanelView: View {
         return (targetOverlayScreen?.safeAreaInsets.top ?? 0) == 0
     }
 
+    /// Fill and layout of the closed island: black on a MacBook so it merges
+    /// with the hardware notch, ink on an external display.
+    private var closedLayout: V6ClosedLayout {
+        isExternalDisplayPlacement ? .external : .macbook
+    }
+
     private var openedHeaderButtonsWidth: CGFloat {
-        (Self.headerControlButtonSize * 3) + (Self.headerControlSpacing * 2)
+        (Self.headerControlButtonSize * 4) + (Self.headerControlSpacing * 3)
     }
 
     private var openedHeaderHorizontalPadding: CGFloat {
-        usesNotchAwareOpenedHeader ? Self.notchHeaderHorizontalPadding : Self.headerHorizontalPadding
+        openedMetrics.headerInset
+    }
+
+    /// The opened island's radii and insets on this display, from the look
+    /// saved for it (D35). The width comes from the window, which the panel
+    /// controller sizes from the same look.
+    private var openedMetrics: IslandOpenedMetrics {
+        let profile: IslandAppearanceDisplayProfile = usesNotchAwareOpenedHeader ? .notch : .topBar
+        return IslandOpenedMetrics.resolve(
+            look: model.nook.displayPreferences(for: profile).openedLook,
+            profile: profile
+        )
     }
 
     var body: some View {
@@ -197,16 +239,16 @@ struct IslandPanelView: View {
 
     @ViewBuilder
     private func notchContent(availableSize: CGSize) -> some View {
-        // Window is always at opened size — use opened insets unconditionally.
+        // The window always has the opened shadow insets and the opened width,
+        // whether the island is open or closed. Its height follows the opened
+        // layout (it grows before the shape and shrinks after it), so only the
+        // width comes from the available size. The opened heights come from
+        // the layout, which the coordinator animates.
         let panelShadowHorizontalInset = IslandChromeMetrics.openedShadowHorizontalInset
         let panelShadowBottomInset = IslandChromeMetrics.openedShadowBottomInset
-        let layoutWidth = max(0, availableSize.width - (panelShadowHorizontalInset * 2))
-        let layoutHeight = max(0, availableSize.height - panelShadowBottomInset)
-
-        let outerHorizontalPadding: CGFloat = 0
-        let outerBottomPadding: CGFloat = 0
-        let openedWidth = max(0, layoutWidth - outerHorizontalPadding)
-        let openedHeight = max(closedNotchHeight, layoutHeight - outerBottomPadding)
+        let openedWidth = max(0, availableSize.width - (panelShadowHorizontalInset * 2))
+        let layout = model.islandOpenedLayout
+        let openedHeight = layout.shapeHeight
         let resolvedClosedPill = closedPill
 
         VStack(spacing: 0) {
@@ -218,7 +260,7 @@ struct IslandPanelView: View {
                 )
 
                 if shouldRenderOpenedSurface {
-                    openedSurfaceContent(width: openedWidth, height: openedHeight)
+                    openedSurfaceContent(width: openedWidth, layout: layout)
                         .frame(
                             width: usesOpenedVisualState ? openedWidth : resolvedClosedPill.resolvedWidth,
                             height: usesOpenedVisualState ? openedHeight : closedNotchHeight,
@@ -226,7 +268,7 @@ struct IslandPanelView: View {
                         )
                         .clipShape(transitionSurfaceShape)
                         .opacity(usesOpenedVisualState ? 1 : 0)
-                        .transition(.opacity.animation(.easeOut(duration: 0.18).delay(0.12)))
+                        .transition(openedContentReveal)
                         .allowsHitTesting(usesOpenedVisualState)
                 }
 
@@ -236,13 +278,18 @@ struct IslandPanelView: View {
             }
             .frame(maxWidth: .infinity, alignment: .top)
         }
-        .scaleEffect(usesOpenedVisualState ? 1 : (isHovering ? IslandChromeMetrics.closedHoverScale : 1), anchor: .top)
+        // Pop and hover scale the one shared surface, so the pill, the glow and
+        // the opened island move together. The animation covers only the
+        // scale: the pop spring while popping, the hover spring otherwise.
+        .animation(Motion.resolved(isPopping ? Motion.islandPop : Motion.hoverScale, reduceMotion: reduceMotion)) { content in
+            content.scaleEffect(usesOpenedVisualState ? 1 : closedScale, anchor: .top)
+        }
         .padding(.horizontal, panelShadowHorizontalInset)
         .padding(.bottom, panelShadowBottomInset)
         .animation(notchTransitionAnimation, value: model.notchStatus)
         .contentShape(Rectangle())
         .onHover { hovering in
-            withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
+            withMotion(Motion.hoverScale) {
                 isHovering = hovering
             }
         }
@@ -266,7 +313,7 @@ struct IslandPanelView: View {
                 return
             }
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + openedSurfaceUnmountDelay) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Motion.openedSurfaceUnmountDelay) {
                 guard openedSurfaceMountGeneration == generation,
                       model.notchStatus != .opened else {
                     return
@@ -284,24 +331,36 @@ struct IslandPanelView: View {
     /// preferences re-renders this automatically; UnifiedBars runs its own
     /// TimelineView internally for bar animation.
     private var closedPill: V6ClosedPill {
-        let layout: V6ClosedLayout = isExternalDisplayPlacement ? .external : .macbook
+        let layout = closedLayout
         let physicalNotchWidth: CGFloat = targetOverlayScreen?.notchSize.width ?? 180
         return V6ClosedPill(
             mode: model.islandClosedMode,
-            label: layout == .external ? model.islandClosedLabel() : nil,
+            label: layout == .external ? model.islandClosedLabelWithNook() : nil,
             rightSlot: model.islandClosedRightSlotContent(),
             layout: layout,
             height: closedNotchHeight,
             physicalNotchWidth: layout == .macbook ? physicalNotchWidth : 0,
-            minWidth: 70
+            minWidth: 70,
+            activity: model.nookClosedActivity,
+            agentsNeedAttention: model.islandClosedMode == .waiting,
+            agentStatusTint: model.nookAgentStatusTint,
+            leftSlot: model.nookLeftSlotContent,
+            rightExtra: model.nookRightSlotContent,
+            // The transitioning surface draws the one fill behind the pill,
+            // and the pill freezes its animations while the opened island
+            // covers it.
+            drawsBackground: false,
+            isLive: !usesOpenedVisualState
         )
     }
 
     @ViewBuilder
     private func v6ClosedSurface(_ pill: V6ClosedPill) -> some View {
         pill
-        .scaleEffect(isPopping ? 1.04 : 1, anchor: .top)
-        .animation(popAnimation, value: isPopping)
+        // Nook file tray: files dropped on the closed notch land in the tray.
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            model.nook.tray.handleDrop(providers)
+        }
     }
 
     // MARK: - Opened surface
@@ -314,7 +373,9 @@ struct IslandPanelView: View {
     ) -> some View {
         let shape = transitionSurfaceShape
         shape
-            .fill(V6Palette.ink)
+            // One fill in every state. The pill draws none, so closed and
+            // opened are the same surface morphing, not two blacks fading.
+            .fill(V6Palette.surface(for: closedLayout))
             .overlay {
                 shape.stroke(Color.white.opacity(usesOpenedVisualState ? 0.07 : 0), lineWidth: 1)
             }
@@ -322,32 +383,87 @@ struct IslandPanelView: View {
                 width: usesOpenedVisualState ? openedWidth : closedPill.resolvedWidth,
                 height: usesOpenedVisualState ? openedHeight : closedNotchHeight
             )
-            .animation(
-                .timingCurve(0.4, 0, 0.2, 1, duration: 0.45),
-                value: closedPill.resolvedWidth
-            )
+            // The status glow, behind the fill. It takes no hits and does not
+            // change the layout. A shadow fills the inside of its path and only
+            // the black hides it, so the carrier is inset by the shape's top
+            // radius: the glow follows the visible body, never the concave
+            // flares or the strips beside it.
+            .background {
+                Color.clear
+                    .islandHalo(model.islandHaloState, cornerRadius: haloCornerRadius)
+                    .padding(.horizontal, haloHorizontalInset)
+            }
+            // After the glow, so the fill and the glow resize in one
+            // transaction when the pill's width changes.
+            .motionAnimation(Motion.morph, value: closedPill.resolvedWidth)
+    }
+
+    /// How far the visible body sits inside the surface frame on each side:
+    /// the shape's current top radius on the notch profile (its concave
+    /// flares live in that band), nothing on the flat top bar. Read from the
+    /// same shape the fill draws, and animated in its transaction, so the
+    /// glow follows the morph.
+    private var haloHorizontalInset: CGFloat {
+        let shape = transitionSurfaceShape
+        return shape.topProfile == .notch ? shape.topCornerRadius : 0
     }
 
     private var transitionSurfaceShape: OpenedIslandSurfaceShape {
-        OpenedIslandSurfaceShape(
+        let metrics = openedMetrics
+        return OpenedIslandSurfaceShape(
             topProfile: usesNotchAwareOpenedHeader ? .notch : .topBar,
-            topCornerRadius: usesOpenedVisualState ? NotchShape.openedTopRadius : 0,
-            bottomCornerRadius: usesOpenedVisualState ? NotchShape.openedBottomRadius : closedNotchHeight / 2
+            topCornerRadius: usesOpenedVisualState ? metrics.topRadius : 0,
+            bottomCornerRadius: usesOpenedVisualState ? metrics.bottomRadius : closedNotchHeight / 2
+        )
+    }
+
+    /// Corner radius the status glow follows: the pill's while closed, the
+    /// opened shape's bottom corners while open.
+    private var haloCornerRadius: CGFloat {
+        usesOpenedVisualState ? openedMetrics.bottomRadius : closedNotchHeight / 2
+    }
+
+    /// How the opened content appears: it fades in a beat after the shape
+    /// starts to open, rising from slightly small and out of focus. The blur
+    /// is skipped when the motion policy says it costs too much, and Reduce
+    /// Motion keeps only the fade. Nothing animates on removal because the
+    /// content is already invisible when it unmounts.
+    private var openedContentReveal: AnyTransition {
+        var reveal = AnyTransition.opacity.combined(
+            with: .scale(scale: Self.revealStartScale, anchor: .top)
+        )
+        if SystemMotionMonitor.shared.policy.allowsBlur {
+            reveal = reveal.combined(
+                with: .modifier(
+                    active: OpenedRevealBlur(radius: Self.revealStartBlurRadius),
+                    identity: OpenedRevealBlur(radius: 0)
+                )
+            )
+        }
+        return .asymmetric(
+            insertion: Motion.transition(reveal, reduceMotion: reduceMotion)
+                .animation(Motion.resolved(Motion.openedContentReveal, reduceMotion: reduceMotion)),
+            removal: .identity
         )
     }
 
     @ViewBuilder
-    private func openedSurfaceContent(width openedWidth: CGFloat, height openedHeight: CGFloat) -> some View {
+    private func openedSurfaceContent(width openedWidth: CGFloat, layout: IslandOpenedLayout) -> some View {
         VStack(spacing: 0) {
             openedHeaderContent
-                .frame(height: closedNotchHeight)
+                .frame(height: layout.headerHeight)
 
             openedContent
                 .frame(width: openedWidth)
-                .frame(maxHeight: max(0, openedHeight - closedNotchHeight), alignment: .top)
+                .frame(maxHeight: layout.contentHeight, alignment: .top)
                 .clipped()
         }
-        .frame(width: openedWidth, height: openedHeight, alignment: .top)
+        .frame(width: openedWidth, height: layout.shapeHeight, alignment: .top)
+        // Nook file tray: a file dropped anywhere on the open island lands in
+        // the tray. The tray card is only the most obvious place to aim for.
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            model.nook.tray.handleDrop(providers)
+        }
     }
 
     // MARK: - Closed state
@@ -401,7 +517,21 @@ struct IslandPanelView: View {
     }
 
     private var openedHeaderButtons: some View {
-        HStack(spacing: Self.headerControlSpacing) {
+        // The icon follows the page on screen, so it does not flip while a
+        // closing island fades out.
+        let showsNookPage = presentation.showsNookPage
+
+        return HStack(spacing: Self.headerControlSpacing) {
+            headerIconButton(
+                systemName: showsNookPage ? "terminal.fill" : "music.note.house.fill",
+                tint: showsNookPage ? .white.opacity(0.62) : .mint.opacity(0.9),
+                accessibilityLabel: showsNookPage ? "Show agents" : "Show nook"
+            ) {
+                withMotion(Motion.pageSwitch) {
+                    model.toggleNookPage()
+                }
+            }
+
             headerIconButton(
                 systemName: model.isSoundMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
                 tint: model.isSoundMuted ? .orange.opacity(0.92) : .white.opacity(0.62)
@@ -433,6 +563,7 @@ struct IslandPanelView: View {
             Image(systemName: systemName)
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(tint)
+                .contentTransition(.symbolEffect(.replace))
                 .frame(width: Self.headerControlButtonSize, height: Self.headerControlButtonSize)
                 .background(.white.opacity(0.08), in: Circle())
         }
@@ -440,21 +571,62 @@ struct IslandPanelView: View {
         .accessibilityLabel(accessibilityLabel ?? systemName)
     }
 
+    /// The two pages of the opened island, agents and Nook. They swap in
+    /// place with a blur-replace. Everything is read from the presentation, so
+    /// a closing island keeps the page it was showing while it fades.
+    @ViewBuilder
     private var openedContent: some View {
+        let shown = presentation
+        // Blur-replace costs too much under Low Power or thermal pressure, so
+        // the page swap falls back to a fade there, as it does for Reduce Motion.
+        let pageTransition = Motion.transition(
+            SystemMotionMonitor.shared.policy.allowsBlur ? Motion.slotSwap : .opacity,
+            reduceMotion: reduceMotion
+        )
+
+        ZStack(alignment: .top) {
+            if shown.showsNookPage {
+                VStack(spacing: 0) {
+                    if shown.showsNookAgentsBar {
+                        NookAgentsBar(model: model)
+                            .padding(.horizontal, sessionListSideInset)
+                            .padding(.top, 8)
+                    }
+                    NookPanelView(model: model)
+                        .padding(.horizontal, sessionListSideInset)
+                }
+                .transition(pageTransition)
+            } else {
+                VStack(spacing: 0) {
+                    agentsContent
+                    if shown.showsNookCompactBar {
+                        NookCompactBar(model: model)
+                            .padding(.horizontal, sessionListSideInset)
+                            .padding(.top, 8)
+                            .padding(.bottom, 4)
+                    }
+                }
+                .transition(pageTransition)
+            }
+        }
+        .motionAnimation(Motion.pageSwitch, value: shown.showsNookPage)
+    }
+
+    private var agentsContent: some View {
         VStack(spacing: 8) {
             if !model.hasAnyInstalledAgent {
                 installHooksHint
-                    .padding(.horizontal, 18)
+                    .padding(.horizontal, sessionListSideInset)
                     .padding(.top, 8)
             }
 
             if model.shouldShowSessionBootstrapPlaceholder {
                 sessionBootstrapPlaceholder
-                    .padding(.horizontal, 18)
+                    .padding(.horizontal, sessionListSideInset)
                     .padding(.top, 8)
             } else if model.islandListSessions.isEmpty {
                 emptyState
-                    .padding(.horizontal, 18)
+                    .padding(.horizontal, sessionListSideInset)
                     .padding(.top, 8)
             } else {
                 sessionList
@@ -535,18 +707,33 @@ struct IslandPanelView: View {
     }
 
     private var actionableSessionID: String? {
-        model.islandSurface.sessionID
+        presentation.surface.sessionID
     }
 
     /// Whether the panel was opened by a notification (show only actionable session + footer).
+    /// Read from the presentation, so a card that is fading out keeps drawing itself.
     private var isNotificationMode: Bool {
-        model.notchOpenReason == .notification && actionableSessionID != nil
+        presentation.isNotificationMode
+    }
+
+    /// The session behind the notification card. It is looked up by the
+    /// presented surface's id, because model.activeIslandCardSession is already
+    /// nil while a closing card fades (the live surface has reset to the list).
+    private var notificationCardSession: AgentSession? {
+        // While the island is not open the card is fading out, and the session
+        // behind it may already have changed or gone (approve, answer and
+        // dismiss close the island and then update the session). The
+        // presentation holds the copy taken at the close.
+        if model.notchStatus != .opened, let captured = presentation.session {
+            return captured
+        }
+        return model.state.session(id: actionableSessionID)
     }
 
     private static let maxSessionListHeight: CGFloat = 560
 
     private var sessionListSideInset: CGFloat {
-        usesNotchAwareOpenedHeader ? 46 : 16
+        openedMetrics.sideInset
     }
 
     private var sessionList: some View {
@@ -596,12 +783,15 @@ struct IslandPanelView: View {
 
     @ViewBuilder
     private func sessionListContent(referenceDate: Date) -> some View {
+        let inNotificationMode = isNotificationMode
+        let actionableID = actionableSessionID
+
         VStack(spacing: 0) {
-            if !isNotificationMode {
+            if !inNotificationMode {
                 sessionPanelHeader(referenceDate: referenceDate)
             }
 
-            if isNotificationMode, let session = model.activeIslandCardSession {
+            if inNotificationMode, let session = notificationCardSession {
                 IslandSessionRow(
                     session: session,
                     referenceDate: referenceDate,
@@ -613,6 +803,7 @@ struct IslandPanelView: View {
                     presentation: .notification,
                     sideInset: sessionListSideInset,
                     lang: model.lang,
+                    tools: model.agentRowTools(for: session),
                     onApprove: { model.approvePermission(for: session.id, action: $0) },
                     onAnswer: { model.answerQuestion(for: session.id, answer: $0) },
                     onReply: TerminalTextSender.canReply(to: session, enabled: model.completionReplyEnabled)
@@ -649,11 +840,12 @@ struct IslandPanelView: View {
                                 referenceDate: referenceDate,
                                 stateIndicator: model.islandSessionStateIndicator,
                                 completedStaleThreshold: model.completedStaleThreshold.seconds,
-                                isActionable: session.phase.requiresAttention || session.id == actionableSessionID,
+                                isActionable: session.phase.requiresAttention || session.id == actionableID,
                                 useDrawingGroup: model.notchStatus == .opened,
                                 isInteractive: model.notchStatus == .opened,
                                 sideInset: sessionListSideInset,
                                 lang: model.lang,
+                                tools: model.agentRowTools(for: session),
                                 onApprove: { model.approvePermission(for: session.id, action: $0) },
                                 onAnswer: { model.answerQuestion(for: session.id, answer: $0) },
                                 onReply: TerminalTextSender.canReply(to: session, enabled: model.completionReplyEnabled)
@@ -666,7 +858,7 @@ struct IslandPanelView: View {
                 }
             }
 
-            if !isNotificationMode {
+            if !inNotificationMode {
                 sessionPanelFooter
             }
         }
@@ -687,6 +879,8 @@ struct IslandPanelView: View {
 
     @ViewBuilder
     private func sessionRowsContent(referenceDate: Date) -> some View {
+        let actionableID = actionableSessionID
+
         ForEach(model.islandSessionSections) { section in
             VStack(alignment: .leading, spacing: 0) {
                 if model.islandSessionGroup != .none {
@@ -699,11 +893,12 @@ struct IslandPanelView: View {
                         referenceDate: referenceDate,
                         stateIndicator: model.islandSessionStateIndicator,
                         completedStaleThreshold: model.completedStaleThreshold.seconds,
-                        isActionable: session.phase.requiresAttention || session.id == actionableSessionID,
+                        isActionable: session.phase.requiresAttention || session.id == actionableID,
                         useDrawingGroup: model.notchStatus == .opened,
                         isInteractive: model.notchStatus == .opened,
                         sideInset: sessionListSideInset,
                         lang: model.lang,
+                        tools: model.agentRowTools(for: session),
                         onApprove: { model.approvePermission(for: session.id, action: $0) },
                         onAnswer: { model.answerQuestion(for: session.id, answer: $0) },
                         onReply: TerminalTextSender.canReply(to: session, enabled: model.completionReplyEnabled)
@@ -1265,6 +1460,8 @@ private struct IslandSessionRow: View {
     var presentation: IslandSessionRowPresentation = .list
     var sideInset: CGFloat = 16
     var lang: LanguageManager = .shared
+    /// Shortcut keys, reply drafts and the "what it did" summary.
+    let tools: AgentRowTools
     var onApprove: ((ApprovalAction) -> Void)?
     var onAnswer: ((QuestionPromptResponse) -> Void)?
     var onReply: ((String) -> Void)?
@@ -1273,7 +1470,13 @@ private struct IslandSessionRow: View {
 
     @State private var isHighlighted = false
     @State private var detailOverride: Bool?
-    @State private var replyText: String = ""
+
+    /// The reply being typed to a finished session. It lives in the model,
+    /// which keeps it when the island closes.
+    private var replyText: String {
+        get { tools.completionDraft.wrappedValue }
+        nonmutating set { tools.completionDraft.wrappedValue = newValue }
+    }
 
     var body: some View {
         rowBody(referenceDate: referenceDate)
@@ -1322,7 +1525,7 @@ private struct IslandSessionRow: View {
         .opacity(isStaleCompleted ? 0.7 : 1)
         .modifier(ConditionalDrawingGroup(enabled: useDrawingGroup && !isActionable))
         .contentShape(Rectangle())
-        .animation(.easeInOut(duration: 0.15), value: isHighlighted)
+        .motionAnimation(Motion.hover, value: isHighlighted)
         .onTapGesture(perform: handlePrimaryTap)
         .onHover { hovering in
             guard isInteractive, allowsRowHoverHighlight else { return }
@@ -1330,6 +1533,19 @@ private struct IslandSessionRow: View {
         }
         .onChange(of: isInteractive) { _, interactive in
             if !interactive {
+                detailOverride = nil
+            }
+        }
+        // The agent shortcuts decide only a card whose buttons are on
+        // screen. The card says when they are folded away, and opens them
+        // again when a shortcut asks.
+        .onChange(of: detailOverride) { _, override in
+            guard presentation == .notification else { return }
+            tools.onApprovalFoldChanged(override == false)
+        }
+        .onChange(of: tools.unfoldRequests) { _, _ in
+            guard presentation == .notification, detailOverride == false else { return }
+            withMotion(Motion.selection) {
                 detailOverride = nil
             }
         }
@@ -1393,6 +1609,15 @@ private struct IslandSessionRow: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(activityColor(for: presence).opacity(0.94))
                 .lineLimit(2)
+                .padding(.leading, detailLeadingInset)
+                .padding(.trailing, sideInset)
+                .padding(.bottom, 10)
+        }
+
+        // What it did since the last prompt. An open completion card shows
+        // it inside the card.
+        if !shouldShowEmbeddedDetailBody, let summary = tools.turnSummary {
+            AgentTurnSummaryView(summary: summary, lang: lang, style: .row)
                 .padding(.leading, detailLeadingInset)
                 .padding(.trailing, sideInset)
                 .padding(.bottom, 10)
@@ -1672,6 +1897,7 @@ private struct IslandSessionRow: View {
     private var completionHasExpandedBody: Bool {
         !completionMessageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || onReply != nil
+            || tools.turnSummary != nil
     }
 
     @ViewBuilder
@@ -1740,24 +1966,99 @@ private struct IslandSessionRow: View {
                     .fill(Color.white.opacity(0.045))
             )
 
-            HStack(spacing: 8) {
-                Button(session.permissionRequest?.secondaryActionTitle ?? lang.t("approval.deny")) { onApprove?(.deny) }
-                    .buttonStyle(IslandActionButtonStyle(kind: .secondary, expands: true))
-                Button(session.permissionRequest?.primaryActionTitle ?? lang.t("approval.allowOnce")) { onApprove?(.allowOnce) }
-                    .buttonStyle(IslandActionButtonStyle(kind: .warning, expands: true))
-                if let toolName = session.permissionRequest?.toolName {
-                    Button(lang.t("approval.alwaysAllow", toolName)) {
-                        let rule = ClaudePermissionRuleValue(toolName: toolName)
-                        let update = ClaudePermissionUpdate.addRules(
-                            destination: .session,
-                            rules: [rule],
-                            behavior: .allow
-                        )
-                        onApprove?(.allowWithUpdates([update]))
-                    }
-                    .buttonStyle(IslandActionButtonStyle(kind: .primary, expands: true))
-                }
+            switch tools.approvalRoute {
+            case .agentOnly:
+                approvalAgentOnlyBody
+            case .denyOnly:
+                approvalDenyOnlyBody
+            case .bridge:
+                approvalButtons
             }
+        }
+    }
+
+    /// For a request the agent wants approved where it runs: where to
+    /// approve it, a way there, and the one answer the island can send.
+    @ViewBuilder
+    private var approvalDenyOnlyBody: some View {
+        Text(lang.t("approval.denyOnly", session.tool.displayName))
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.white.opacity(0.78))
+            .fixedSize(horizontal: false, vertical: true)
+
+        if tools.approvalWasNotDelivered {
+            Text(lang.t("approval.notDelivered", session.tool.displayName))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(actionableStatusTint)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+
+        HStack(spacing: 8) {
+            Button(session.permissionRequest?.secondaryActionTitle ?? lang.t("approval.deny")) { onApprove?(.deny) }
+                .buttonStyle(IslandActionButtonStyle(kind: .secondary, expands: true))
+            Button(lang.t("question.goToTerminal")) { onJump() }
+                .buttonStyle(IslandActionButtonStyle(kind: .primary, expands: true))
+        }
+
+        if let hint = tools.hotkeyHint {
+            AgentHotkeyHintLine(
+                hint: hint,
+                approveTitle: session.permissionRequest?.primaryActionTitle ?? lang.t("approval.allowOnce"),
+                denyTitle: session.permissionRequest?.secondaryActionTitle ?? lang.t("approval.deny")
+            )
+        }
+    }
+
+    /// For a request the island has no way to answer: where to answer it,
+    /// in place of buttons that would do nothing.
+    private var approvalAgentOnlyBody: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(lang.t("approval.agentOnly", session.tool.displayName))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.white.opacity(0.78))
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button(lang.t("question.goToTerminal")) {
+                onJump()
+            }
+            .buttonStyle(IslandActionButtonStyle(kind: .primary, expands: true))
+        }
+    }
+
+    @ViewBuilder
+    private var approvalButtons: some View {
+        if tools.approvalWasNotDelivered {
+            Text(lang.t("approval.notDelivered", session.tool.displayName))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(actionableStatusTint)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+
+        HStack(spacing: 8) {
+            Button(session.permissionRequest?.secondaryActionTitle ?? lang.t("approval.deny")) { onApprove?(.deny) }
+                .buttonStyle(IslandActionButtonStyle(kind: .secondary, expands: true))
+            Button(session.permissionRequest?.primaryActionTitle ?? lang.t("approval.allowOnce")) { onApprove?(.allowOnce) }
+                .buttonStyle(IslandActionButtonStyle(kind: .warning, expands: true))
+            if let toolName = session.permissionRequest?.toolName {
+                Button(lang.t("approval.alwaysAllow", toolName)) {
+                    let rule = ClaudePermissionRuleValue(toolName: toolName)
+                    let update = ClaudePermissionUpdate.addRules(
+                        destination: .session,
+                        rules: [rule],
+                        behavior: .allow
+                    )
+                    onApprove?(.allowWithUpdates([update]))
+                }
+                .buttonStyle(IslandActionButtonStyle(kind: .primary, expands: true))
+            }
+        }
+
+        if let hint = tools.hotkeyHint {
+            AgentHotkeyHintLine(
+                hint: hint,
+                approveTitle: session.permissionRequest?.primaryActionTitle ?? lang.t("approval.allowOnce"),
+                denyTitle: session.permissionRequest?.secondaryActionTitle ?? lang.t("approval.deny")
+            )
         }
     }
 
@@ -1767,6 +2068,11 @@ private struct IslandSessionRow: View {
         StructuredQuestionPromptView(
             prompt: session.questionPrompt,
             lang: lang,
+            route: tools.questionRoute,
+            agentName: session.tool.displayName,
+            draft: tools.questionDraft,
+            onEditingChanged: tools.onReplyEditingChanged,
+            onJump: onJump,
             onAnswer: { onAnswer?($0) }
         )
     }
@@ -1775,10 +2081,19 @@ private struct IslandSessionRow: View {
 
     private var completionActionBody: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if let summary = tools.turnSummary {
+                AgentTurnSummaryView(summary: summary, lang: lang, style: .card)
+
+                Rectangle()
+                    .fill(.white.opacity(completionDividerOpacity))
+                    .frame(height: 1)
+            }
+
             if !completionMessageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 AutoHeightScrollView(maxHeight: 160) {
                     Markdown(completionMessageText)
                         .markdownTheme(.completionCard)
+                        .markdownWithoutRemoteImages()
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 9)
@@ -1838,8 +2153,9 @@ private struct IslandSessionRow: View {
         HStack(spacing: 8) {
             ReplyTextField(
                 placeholder: lang.t("completion.replyPlaceholder", session.completionReplyRecipientName),
-                text: $replyText,
-                onSubmit: { submitReply() }
+                text: tools.completionDraft,
+                onSubmit: { submitReply() },
+                onEditingChanged: tools.onReplyEditingChanged
             )
             .frame(height: 32)
 
@@ -1861,6 +2177,8 @@ private struct IslandSessionRow: View {
     private func submitReply() {
         let text = replyText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        // Cleared at once, which keeps a second Enter from sending it
+        // twice. The model puts it back if the send fails.
         replyText = ""
         onReply?(text)
     }
@@ -2045,7 +2363,7 @@ private struct IslandSessionRow: View {
     private func detailToggleButton(isOpen: Bool) -> some View {
         Button {
             guard isInteractive else { return }
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withMotion(Motion.selection) {
                 detailOverride = !isOpen
             }
         } label: {
@@ -2120,12 +2438,32 @@ private struct IslandSessionRow: View {
 private struct StructuredQuestionPromptView: View {
     let prompt: QuestionPrompt?
     var lang: LanguageManager = .shared
+    /// Whether an answer given here reaches the agent at all.
+    var route: AgentQuestionReplyRoute = .bridge
+    var agentName: String = ""
+    /// What is picked and typed and not sent yet. It lives in the model,
+    /// which keeps it when the island closes.
+    @Binding var draft: AgentQuestionDraft
+    var onEditingChanged: ((Bool) -> Void)?
+    var onJump: (() -> Void)?
     let onAnswer: (QuestionPromptResponse) -> Void
 
-    @State private var selections: [String: Set<String>] = [:]
-    @State private var freeformTexts: [String: String] = [:]
-    @State private var typedReply: String = ""
     @State private var hoveredOptionKey: String?
+
+    private var selections: [String: Set<String>] {
+        get { draft.selections }
+        nonmutating set { draft.selections = newValue }
+    }
+
+    private var freeformTexts: [String: String] {
+        get { draft.freeformTexts }
+        nonmutating set { draft.freeformTexts = newValue }
+    }
+
+    private var typedReply: String {
+        get { draft.typedReply }
+        nonmutating set { draft.typedReply = newValue }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -2136,7 +2474,9 @@ private struct StructuredQuestionPromptView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if structuredQuestions.isEmpty {
+            if route == .terminalOnly {
+                terminalOnlyBody
+            } else if structuredQuestions.isEmpty {
                 freeformAnswerBody
             } else {
                 VStack(alignment: .leading, spacing: 8) {
@@ -2264,7 +2604,7 @@ private struct StructuredQuestionPromptView: View {
                 .strokeBorder(optionStrokeColor(isSelected: isSelected, isHovered: isHovered))
         )
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.12)) {
+            withMotion(Motion.hover) {
                 hoveredOptionKey = hovering ? key : (hoveredOptionKey == key ? nil : hoveredOptionKey)
             }
         }
@@ -2283,11 +2623,32 @@ private struct StructuredQuestionPromptView: View {
                 if hasCompleteSelection {
                     onAnswer(QuestionPromptResponse(answers: answerMap))
                 }
-            }
+            },
+            // Picking the option is asking to type: the caret goes there.
+            focusesOnAppear: true,
+            onEditingChanged: onEditingChanged
         )
         .frame(height: 22)
         .padding(.vertical, 6)
         .padding(.horizontal, 10)
+    }
+
+    /// For an agent that reads its answer in the terminal and nowhere
+    /// else. A field here would take the text and deliver it to no one.
+    private var terminalOnlyBody: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(lang.t("question.terminalOnly", agentName))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.white.opacity(0.78))
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let onJump {
+                Button(lang.t("question.goToTerminal")) {
+                    onJump()
+                }
+                .buttonStyle(IslandActionButtonStyle(kind: .primary, expands: true))
+            }
+        }
     }
 
     private var freeformAnswerBody: some View {
@@ -2308,12 +2669,13 @@ private struct StructuredQuestionPromptView: View {
             HStack(spacing: 6) {
                 ReplyTextField(
                     placeholder: lang.t("question.otherPlaceholder"),
-                    text: $typedReply,
+                    text: $draft.typedReply,
                     onSubmit: {
                         if canSubmit {
                             submitAnswer()
                         }
-                    }
+                    },
+                    onEditingChanged: onEditingChanged
                 )
                 .frame(height: 30)
             }
@@ -2528,10 +2890,17 @@ private struct StructuredQuestionPromptView: View {
 /// NSTextField wrapper that fires `onSubmit` only when the IME composition
 /// is finished — pressing Enter during Chinese/Japanese IME composition
 /// confirms the candidate instead of submitting.
+///
+/// Escape gives the reply up: it clears the field and hands the keyboard
+/// back. `onEditingChanged` reports typing starting and ending, which the
+/// island uses to stay open under a reply in progress.
 private struct ReplyTextField: NSViewRepresentable {
     var placeholder: String
     @Binding var text: String
     var onSubmit: () -> Void
+    /// Take the keyboard as soon as the field is on screen.
+    var focusesOnAppear = false
+    var onEditingChanged: ((Bool) -> Void)?
 
     func makeNSView(context: Context) -> NSTextField {
         let field = NSTextField()
@@ -2550,6 +2919,13 @@ private struct ReplyTextField: NSViewRepresentable {
         field.delegate = context.coordinator
         field.cell?.lineBreakMode = .byTruncatingTail
         field.cell?.usesSingleLineMode = true
+        if focusesOnAppear {
+            // The field has no window until SwiftUI has placed it.
+            DispatchQueue.main.async { [weak field] in
+                guard let field, let window = field.window else { return }
+                window.makeFirstResponder(field)
+            }
+        }
         return field
     }
 
@@ -2557,20 +2933,52 @@ private struct ReplyTextField: NSViewRepresentable {
         if nsView.stringValue != text {
             nsView.stringValue = text
         }
+        context.coordinator.text = $text
         context.coordinator.onSubmit = onSubmit
+        context.coordinator.onEditingChanged = onEditingChanged
+    }
+
+    static func dismantleNSView(_ nsView: NSTextField, coordinator: Coordinator) {
+        // A field that leaves with the island never reports the end of its
+        // editing. Report it here, after this view update has finished.
+        DispatchQueue.main.async {
+            coordinator.setEditing(false)
+        }
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, onSubmit: onSubmit)
+        Coordinator(text: $text, onSubmit: onSubmit, onEditingChanged: onEditingChanged)
     }
 
     final class Coordinator: NSObject, NSTextFieldDelegate {
         var text: Binding<String>
         var onSubmit: () -> Void
+        var onEditingChanged: ((Bool) -> Void)?
+        private var isEditing = false
 
-        init(text: Binding<String>, onSubmit: @escaping () -> Void) {
+        init(
+            text: Binding<String>,
+            onSubmit: @escaping () -> Void,
+            onEditingChanged: ((Bool) -> Void)?
+        ) {
             self.text = text
             self.onSubmit = onSubmit
+            self.onEditingChanged = onEditingChanged
+        }
+
+        /// Reports a change once, however many callbacks say the same.
+        func setEditing(_ editing: Bool) {
+            guard editing != isEditing else { return }
+            isEditing = editing
+            onEditingChanged?(editing)
+        }
+
+        func controlTextDidBeginEditing(_ obj: Notification) {
+            setEditing(true)
+        }
+
+        func controlTextDidEndEditing(_ obj: Notification) {
+            setEditing(false)
         }
 
         func controlTextDidChange(_ obj: Notification) {
@@ -2584,6 +2992,14 @@ private struct ReplyTextField: NSViewRepresentable {
                 // a Chinese/Japanese candidate). Only submit when no marked text.
                 guard !textView.hasMarkedText() else { return false }
                 onSubmit()
+                return true
+            }
+            if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+                // Escape during IME composition belongs to the input method.
+                guard !textView.hasMarkedText() else { return false }
+                control.stringValue = ""
+                text.wrappedValue = ""
+                control.window?.makeFirstResponder(nil)
                 return true
             }
             return false

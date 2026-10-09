@@ -221,6 +221,20 @@ def main() -> None:
         if report.get("liveSessionCount") != 9 and not any("9" in value for value in text_values):
             fail("closed scenario is missing the live session count value")
 
+    elif scenario in ("closedApproval", "closedQuestion", "closedRunning", "closedIdle"):
+        # Closed-island halo scenarios (D16): the glow sits in the window's
+        # transparent insets, so only the closed state and frame are checked.
+        if notch_status != "closed":
+            fail(f"expected closed notch for {scenario}, got {notch_status!r}")
+        if island_surface != "sessionList":
+            fail(f"expected {scenario} to use sessionList surface, got {island_surface!r}")
+        require_frame_between(
+            overlay_frame,
+            width=(200, 620),
+            height=(35, 500),
+            context=f"{scenario} overlay frame",
+        )
+
     elif scenario == "sessionList":
         if notch_status != "opened":
             fail(f"expected opened notch for sessionList, got {notch_status!r}")

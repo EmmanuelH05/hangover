@@ -52,7 +52,10 @@ struct WatchNotificationRelayTests {
             session: session
         )
 
-        #expect(relay.pendingRequestCountForTests(sessionID: session.id) == 2)
+        // Only the newest stays answerable: the bridge keeps one waiting
+        // request per session and an answer acts on that one, which is why
+        // a device must not hold the older id.
+        #expect(relay.pendingRequestCountForTests(sessionID: session.id) == 1)
 
         relay.notifyEvent(
             .actionableStateResolved(

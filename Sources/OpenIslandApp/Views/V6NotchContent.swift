@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import OpenIslandCore
 
@@ -30,6 +31,9 @@ enum IslandRightSlotContent: Equatable {
 
 struct V6RightSlotView: View {
     let content: IslandRightSlotContent
+    /// False stops the waiting tile's pulse, for when the pill is hidden
+    /// behind the opened island.
+    var isLive: Bool = true
 
     var body: some View {
         switch content {
@@ -39,8 +43,9 @@ struct V6RightSlotView: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
                 .foregroundStyle(V6Palette.paper.opacity(0.72))
+                .contentTransition(.numericText())
         case .agents(let cells):
-            AgentsGridBody(cells: cells)
+            AgentsGridBody(cells: cells, isLive: isLive)
         }
     }
 
@@ -114,6 +119,7 @@ struct V6RightSlotView: View {
 /// idle = 22% alpha, waiting = opacity 0.35 ↔ 1 breathing pulse.
 private struct AgentsGridBody: View {
     let cells: [AgentGridCell]
+    var isLive: Bool = true
 
     var body: some View {
         let rowSizes = V6RightSlotView.balancedRows(cells.count)
@@ -124,7 +130,7 @@ private struct AgentsGridBody: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 HStack(spacing: geom.gap) {
                     ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
-                        AgentsGridTileView(cell: cell, size: geom.cell, radius: geom.radius)
+                        AgentsGridTileView(cell: cell, size: geom.cell, radius: geom.radius, isLive: isLive)
                     }
                 }
             }
@@ -137,6 +143,7 @@ private struct AgentsGridTileView: View {
     let cell: AgentGridCell
     let size: CGFloat
     let radius: CGFloat
+    let isLive: Bool
 
     var body: some View {
         switch cell {
@@ -151,7 +158,7 @@ private struct AgentsGridTileView: View {
                     .fill(color.opacity(0.22))
                     .frame(width: size, height: size)
             case .waiting:
-                AgentsGridWaitingTile(color: color, size: size, radius: radius)
+                AgentsGridWaitingTile(color: color, size: size, radius: radius, isLive: isLive)
             }
         case .overflow(let n):
             ZStack {
@@ -166,22 +173,122 @@ private struct AgentsGridTileView: View {
     }
 }
 
+/// The waiting tile. While live it breathes between `WaitingTilePulse.lowOpacity`
+/// and `highOpacity` on a Core Animation layer, so the pulse costs no
+/// main-thread frames. When not live (the pill is hidden behind the opened
+/// island) it draws one static opacity and nothing animates.
 private struct AgentsGridWaitingTile: View {
     let color: Color
     let size: CGFloat
     let radius: CGFloat
-    @State private var pulse = false
+    var isLive: Bool = true
 
     var body: some View {
-        RoundedRectangle(cornerRadius: radius, style: .continuous)
-            .fill(color)
-            .frame(width: size, height: size)
-            .opacity(pulse ? 1.0 : 0.35)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
-                    pulse = true
-                }
-            }
+        if isLive {
+            WaitingTilePulseView(color: color, radius: radius)
+                .frame(width: size, height: size)
+        } else {
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(color)
+                .opacity(WaitingTilePulse.restOpacity)
+                .frame(width: size, height: size)
+        }
+    }
+}
+
+/// The waiting tile's breathing pulse: an opacity loop on the shared cycle
+/// grid, so every tile pulses in step and re-adding one never restarts it.
+enum WaitingTilePulse {
+    static let lowOpacity: CGFloat = 0.35
+    static let highOpacity: CGFloat = 1.0
+    /// One half of the breathing cycle. Motion.swift has no name for a
+    /// continuous pulse, so the duration lives here.
+    static let halfPeriod: CFTimeInterval = 0.7
+    static let period: CFTimeInterval = halfPeriod * 2
+    /// What the tile shows while it is not live.
+    static let restOpacity: CGFloat = (lowOpacity + highOpacity) / 2
+    static let animationKey = "waiting.pulse"
+
+    /// The loop, starting on the cycle grid at or before `now` (in the
+    /// layer's own time).
+    static func animation(now: CFTimeInterval) -> CAKeyframeAnimation {
+        let animation = CAKeyframeAnimation(keyPath: "opacity")
+        animation.values = [lowOpacity, highOpacity, lowOpacity].map { Float($0) }
+        animation.keyTimes = [0, 0.5, 1]
+        animation.duration = period
+        animation.beginTime = UnifiedBars.alignedBeginTime(now: now, period: period, delay: 0)
+        animation.repeatCount = .infinity
+        animation.timingFunctions = [
+            CAMediaTimingFunction(name: .easeInEaseOut),
+            CAMediaTimingFunction(name: .easeInEaseOut),
+        ]
+        return animation
+    }
+}
+
+private struct WaitingTilePulseView: NSViewRepresentable {
+    let color: Color
+    let radius: CGFloat
+
+    func makeNSView(context: Context) -> WaitingTilePulseLayerView {
+        let view = WaitingTilePulseLayerView()
+        view.update(color: NSColor(color), radius: radius)
+        return view
+    }
+
+    func updateNSView(_ nsView: WaitingTilePulseLayerView, context: Context) {
+        nsView.update(color: NSColor(color), radius: radius)
+    }
+}
+
+/// A rounded square whose opacity loops by Core Animation. `update` is
+/// idempotent and never restarts a running loop.
+final class WaitingTilePulseLayerView: NSView {
+    private var appliedColor: CGColor?
+    private var appliedRadius: CGFloat?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer = CALayer()
+        layer?.cornerCurve = .continuous
+        layer?.opacity = Float(WaitingTilePulse.highOpacity)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func update(color: NSColor, radius: CGFloat) {
+        guard let layer else { return }
+        let cgColor = color.cgColor
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if appliedColor != cgColor {
+            appliedColor = cgColor
+            layer.backgroundColor = cgColor
+        }
+        if appliedRadius != radius {
+            appliedRadius = radius
+            layer.cornerRadius = radius
+        }
+        startPulseIfNeeded()
+        CATransaction.commit()
+    }
+
+    /// Core Animation can drop a layer's animations when its window goes away,
+    /// so the loop is checked again whenever the view lands in one.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil else { return }
+        startPulseIfNeeded()
+    }
+
+    private func startPulseIfNeeded() {
+        guard let layer, layer.animation(forKey: WaitingTilePulse.animationKey) == nil else { return }
+        let now = layer.convertTime(CACurrentMediaTime(), from: nil)
+        layer.add(WaitingTilePulse.animation(now: now), forKey: WaitingTilePulse.animationKey)
     }
 }
 
@@ -196,6 +303,7 @@ struct V6CenterLabelView: View {
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(V6Palette.paper)
+            .contentTransition(.interpolate)
     }
 
     static func intrinsicWidth(of text: String) -> CGFloat {
@@ -203,11 +311,90 @@ struct V6CenterLabelView: View {
     }
 }
 
+// MARK: - Closed-pill content identity
+
+/// What kind of thing fills a slot, ignoring its values. It is the slot's view
+/// identity: a different kind swaps (blur-replace), while the same kind with
+/// new values stays in place so numbers and colors morph instead.
+enum PillSlotIdentity: Hashable {
+    case bars
+    case artwork
+    case symbol(String)
+    case agentCount
+    case agentGrid
+    case date
+    case battery
+    case countdown
+    case hidden
+    case mediaWing
+    case textWing
+    case levelWing
+
+    init(rightSlot content: IslandRightSlotContent) {
+        switch content {
+        case .count: self = .agentCount
+        case .agents: self = .agentGrid
+        }
+    }
+
+    init(sideSlot content: NookSideSlotContent) {
+        switch content {
+        case .bars: self = .bars
+        case .agentSlot(let slot): self = Self(rightSlot: slot)
+        case .date: self = .date
+        case .battery: self = .battery
+        case .countdown: self = .countdown
+        case .hidden: self = .hidden
+        }
+    }
+
+    init(leading: NookClosedActivity.Leading) {
+        switch leading {
+        case .artwork: self = .artwork
+        case .symbol(let name, _): self = .symbol(name)
+        }
+    }
+
+    init(trailing: NookClosedActivity.Trailing) {
+        switch trailing {
+        case .media: self = .mediaWing
+        case .text: self = .textWing
+        case .level: self = .levelWing
+        }
+    }
+}
+
+/// Everything about the closed pill whose change should animate. The pill
+/// animates on this instead of on its width alone, so swapping two things of
+/// the same width (a date for a battery) morphs too.
+struct PillContentKey: Equatable {
+    /// The activity without the values that change on their own (play state,
+    /// GIF placement, artwork), which are not content swaps.
+    struct ActivityKey: Equatable {
+        var leading: PillSlotIdentity
+        var trailing: PillSlotIdentity?
+        var text: String?
+        var showsOnRight: Bool
+    }
+
+    var label: String?
+    var rightSlot: IslandRightSlotContent?
+    var mode: UnifiedBars.Mode
+    var activity: ActivityKey?
+    var leftSlot: NookSideSlotContent?
+    var rightExtra: NookSideSlotContent?
+    var layout: V6ClosedLayout
+}
+
 // MARK: - Closed-pill layouts
 
 /// The canonical v6 closed-island pill rendered inside a fixed-height frame.
 /// Pure view — takes all parameters explicitly so it can be reused for the
 /// live settings preview and the real island.
+///
+/// One body serves both layouts. The layout only changes the fill, the edge
+/// padding, whether the label shows and how wide the trailing wing is, so
+/// switching layouts morphs the width instead of cutting.
 struct V6ClosedPill: View {
     var mode: UnifiedBars.Mode
     var label: String?          // suppressed automatically in MacBook layout
@@ -222,12 +409,65 @@ struct V6ClosedPill: View {
     /// width that fits just the glyph.
     var minWidth: CGFloat = 70
 
-    var body: some View {
-        switch layout {
-        case .external: externalBody
-        case .macbook:  macbookBody
-        }
+    /// Nook: what the two wings show instead of the glyph and right slot
+    /// (album art + GIF while music plays, symbol + text for a timer or a
+    /// transient notice).
+    var activity: NookClosedActivity? = nil
+    /// Whether an agent is waiting on the user. Activities that
+    /// `yieldsToAgents` hand the right wing back to the agent slot then.
+    var agentsNeedAttention: Bool = false
+    /// Status dot drawn on the album art so agent activity stays visible
+    /// while music plays.
+    var agentStatusTint: Color? = nil
+    /// Nook: what replaces the agent bars on the left while nothing else
+    /// claims it. A waiting agent always gets the bars back.
+    var leftSlot: NookSideSlotContent? = nil
+    /// Nook: the same for the right side. The island's own right slot
+    /// comes back while an agent waits.
+    var rightExtra: NookSideSlotContent? = nil
+    /// False omits the fill, for when the island draws one surface behind the
+    /// pill (the closed pill morphs into the opened island).
+    var drawsBackground: Bool = true
+    /// False freezes the visualizer, the GIF and the bars, for when the pill
+    /// is hidden behind the opened island.
+    var isLive: Bool = true
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The right-side extra, unless an agent is waiting and has a slot to show.
+    private var shownRightExtra: NookSideSlotContent? {
+        guard let rightExtra, !showsActivityOnRight else { return nil }
+        if agentsNeedAttention, rightSlot != nil { return nil }
+        return rightExtra
     }
+
+    private var shownLeftSlot: NookSideSlotContent? {
+        guard activity == nil, mode != .waiting else { return nil }
+        return leftSlot
+    }
+
+    /// The label only exists in the external layout.
+    private var shownLabel: String? {
+        layout == .external ? label : nil
+    }
+
+    private var leadingWidth: CGFloat {
+        shownLeftSlot.map { NookSideSlotView.width(of: $0) } ?? 24
+    }
+
+    static let plainWingWidth: CGFloat = 44
+    static let mediaWingWidth: CGFloat = 50
+    /// Horizontal inset while an activity shows; tighter than the plain pad
+    /// so the art and GIF sit close to the physical notch.
+    private static let activityPad: CGFloat = 12
+    private static let externalMediaSideWidth: CGFloat = 52
+
+    private var showsActivityOnRight: Bool {
+        guard let activity, activity.trailing != nil else { return false }
+        return !(agentsNeedAttention && activity.yieldsToAgents && rightSlot != nil)
+    }
+
+    private var albumArtSize: CGFloat { max(16, height - 10) }
 
     // Horizontal edge padding is identical left/right — canonical v6 pill
     // has r = h/2 semicircular bottoms, so edge inset = r keeps content
@@ -241,94 +481,225 @@ struct V6ClosedPill: View {
     var resolvedWidth: CGFloat {
         switch layout {
         case .external:
-            let glyphWidth: CGFloat = 24
+            let glyphWidth = leadingWidth
             let labelWidth = label.map { V6CenterLabelView.intrinsicWidth(of: $0) } ?? 0
             let rightWidth = rightSlot.map { V6RightSlotView.intrinsicWidth(of: $0) } ?? 0
             let labelBlock = label == nil ? 0 : 6 + labelWidth
-            let rightBlock = rightSlot == nil ? 0 : Self.innerGap + rightWidth
+            let rightBlock: CGFloat
+            if showsActivityOnRight {
+                rightBlock = Self.innerGap + Self.externalMediaSideWidth
+            } else if let extra = shownRightExtra {
+                rightBlock = Self.innerGap + NookSideSlotView.width(of: extra)
+            } else {
+                rightBlock = rightSlot == nil ? 0 : Self.innerGap + rightWidth
+            }
             return max(minWidth, pad * 2 + glyphWidth + labelBlock + rightBlock)
         case .macbook:
-            return 44 + physicalNotchWidth + 44
+            let wing = activity == nil ? Self.plainWingWidth : Self.mediaWingWidth
+            return wing + physicalNotchWidth + wing
         }
     }
 
-    // MARK: External (fluid)
+    // MARK: Per-layout values
 
-    private var externalBody: some View {
-        let glyphW: CGFloat = 24
+    /// External pads by `pad` always; the MacBook pill tightens to
+    /// `activityPad` while an activity shows.
+    private var horizontalPadding: CGFloat {
+        layout == .macbook && activity != nil ? Self.activityPad : pad
+    }
 
-        return ZStack {
-            V6ClosedPillShape()
-                .fill(V6Palette.ink)
+    /// The MacBook pill spans the whole notch, so its two sides can touch the
+    /// spacer; the external pill keeps `innerGap` between them.
+    private var spacerMinLength: CGFloat {
+        layout == .macbook ? 0 : Self.innerGap
+    }
 
-            HStack(spacing: 0) {
-                UnifiedBars(mode: mode, size: 24)
-                    .frame(width: glyphW, height: 24)
-
-                if let label {
-                    V6CenterLabelView(text: label)
-                        .padding(.leading, 6)
-                        .transition(.opacity.combined(with: .move(edge: .leading)))
-                }
-
-                Spacer(minLength: Self.innerGap)
-
-                if let rightSlot {
-                    V6RightSlotView(content: rightSlot)
-                        .transition(.opacity.combined(with: .move(edge: .trailing)))
-                }
-            }
-            .padding(.horizontal, pad)
+    private var trailingWingWidth: CGFloat {
+        switch layout {
+        case .external: Self.externalMediaSideWidth
+        case .macbook: Self.mediaWingWidth - Self.activityPad - 2
         }
-        .frame(width: resolvedWidth, height: height)
-        .animation(
-            .timingCurve(0.4, 0, 0.2, 1, duration: 0.45),
-            value: AnyHashable([
-                AnyHashable(label ?? ""),
-                AnyHashable(rightSlot.map(RightSlotKey.init) ?? .none),
-                AnyHashable(mode),
-            ])
+    }
+
+    // MARK: Content
+
+    /// What the right side shows, in priority order.
+    private enum RightContent {
+        case wing(NookClosedActivity.Trailing)
+        case extra(NookSideSlotContent)
+        case agents(IslandRightSlotContent)
+
+        var identity: PillSlotIdentity {
+            switch self {
+            case .wing(let trailing): PillSlotIdentity(trailing: trailing)
+            case .extra(let extra): PillSlotIdentity(sideSlot: extra)
+            case .agents(let slot): PillSlotIdentity(rightSlot: slot)
+            }
+        }
+    }
+
+    private var rightContent: RightContent? {
+        if showsActivityOnRight, let trailing = activity?.trailing { return .wing(trailing) }
+        if let extra = shownRightExtra { return .extra(extra) }
+        if let rightSlot { return .agents(rightSlot) }
+        return nil
+    }
+
+    private var leadingIdentity: PillSlotIdentity {
+        if let activity { return PillSlotIdentity(leading: activity.leading) }
+        if let leftSlot = shownLeftSlot { return PillSlotIdentity(sideSlot: leftSlot) }
+        return .bars
+    }
+
+    /// Everything the pill animates on. Two pills with the same width but
+    /// different content have different keys.
+    var contentKey: PillContentKey {
+        PillContentKey(
+            label: shownLabel,
+            rightSlot: rightSlot,
+            mode: mode,
+            activity: activity.map { activity in
+                let text: String?
+                switch activity.trailing {
+                case .text(let value): text = value
+                case .level(let percent, _): text = "\(percent)"
+                case .media, nil: text = nil
+                }
+                return PillContentKey.ActivityKey(
+                    leading: PillSlotIdentity(leading: activity.leading),
+                    trailing: activity.trailing.map { PillSlotIdentity(trailing: $0) },
+                    text: text,
+                    showsOnRight: showsActivityOnRight
+                )
+            },
+            leftSlot: shownLeftSlot,
+            rightExtra: shownRightExtra,
+            layout: layout
         )
     }
 
-    // MARK: MacBook (outer width locked)
+    /// What the width and the fill animate on.
+    private struct ShapeKey: Equatable {
+        var width: CGFloat
+        var layout: V6ClosedLayout
+    }
 
-    private var macbookBody: some View {
-        return ZStack {
-            V6ClosedPillShape()
-                .fill(V6Palette.ink)
+    /// Slot swaps blur-replace, except under Reduce Motion or a motion
+    /// policy that has dropped blur (Low Power, thermal), which only fade.
+    private var slotTransition: AnyTransition {
+        PillSlotSwap.resolve(
+            reduceMotion: reduceMotion,
+            allowsBlur: SystemMotionMonitor.shared.policy.allowsBlur
+        ).transition
+    }
+
+    private var labelTransition: AnyTransition {
+        Motion.transition(.opacity.combined(with: .move(edge: .leading)), reduceMotion: reduceMotion)
+    }
+
+    var body: some View {
+        ZStack {
+            if drawsBackground {
+                V6ClosedPillShape()
+                    .fill(V6Palette.surface(for: layout))
+            }
 
             HStack(spacing: 0) {
-                UnifiedBars(mode: mode, size: 24)
-                    .frame(width: 24, height: 24)
+                leadingGlyph
+                    .frame(width: leadingWidth, height: 24)
+                    .id(leadingIdentity)
+                    .transition(slotTransition)
 
-                Spacer(minLength: 0)
+                if let shownLabel {
+                    V6CenterLabelView(text: shownLabel)
+                        .padding(.leading, 6)
+                        .transition(labelTransition)
+                }
 
-                if let rightSlot {
-                    V6RightSlotView(content: rightSlot)
+                Spacer(minLength: spacerMinLength)
+
+                if let right = rightContent {
+                    rightView(right)
+                        .id(right.identity)
+                        .transition(slotTransition)
                 }
             }
-            .padding(.horizontal, pad)
+            .padding(.horizontal, horizontalPadding)
+            .motionAnimation(Motion.contentSwap, value: contentKey)
         }
         .frame(width: resolvedWidth, height: height)
+        // Moving content never draws outside the pill.
+        .clipShape(V6ClosedPillShape())
+        .motionAnimation(Motion.morph, value: ShapeKey(width: resolvedWidth, layout: layout))
+    }
+
+    /// Album art or a symbol while the Nook has something to show, the
+    /// agent glyph otherwise.
+    @ViewBuilder
+    private var leadingGlyph: some View {
+        if let activity {
+            NookLeadingWingView(leading: activity.leading, size: albumArtSize, statusTint: agentStatusTint)
+        } else if let leftSlot = shownLeftSlot {
+            NookSideSlotView(content: leftSlot, size: 24, isLive: isLive)
+        } else {
+            UnifiedBars(mode: mode, size: 24, isPaused: !isLive)
+        }
+    }
+
+    @ViewBuilder
+    private func rightView(_ content: RightContent) -> some View {
+        switch content {
+        case .wing(let trailing):
+            NookTrailingWingView(trailing: trailing, height: height - 6, width: trailingWingWidth, isLive: isLive)
+        case .extra(let extra):
+            NookSideSlotView(content: extra, size: 24, isLive: isLive)
+        case .agents(let slot):
+            V6RightSlotView(content: slot, isLive: isLive)
+        }
+    }
+}
+
+/// How a slot swap looks. The choice is a pure function so a test can check it.
+enum PillSlotSwap: Equatable {
+    case blurReplace
+    case fade
+
+    static func resolve(reduceMotion: Bool, allowsBlur: Bool) -> PillSlotSwap {
+        reduceMotion || !allowsBlur ? .fade : .blurReplace
+    }
+
+    var transition: AnyTransition {
+        switch self {
+        case .blurReplace: Motion.slotSwap
+        case .fade: .opacity
+        }
+    }
+}
+
+/// Two pills are equal when every input is. `NookClosedActivity` compares
+/// artwork by identity, as it already does, so a new track is a change.
+extension V6ClosedPill: Equatable {
+    nonisolated static func == (lhs: V6ClosedPill, rhs: V6ClosedPill) -> Bool {
+        lhs.mode == rhs.mode
+            && lhs.label == rhs.label
+            && lhs.rightSlot == rhs.rightSlot
+            && lhs.layout == rhs.layout
+            && lhs.height == rhs.height
+            && lhs.physicalNotchWidth == rhs.physicalNotchWidth
+            && lhs.minWidth == rhs.minWidth
+            && lhs.activity == rhs.activity
+            && lhs.agentsNeedAttention == rhs.agentsNeedAttention
+            && lhs.agentStatusTint == rhs.agentStatusTint
+            && lhs.leftSlot == rhs.leftSlot
+            && lhs.rightExtra == rhs.rightExtra
+            && lhs.drawsBackground == rhs.drawsBackground
+            && lhs.isLive == rhs.isLive
     }
 }
 
 enum V6ClosedLayout: Equatable {
     case external
     case macbook
-}
-
-private enum RightSlotKey: Hashable {
-    case count(Int)
-    case agents(Int)
-
-    init(_ content: IslandRightSlotContent) {
-        switch content {
-        case .count(let n):    self = .count(n)
-        case .agents(let cs):  self = .agents(cs.count)
-        }
-    }
 }
 
 // MARK: - Settings-tab live preview
@@ -341,7 +712,15 @@ struct IslandPreviewPill: View {
     let rightSlot: IslandRightSlotContent?
     let layout: V6ClosedLayout
     let physicalNotchWidth: CGFloat
-    let now: Date
+    /// Kept so existing call sites compile. The pill no longer reads it, and
+    /// it does not take part in equality.
+    var now: Date? = nil
+    /// Nook: lets the preview show the closed island while music plays.
+    var activity: NookClosedActivity? = nil
+    var agentsNeedAttention: Bool = false
+    var agentStatusTint: Color? = nil
+    var leftSlot: NookSideSlotContent? = nil
+    var rightExtra: NookSideSlotContent? = nil
 
     var body: some View {
         V6ClosedPill(
@@ -349,8 +728,28 @@ struct IslandPreviewPill: View {
             label: label,
             rightSlot: rightSlot,
             layout: layout,
-            physicalNotchWidth: physicalNotchWidth
+            physicalNotchWidth: physicalNotchWidth,
+            activity: activity,
+            agentsNeedAttention: agentsNeedAttention,
+            agentStatusTint: agentStatusTint,
+            leftSlot: leftSlot,
+            rightExtra: rightExtra
         )
         .frame(maxWidth: .infinity, alignment: .center)
+    }
+}
+
+extension IslandPreviewPill: Equatable {
+    nonisolated static func == (lhs: IslandPreviewPill, rhs: IslandPreviewPill) -> Bool {
+        lhs.mode == rhs.mode
+            && lhs.label == rhs.label
+            && lhs.rightSlot == rhs.rightSlot
+            && lhs.layout == rhs.layout
+            && lhs.physicalNotchWidth == rhs.physicalNotchWidth
+            && lhs.activity == rhs.activity
+            && lhs.agentsNeedAttention == rhs.agentsNeedAttention
+            && lhs.agentStatusTint == rhs.agentStatusTint
+            && lhs.leftSlot == rhs.leftSlot
+            && lhs.rightExtra == rhs.rightExtra
     }
 }

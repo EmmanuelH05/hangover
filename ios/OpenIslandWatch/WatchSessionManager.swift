@@ -118,7 +118,9 @@ final class WatchSessionManager: NSObject, ObservableObject {
             content.title = p.agentTool
             content.subtitle = p.title
             content.body = p.summary
-            content.categoryIdentifier = "PERMISSION_REQUEST"
+            content.categoryIdentifier = p.requiresTerminalApproval == true
+                ? "PERMISSION_REQUEST_DENY_ONLY"
+                : "PERMISSION_REQUEST"
             content.userInfo = ["requestID": requestID]
 
         case .question(let q):

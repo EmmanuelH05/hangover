@@ -3,14 +3,14 @@
 set -euo pipefail
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
-    echo "Open Island packaging runs only on macOS." >&2
+    echo "Hangover packaging runs only on macOS." >&2
     exit 1
 fi
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-app_name="${OPEN_ISLAND_APP_NAME:-Open Island}"
-bundle_identifier="${OPEN_ISLAND_BUNDLE_ID:-app.openisland.dev}"
-version="${OPEN_ISLAND_VERSION:-0.1.0}"
+app_name="${OPEN_ISLAND_APP_NAME:-Hangover}"
+bundle_identifier="${OPEN_ISLAND_BUNDLE_ID:-com.emmanuelhernandez.hangover}"
+version="${OPEN_ISLAND_VERSION:-1.0.0}"
 build_number="${OPEN_ISLAND_BUILD_NUMBER:-$(git -C "$repo_root" rev-list --count HEAD 2>/dev/null || echo 1)}"
 package_root="${OPEN_ISLAND_PACKAGE_ROOT:-$repo_root/output/package}"
 bundle_dir="${OPEN_ISLAND_BUNDLE_DIR:-$package_root/$app_name.app}"
@@ -73,6 +73,23 @@ else
     echo "WARNING: Sparkle.framework not found at $sparkle_framework — run 'swift package resolve' first." >&2
 fi
 
+# MediaRemote adapter (now playing): built from the vendored sources and
+# loaded by /usr/bin/perl at runtime. Without it the packaged app has no
+# now playing data. The adapter script builds for arm64 only.
+#
+# The perl script goes in Resources, where it is sealed as a plain file. In
+# Helpers it would count as code and carry its signature in extended
+# attributes, which a plain unzip drops.
+zsh "$repo_root/scripts/build-mediaremote-adapter.sh" >/dev/null
+adapter_dir="$repo_root/.build/mediaremote-adapter"
+cp -R "$adapter_dir/MediaRemoteAdapter.framework" "$bundle_dir/Contents/Frameworks/"
+cp "$adapter_dir/mediaremote-adapter.pl" "$bundle_dir/Contents/Resources/mediaremote-adapter.pl"
+
+# The GNU GPL asks that everyone given the app is also given the license.
+# The About pane opens this copy, and the notice names the upstream project.
+cp "$repo_root/LICENSE" "$bundle_dir/Contents/Resources/LICENSE.txt"
+cp "$repo_root/NOTICE.md" "$bundle_dir/Contents/Resources/NOTICE.md"
+
 # Copy SPM resource bundle into Contents/Resources/ so the .app root stays
 # clean for code signing (no unsealed contents). Our custom
 # resource_bundle_accessor.swift searches Bundle.main.resourceURL first.
@@ -112,6 +129,17 @@ cat > "$bundle_dir/Contents/Info.plist" <<EOF
     <string>$app_name</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>$bundle_identifier.links</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>hangover</string>
+            </array>
+        </dict>
+    </array>
     <key>CFBundleShortVersionString</key>
     <string>$version</string>
     <key>CFBundleVersion</key>
@@ -119,15 +147,23 @@ cat > "$bundle_dir/Contents/Info.plist" <<EOF
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Open Island needs automation access to focus Terminal and iTerm sessions for jump-back.</string>
+    <string>Hangover uses automation to find your agent's terminal window, jump back to it and send your reply there.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>The Nook mirror shows your camera inside the notch, and its photo booth takes pictures only when you start it.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>The Nook shows your upcoming calendar events.</string>
+    <key>NSRemindersFullAccessUsageDescription</key>
+    <string>The Nook todo list reads and writes your Reminders.</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Hangover lets a paired iPhone or Apple Watch on your network see and answer agent requests, only while you have that turned on.</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_openisland._tcp</string>
+    </array>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
-    <key>SUFeedURL</key>
-    <string>https://raw.githubusercontent.com/Octane0411/open-vibe-island/main/appcast.xml</string>
-    <key>SUPublicEDKey</key>
-    <string>${OPEN_ISLAND_EDDSA_PUBLIC_KEY:-3IF8txq9RRNanzE2FNhyGRcwhslTucCcJHpTkpxcgBQ=}</string>
 </dict>
 </plist>
 EOF
@@ -142,6 +178,10 @@ for required in \
     "Contents/Helpers/OpenIslandSetup" \
     "Contents/Resources/OpenIsland.icns" \
     "Contents/Resources/OpenIsland_OpenIslandApp.bundle" \
+    "Contents/Resources/mediaremote-adapter.pl" \
+    "Contents/Resources/LICENSE.txt" \
+    "Contents/Resources/NOTICE.md" \
+    "Contents/Frameworks/MediaRemoteAdapter.framework/MediaRemoteAdapter" \
 ; do
     if [[ ! -e "$bundle_dir/$required" ]]; then
         echo "ERROR: missing required file: $required" >&2
@@ -158,12 +198,22 @@ echo "Bundle structure verified."
 # --- Smoke-test the app outside the repo to catch Bundle.module fallback hacks ---
 # SPM's generated resource accessor has a hardcoded fallback to the local .build/
 # directory. Running from /tmp ensures the app works without that crutch.
+#
+# The check starts the packaged app for three seconds. Set
+# OPEN_ISLAND_SKIP_SMOKE_TEST=true to package without starting anything.
+skip_smoke_test="${OPEN_ISLAND_SKIP_SMOKE_TEST:-false}"
 smoke_dir="$(mktemp -d)/smoke-test"
 mkdir -p "$smoke_dir"
-cp -R "$bundle_dir" "$smoke_dir/"
 smoke_app="$smoke_dir/$(basename "$bundle_dir")"
 smoke_binary="$smoke_app/Contents/MacOS/OpenIslandApp"
-if [[ -x "$smoke_binary" ]]; then
+if [[ "$skip_smoke_test" != "true" ]]; then
+    # A statement of its own: a copy that fails must stop the script.
+    cp -R "$bundle_dir" "$smoke_dir/"
+fi
+if [[ "$skip_smoke_test" == "true" ]]; then
+    echo "Smoke test skipped (OPEN_ISLAND_SKIP_SMOKE_TEST=true). The app was not started."
+    rm -rf "$(dirname "$smoke_dir")"
+elif [[ -x "$smoke_binary" ]]; then
     # Launch and give it a few seconds — if it crashes, the pid disappears.
     "$smoke_binary" &
     smoke_pid=$!
@@ -185,6 +235,12 @@ else
 fi
 
 sparkle_fw="$bundle_dir/Contents/Frameworks/Sparkle.framework"
+adapter_fw="$bundle_dir/Contents/Frameworks/MediaRemoteAdapter.framework"
+
+# Nothing in the bundle may depend on an extended attribute: the zip below
+# carries none, which lets any unzip tool give back a bundle whose
+# signature still holds.
+xattr -cr "$bundle_dir"
 
 if [[ -n "$signing_identity" ]]; then
     # Sign nested code objects inside-out: Sparkle internals → helpers → app.
@@ -199,6 +255,9 @@ if [[ -n "$signing_identity" ]]; then
             codesign --force --options runtime --timestamp --sign "$signing_identity" "$sparkle_fw/Versions/B/Updater.app"
         codesign --force --options runtime --timestamp --sign "$signing_identity" "$sparkle_fw"
     fi
+
+    # Not run yet: no Developer ID build of the adapter has been made.
+    codesign --force --options runtime --timestamp --sign "$signing_identity" "$adapter_fw"
 
     codesign --force --options runtime --timestamp --sign "$signing_identity" \
         "$bundle_dir/Contents/Helpers/OpenIslandHooks"
@@ -215,31 +274,48 @@ if [[ -n "$signing_identity" ]]; then
 
     codesign --verify --deep --strict --verbose=2 "$bundle_dir"
 else
-    # Ad-hoc sign so macOS accepts the embedded Sparkle.framework.
+    # No identity: ad-hoc sign, which is how version 1.0 ships. Nested code
+    # is signed first, inside out, and a failure stops the script. No
+    # hardened runtime and no entitlements here, as before: those are for
+    # notarization, which an ad-hoc build cannot have.
     if [[ -d "$sparkle_fw" ]]; then
         for xpc in "$sparkle_fw"/Versions/B/XPCServices/*.xpc; do
-            [[ -d "$xpc" ]] && codesign --force --sign - "$xpc" 2>/dev/null || true
+            if [[ -d "$xpc" ]]; then codesign --force --sign - "$xpc"; fi
         done
-        codesign --force --sign - "$sparkle_fw" 2>/dev/null || true
+        if [[ -f "$sparkle_fw/Versions/B/Autoupdate" ]]; then
+            codesign --force --sign - "$sparkle_fw/Versions/B/Autoupdate"
+        fi
+        if [[ -d "$sparkle_fw/Versions/B/Updater.app" ]]; then
+            codesign --force --sign - "$sparkle_fw/Versions/B/Updater.app"
+        fi
+        codesign --force --sign - "$sparkle_fw"
     fi
-    codesign --force --sign - "$bundle_dir/Contents/Helpers/OpenIslandHooks" 2>/dev/null || true
-    codesign --force --sign - "$bundle_dir/Contents/Helpers/OpenIslandSetup" 2>/dev/null || true
-    codesign --force --sign - "$bundle_dir" 2>/dev/null || true
+    codesign --force --sign - "$adapter_fw"
+    codesign --force --sign - "$bundle_dir/Contents/Helpers/OpenIslandHooks"
+    codesign --force --sign - "$bundle_dir/Contents/Helpers/OpenIslandSetup"
+    codesign --force --sign - "$bundle_dir"
+
+    codesign --verify --deep --strict --verbose=2 "$bundle_dir"
 fi
 
-ditto -c -k --keepParent "$bundle_dir" "$zip_path"
+ditto -c -k --norsrc --noextattr --noqtn --keepParent "$bundle_dir" "$zip_path"
 
 # --- Notarize app bundle (before DMG so the stapled bundle goes into the DMG) ---
 if [[ -n "$signing_identity" && -n "$notary_profile" ]]; then
     xcrun notarytool submit "$zip_path" --keychain-profile "$notary_profile" --wait
     xcrun stapler staple -v "$bundle_dir"
     rm -f "$zip_path"
-    ditto -c -k --keepParent "$bundle_dir" "$zip_path"
+    ditto -c -k --norsrc --noextattr --noqtn --keepParent "$bundle_dir" "$zip_path"
 fi
 
 # --- Styled DMG creation ---
+# The zip is the release. The disk image is made only when the create-dmg
+# tool is installed.
 dmg_bg="$repo_root/Assets/Brand/dmg-background@2x.png"
+made_dmg=false
 
+if command -v create-dmg >/dev/null 2>&1; then
+made_dmg=true
 create-dmg \
     --volname "$app_name" \
     --background "$dmg_bg" \
@@ -268,14 +344,20 @@ if [[ -n "$signing_identity" && -n "$notary_profile" ]]; then
     xcrun notarytool submit "$dmg_path" --keychain-profile "$notary_profile" --wait
     xcrun stapler staple -v "$dmg_path"
 fi
+else
+    echo "create-dmg is not installed: no disk image was made. The zip is complete without it."
+fi
 
 echo "Bundle: $bundle_dir"
 echo "Archive: $zip_path"
-echo "DMG: $dmg_path"
+if [[ "$made_dmg" == "true" ]]; then
+    echo "DMG: $dmg_path"
+fi
 if [[ -n "$signing_identity" ]]; then
     echo "Signed with identity: $signing_identity"
 else
-    echo "No signing identity configured; produced an unsigned local bundle."
+    echo "No signing identity configured: the bundle is ad-hoc signed and not notarized."
+    echo "macOS will refuse the first open of a downloaded copy. See README.md, Install."
 fi
 
 if [[ -n "$notary_profile" ]]; then

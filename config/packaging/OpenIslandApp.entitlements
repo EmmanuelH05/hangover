@@ -1,10 +1,35 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    Hardened runtime entitlements, used only when the app is signed with a
+    Developer ID (scripts/package-app.sh with OPEN_ISLAND_SIGN_IDENTITY).
+    An ad-hoc build is signed without the hardened runtime and without this
+    file.
+
+    Each key is one of the resource access keys Apple lists for the hardened
+    runtime, and each has a matching usage text in the bundle's Info.plist.
+
+    The app is not sandboxed. The App Sandbox network keys
+    (com.apple.security.network.client and .server) do nothing outside the
+    sandbox and are left out: the weather tile, Notion and the phone relay
+    need no entitlement here. Apple lists no key for Reminders. They are
+    read through EventKit, like the calendar.
+
+    Not needed: audio input (the mirror records no sound), location (the
+    weather city is typed), the Photos library (photo strips are plain
+    files), and every runtime exception. The app loads only its own
+    frameworks and Apple's.
+-->
 <plist version="1.0">
 <dict>
+    <!-- Terminal jumps, replies and the session monitor send Apple events. -->
     <key>com.apple.security.automation.apple-events</key>
     <true/>
-    <key>com.apple.security.network.client</key>
+    <!-- The calendar and to-do widgets, through EventKit. -->
+    <key>com.apple.security.personal-information.calendars</key>
+    <true/>
+    <!-- The mirror and its photo booth. -->
+    <key>com.apple.security.device.camera</key>
     <true/>
 </dict>
 </plist>
