@@ -29,8 +29,11 @@ struct CodexAppServerTimeoutTests {
         // this test shares the process with suites that block on ~2 s
         // osascript timeouts, and that scheduling contention was pushing
         // elapsed to 2.0–2.4 s against the previous 2.0 s bound.
+        // Raised again from 5 to 15 seconds: with this fork's larger suite a
+        // shared CI runner measured 5.09. The point is that it fails long
+        // before the global test timeout.
         let elapsed = Date().timeIntervalSince(start)
-        #expect(elapsed < max(5.0, client.requestTimeoutSeconds * 20))
+        #expect(elapsed < max(15.0, client.requestTimeoutSeconds * 20))
     }
 
     @Test
