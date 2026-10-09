@@ -76,9 +76,9 @@ swift test
 OPEN_ISLAND_SKIP_SMOKE_TEST=true zsh scripts/package-app.sh
 ```
 
-The last line writes `output/package/Hangover.app`. Move it to Applications and open it.
+The last line writes `output/package/Hangover.app`. Move it to Applications and open it. If you change the code, `zsh scripts/harness.sh ci` runs the same checks GitHub runs on every push.
 
-A few names inside the code still say `OpenIsland`. That's on purpose: the hooks Hangover installs for your agents point at those names. `README.zh-CN.md` and most of `docs/` still belong to the original project.
+A few names inside the code still say `OpenIsland`. That's on purpose: the hooks Hangover installs for your agents point at those names. `README.zh-CN.md` and most of the design notes in [docs/index.md](docs/index.md) still belong to the original project.
 
 ## Privacy
 
