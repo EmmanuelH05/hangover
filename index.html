@@ -58,10 +58,6 @@
   ol.steps { list-style: none; padding: 0; margin: 20px 0 0; counter-reset: step; }
   ol.steps li {
     counter-increment: step;
-    display: grid;
-    grid-template-columns: 1fr 250px;
-    gap: 22px;
-    align-items: center;
     background: var(--card);
     border: 1px solid var(--line);
     border-radius: 18px;
@@ -84,37 +80,14 @@
   }
   ol.steps p { margin: 0; color: var(--soft); font-size: 16px; }
   ol.steps p b { color: var(--text); }
-  /* Drawings. They show where to click, not what macOS looks like to the pixel. */
-  .art {
-    height: 132px;
-    border-radius: 14px;
-    background: #101013;
-    border: 1px solid var(--line);
-    display: grid;
-    place-items: center;
-    padding: 12px;
-  }
-  .row { display: flex; align-items: center; gap: 10px; }
-  .tile { border-radius: 12px; background: #24242a; border: 1px solid #34343b; padding: 10px 12px; font-size: 13px; color: var(--text); text-align: center; }
-  .arrow { color: var(--soft); font-size: 22px; }
-  .dialog { width: 190px; border-radius: 14px; background: #24242a; border: 1px solid #3a3a42; padding: 12px; }
-  .dialog .mark { width: 26px; height: 26px; border-radius: 7px; background: var(--warn); color: var(--ink); font-weight: 800; display: grid; place-items: center; margin: 0 auto 8px; }
-  .bar { height: 6px; border-radius: 3px; background: #45454d; margin: 5px auto; }
-  .btns { display: flex; gap: 8px; margin-top: 10px; }
-  .btn { flex: 1; height: 24px; border-radius: 7px; background: #3a3a42; font-size: 12px; display: grid; place-items: center; color: var(--soft); }
-  .btn.pick { background: var(--paper); color: var(--ink); font-weight: 700; box-shadow: 0 0 0 3px rgba(231, 167, 98, 0.55); }
-  .panel { width: 210px; border-radius: 14px; background: #24242a; border: 1px solid #3a3a42; padding: 12px; font-size: 12px; }
-  .panel .title { font-weight: 700; margin-bottom: 8px; }
-  .panel .label { color: var(--soft); margin-bottom: 4px; }
-  .panel .btn { width: 104px; flex: none; margin: 8px 0 0 auto; }
-  .done { display: flex; align-items: center; gap: 10px; background: #000; border: 1px solid #34343b; border-radius: 999px; padding: 9px 18px; font-size: 14px; }
-  .done i { width: 18px; height: 18px; border-radius: 50%; background: var(--ok); display: inline-block; }
+  /* Real screenshots, taken at twice their shown size. */
+  ol.steps img { display: block; margin: 18px auto 2px; max-width: 100%; height: auto; }
+  ol.steps img.framed { border-radius: 14px; border: 1px solid var(--line); }
   .note { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px 22px; margin-top: 12px; }
   footer { margin-top: 64px; padding-top: 22px; border-top: 1px solid var(--line); font-size: 15px; color: var(--soft); }
   @media (max-width: 640px) {
     h1 { font-size: 36px; }
     ul.inside { grid-template-columns: 1fr; }
-    ol.steps li { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -150,51 +123,22 @@
   <p class="soft">macOS stops any app that didn't go through Apple's paid developer program, and Hangover is free. You'll see a warning once. Here is what to click.</p>
   <ol class="steps">
     <li>
-      <div>
-        <h3>Download and move it</h3>
-        <p>Open <b>Hangover.zip</b> from your Downloads, then drag <b>Hangover</b> into your <b>Applications</b> folder.</p>
-      </div>
-      <div class="art" aria-hidden="true">
-        <div class="row"><div class="tile">Hangover</div><div class="arrow">→</div><div class="tile">Applications</div></div>
-      </div>
+      <h3>Download and move it</h3>
+      <p>Open <b>Hangover.zip</b> from your Downloads, then drag <b>Hangover</b> into your <b>Applications</b> folder.</p>
     </li>
     <li>
-      <div>
-        <h3>Open it, then click Done</h3>
-        <p>Double-click Hangover. macOS shows a warning. Click <b>Done</b>. Don't move it to the Trash.</p>
-      </div>
-      <div class="art" aria-hidden="true">
-        <div class="dialog">
-          <div class="mark">!</div>
-          <div class="bar" style="width:80%"></div>
-          <div class="bar" style="width:62%"></div>
-          <div class="btns"><div class="btn"></div><div class="btn pick">Done</div></div>
-        </div>
-      </div>
+      <h3>Open it, then click Done</h3>
+      <p>Double-click Hangover. macOS shows this warning. Click <b>Done</b>. Don't click Move to Trash.</p>
+      <img src="warning.png" width="328" height="352" alt="The macOS warning that says Hangover was not opened, with the buttons Move to Trash and Done">
     </li>
     <li>
-      <div>
-        <h3>Click Open Anyway</h3>
-        <p>Open <b>System Settings</b>, go to <b>Privacy &amp; Security</b>, scroll down to <b>Security</b> and click <b>Open Anyway</b>. Confirm with your password or Touch ID. The button stays for about an hour.</p>
-      </div>
-      <div class="art" aria-hidden="true">
-        <div class="panel">
-          <div class="title">Privacy &amp; Security</div>
-          <div class="label">Security</div>
-          <div class="bar" style="width:100%; margin-left:0"></div>
-          <div class="bar" style="width:70%; margin-left:0"></div>
-          <div class="btn pick">Open Anyway</div>
-        </div>
-      </div>
+      <h3>Click Open Anyway</h3>
+      <p>Open <b>System Settings</b>, go to <b>Privacy &amp; Security</b> and scroll down to <b>Security</b>. You'll see this. Click <b>Open Anyway</b>, then confirm with your password or Touch ID. The button stays for about an hour.</p>
+      <img class="framed" src="open-anyway.png" width="473" height="176" alt="The Security section of System Settings, saying Hangover was blocked to protect your Mac, with an Open Anyway button">
     </li>
     <li>
-      <div>
-        <h3>That's it</h3>
-        <p>From now on it opens like any other app, and it keeps itself up to date.</p>
-      </div>
-      <div class="art" aria-hidden="true">
-        <div class="done"><i></i>Hangover is running</div>
-      </div>
+      <h3>That's it</h3>
+      <p>From now on it opens like any other app, and it keeps itself up to date.</p>
     </li>
   </ol>
   <div class="note">
