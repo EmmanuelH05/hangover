@@ -336,6 +336,16 @@ final class AppModel {
             UserDefaults.standard.set(keepNotchOpenUntilDecision, forKey: Self.keepNotchOpenUntilDecisionDefaultsKey)
         }
     }
+    /// Two-finger swipes on the island (Settings → General, D46). Opt-in:
+    /// off, a scroll over the island does nothing, and anything a swipe hid
+    /// comes back.
+    var swipeGesturesEnabled: Bool = false {
+        didSet {
+            guard hasFinishedInit, swipeGesturesEnabled != oldValue else { return }
+            UserDefaults.standard.set(swipeGesturesEnabled, forKey: IslandSwipeSetting.defaultsKey)
+            if !swipeGesturesEnabled { nook.closedContentHiddenBySwipe = false }
+        }
+    }
     /// Whether the closed island opens when the pointer rests on it or only
     /// on a click (Settings → General). Files dragged to the island open it
     /// either way.
@@ -703,6 +713,7 @@ final class AppModel {
             Self.showDockIconDefaultsKey: true,
             Self.hapticFeedbackEnabledDefaultsKey: false,
             Self.keepNotchOpenUntilDecisionDefaultsKey: false,
+            IslandSwipeSetting.defaultsKey: false,
             Self.allowsLinksFromOtherAppsDefaultsKey: true,
             Self.completionReplyEnabledDefaultsKey: false,
             Self.suppressFrontmostNotificationsDefaultsKey: true,
@@ -714,6 +725,7 @@ final class AppModel {
         showDockIcon = UserDefaults.standard.bool(forKey: Self.showDockIconDefaultsKey)
         hapticFeedbackEnabled = UserDefaults.standard.bool(forKey: Self.hapticFeedbackEnabledDefaultsKey)
         keepNotchOpenUntilDecision = UserDefaults.standard.bool(forKey: Self.keepNotchOpenUntilDecisionDefaultsKey)
+        swipeGesturesEnabled = UserDefaults.standard.bool(forKey: IslandSwipeSetting.defaultsKey)
         allowsLinksFromOtherApps = UserDefaults.standard.bool(forKey: Self.allowsLinksFromOtherAppsDefaultsKey)
         islandOpenTrigger = UserDefaults.standard.string(forKey: Self.islandOpenTriggerDefaultsKey)
             .flatMap(IslandOpenTrigger.init(rawValue:)) ?? .hover

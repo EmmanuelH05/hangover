@@ -386,7 +386,7 @@ struct AgentsSwitchTests {
     @Test
     func generalHidesTheRowsThatAreOnlyAboutAgentsWhileOff() {
         let off = GeneralSettingsRow.shown(agentsEnabled: false)
-        #expect(off == [.showDockIcon, .linksFromOtherApps, .openTrigger, .hapticFeedback])
+        #expect(off == [.showDockIcon, .linksFromOtherApps, .openTrigger, .swipeGestures, .hapticFeedback])
         #expect(GeneralSettingsRow.shown(agentsEnabled: true) == GeneralSettingsRow.allCases)
     }
 

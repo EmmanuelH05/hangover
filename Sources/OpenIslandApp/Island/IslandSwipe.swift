@@ -133,6 +133,15 @@ struct IslandSwipeRecognizer: Equatable, Sendable {
     }
 }
 
+/// The swipe is a setting, off until the user turns it on in Settings,
+/// General (D46). The monitors read it before anything else, which keeps a
+/// scroll anywhere on the Mac free while it is off.
+enum IslandSwipeSetting {
+    static let defaultsKey = "app.swipeGesturesEnabled"
+
+    static var isEnabled: Bool { UserDefaults.standard.bool(forKey: defaultsKey) }
+}
+
 /// Whether a scroll over the island belongs to something that scrolls.
 enum IslandScrollContent {
     /// Past this much hidden content, a scroll view counts as scrollable.

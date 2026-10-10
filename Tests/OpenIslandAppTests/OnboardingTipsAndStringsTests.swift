@@ -13,23 +13,35 @@ struct OnboardingTipTests {
     @Test func aFullSetupWithAgentsFillsThePage() {
         let tips = OnboardingTip.shown(agentsEnabled: true, widgets: Self.everyWidget)
 
-        #expect(tips == [.keepOpen, .swipeAway, .dropFiles, .rearrange, .switchPages, .jump, .todoNotes, .settings])
+        #expect(tips == [.keepOpen, .dropFiles, .rearrange, .switchPages, .jump, .todoNotes, .quickNotes, .settings])
         #expect(tips.count == OnboardingTip.pageLimit)
+    }
+
+    /// The swipe is a setting that starts off. Its tip shows only while
+    /// it is on, second in the list.
+    @Test func theSwipeTipShowsOnlyWhileTheSwipeIsOn() {
+        let on = OnboardingTip.shown(agentsEnabled: true, widgets: Self.everyWidget, swipeEnabled: true)
+        #expect(on == [.keepOpen, .swipeAway, .dropFiles, .rearrange, .switchPages, .jump, .todoNotes, .settings])
+
+        for agentsEnabled in [true, false] {
+            let off = OnboardingTip.shown(agentsEnabled: agentsEnabled, widgets: Self.everyWidget)
+            #expect(!off.contains(.swipeAway))
+        }
     }
 
     @Test func withTheAgentsOffNoTipIsAboutAgents() {
         let tips = OnboardingTip.shown(agentsEnabled: false, widgets: Self.everyWidget)
 
-        #expect(tips == [.keepOpen, .swipeAway, .dropFiles, .rearrange, .todoNotes, .quickNotes, .speaker, .settings])
+        #expect(tips == [.keepOpen, .dropFiles, .rearrange, .todoNotes, .quickNotes, .speaker, .volume, .settings])
         #expect(tips.allSatisfy { !$0.needsAgents })
     }
 
     @Test func aTipAboutAWidgetShowsOnlyWhileThatWidgetIsOnThePage() {
         let none = OnboardingTip.shown(agentsEnabled: false, widgets: [])
-        #expect(none == [.keepOpen, .swipeAway, .rearrange, .volume, .settings])
+        #expect(none == [.keepOpen, .rearrange, .volume, .settings])
 
         let music = OnboardingTip.shown(agentsEnabled: false, widgets: [.media])
-        #expect(music == [.keepOpen, .swipeAway, .rearrange, .speaker, .volume, .settings])
+        #expect(music == [.keepOpen, .rearrange, .speaker, .volume, .settings])
 
         for tip in OnboardingTip.allCases {
             guard let widget = tip.widget else { continue }

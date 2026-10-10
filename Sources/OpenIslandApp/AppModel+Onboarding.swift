@@ -92,6 +92,7 @@ extension AppModel {
         }
         return OnboardingState(
             agentsEnabled: agentsEnabled,
+            swipeEnabled: swipeGesturesEnabled,
             openTrigger: islandOpenTrigger,
             isIslandOpen: notchStatus == .opened,
             agents: [

@@ -104,7 +104,8 @@ struct OnboardingTipsPage: View {
         let state = context.state
         let tips = OnboardingTip.shown(
             agentsEnabled: state.agentsEnabled,
-            widgets: Set(state.shownPlacements.map(\.kind))
+            widgets: Set(state.shownPlacements.map(\.kind)),
+            swipeEnabled: state.swipeEnabled
         )
         OnboardingPageScaffold(
             page: .tips,

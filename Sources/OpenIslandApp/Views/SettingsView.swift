@@ -300,6 +300,15 @@ struct GeneralSettingsPane: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+        case .swipeGestures:
+            Toggle(lang.t("settings.general.swipeGestures"), isOn: Binding(
+                get: { model.swipeGesturesEnabled },
+                set: { model.swipeGesturesEnabled = $0 }
+            ))
+            Text(lang.t("onboarding.tips.swipeAway.text"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         case .openTrigger:
             Picker(lang.t(IslandOpenTrigger.settingTitleKey), selection: Binding(
                 get: { model.islandOpenTrigger },
@@ -344,6 +353,7 @@ enum GeneralSettingsRow: String, CaseIterable, Identifiable, Sendable {
     case showDockIcon
     case linksFromOtherApps
     case openTrigger
+    case swipeGestures
     case hapticFeedback
     case completionReply
     case suppressFrontmostNotifications
@@ -353,7 +363,7 @@ enum GeneralSettingsRow: String, CaseIterable, Identifiable, Sendable {
     var isAgentsOnly: Bool {
         switch self {
         case .keepOpenUntilDecision, .completionReply, .suppressFrontmostNotifications: true
-        case .showDockIcon, .linksFromOtherApps, .openTrigger, .hapticFeedback: false
+        case .showDockIcon, .linksFromOtherApps, .openTrigger, .swipeGestures, .hapticFeedback: false
         }
     }
 

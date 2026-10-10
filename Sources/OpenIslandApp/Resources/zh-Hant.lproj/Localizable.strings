@@ -24,6 +24,7 @@
 "settings.general.autoHideNoSessions" = "無活躍工作階段時自動隱藏";
 "settings.general.autoCollapse" = "滑鼠離開時自動收起";
 "settings.general.keepOpenUntilDecision" = "未審批前不關閉瀏海";
+"settings.general.swipeGestures" = "在島上使用雙指輕掃";
 "settings.general.showDockIcon" = "在 Dock 中顯示圖示";
 "settings.general.hapticFeedback" = "懸停時震動回饋";
 "settings.general.openTrigger" = "開啟島的方式";

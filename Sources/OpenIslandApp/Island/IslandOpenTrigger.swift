@@ -149,6 +149,12 @@ enum IslandPointerRules {
         }
     }
 
+    /// Whether a scroll event is worth following: the swipe is switched on
+    /// and the pointer is on the island.
+    static func swipeListens(isEnabled: Bool, isInClosedSurface: Bool, isInExpandedArea: Bool) -> Bool {
+        isEnabled && (isInClosedSurface || isInExpandedArea)
+    }
+
     /// What a swipe does. Every refusal a click close has applies to a swipe
     /// close too, and a swipe on a list that can still scroll is the list's.
     static func swipeAction(_ context: IslandSwipeContext) -> IslandSwipeAction {

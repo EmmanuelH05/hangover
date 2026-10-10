@@ -79,11 +79,17 @@ enum OnboardingTip: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// The tips a page shows, in the order above, with where Settings is
-    /// last. Tips about agents, or about a widget that is off the page, are
-    /// left out, and the rest stop at what fits.
-    static func shown(agentsEnabled: Bool, widgets: Set<NookWidgetKind>) -> [OnboardingTip] {
+    /// last. Tips about agents, about a widget that is off the page, or
+    /// about the swipe while it is switched off are left out, and the rest
+    /// stop at what fits.
+    static func shown(
+        agentsEnabled: Bool,
+        widgets: Set<NookWidgetKind>,
+        swipeEnabled: Bool = false
+    ) -> [OnboardingTip] {
         let fitting = allCases.filter { tip in
             guard tip != .settings else { return false }
+            if tip == .swipeAway, !swipeEnabled { return false }
             if tip.needsAgents, !agentsEnabled { return false }
             if let widget = tip.widget, !widgets.contains(widget) { return false }
             return true

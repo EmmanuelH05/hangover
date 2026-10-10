@@ -24,6 +24,7 @@
 "settings.general.autoHideNoSessions" = "Auto-hide without active sessions";
 "settings.general.autoCollapse" = "Auto-collapse on mouse exit";
 "settings.general.keepOpenUntilDecision" = "Keep open until approve or deny";
+"settings.general.swipeGestures" = "Swipe on the island with two fingers";
 "settings.general.showDockIcon" = "Show icon in Dock";
 "settings.general.hapticFeedback" = "Haptic feedback on hover";
 "settings.general.openTrigger" = "Open the island";

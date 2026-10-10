@@ -721,7 +721,11 @@ final class OverlayPanelController {
 
         let inClosedSurface = isPointInClosedSurfaceArea(screenLocation)
         let inExpandedArea = isPointInExpandedArea(screenLocation)
-        guard inClosedSurface || inExpandedArea else {
+        guard IslandPointerRules.swipeListens(
+            isEnabled: model.swipeGesturesEnabled,
+            isInClosedSurface: inClosedSurface,
+            isInExpandedArea: inExpandedArea
+        ) else {
             swipe.reset()
             return false
         }
@@ -1653,14 +1657,17 @@ final class NotchEventMonitors {
         // Scroll events arrive for the whole Mac. A monitor only reads the
         // numbers and hands plain values to the handler, which tests the
         // pointer first. The local one runs on the main thread and may
-        // swallow the rest of a swipe the island acted on.
+        // swallow the rest of a swipe the island acted on. With the swipe
+        // switched off, which is how it starts, neither does anything.
         globalScrollMonitor = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel) { event in
+            guard IslandSwipeSetting.isEnabled else { return }
             let sample = Self.sample(from: event)
             let location = NSEvent.mouseLocation
             Task { @MainActor in _ = scrollHandler(sample, location, .zero, 0, false) }
         }
 
         localScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
+            guard IslandSwipeSetting.isEnabled else { return event }
             let sample = Self.sample(from: event)
             let location = NSEvent.mouseLocation
             let windowLocation = event.locationInWindow

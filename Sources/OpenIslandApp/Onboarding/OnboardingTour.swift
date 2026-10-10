@@ -44,6 +44,9 @@ struct OnboardingState: Equatable, Sendable {
     /// The agents switch. Off, the tour leaves its agents page out and
     /// says nothing about agents on the others (D41).
     var agentsEnabled = true
+    /// The swipe setting. Off, which is how it starts, the tips leave the
+    /// swipe out (D46).
+    var swipeEnabled = false
     var openTrigger: IslandOpenTrigger = .hover
     /// True while the real island is open, which is how the tour knows the
     /// user tried it.
