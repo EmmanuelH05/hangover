@@ -94,7 +94,7 @@ struct OnboardingRenderTests {
                 tourView(page, Self.state(for: page), size: size)
             })
         }
-        #expect(pictures.count == 7)
+        #expect(pictures.count == 8)
         #expect(Set(pictures).count == pictures.count, "two live pages drew the same picture")
     }
 

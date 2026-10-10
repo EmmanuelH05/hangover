@@ -8,8 +8,7 @@ import SwiftUI
 // MARK: - 6. Widgets
 
 /// One row a widget: its picture, its name and its switch. The real island
-/// shows the widgets that are on, and a card under the list spotlights the
-/// widget whose row was clicked.
+/// shows the widgets that are on. The next page shows each one working.
 struct OnboardingWidgetsPage: View {
     let context: OnboardingPageContext
 
@@ -36,48 +35,33 @@ struct OnboardingWidgetsPage: View {
                     }
                 }
                 .background(OnboardingCardBackground())
-
-                OnboardingSpotlightCard(
-                    kind: state.spotlight,
-                    isOn: state.showsWidget(state.spotlight),
-                    context: context
-                )
             }
         }
     }
 
-    /// A widget's row: the left of it selects the widget for the spotlight,
-    /// the switch at the right turns it on or off. On puts the widget on
-    /// this display's page, off switches it off for the app.
+    /// A widget's row: its name at the left, and at the right the switch
+    /// that turns it on or off. On puts the widget on this display's page,
+    /// off switches it off for the app.
     private func row(_ kind: NookWidgetKind) -> some View {
         let isOn = state.showsWidget(kind)
-        let isSelected = state.spotlight == kind
         let name = context.t("onboarding.nook.widget.\(kind.rawValue)")
         return HStack(spacing: 0) {
-            Button {
-                context.actions.spotlightWidget(kind)
-            } label: {
-                HStack(spacing: 10) {
-                    OnboardingSymbolPlate(
-                        symbol: kind.systemImage,
-                        size: 26,
-                        tint: isOn ? OnboardingStyle.paper : OnboardingStyle.faintText
-                    )
-                    Text(name)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(isOn ? OnboardingStyle.primaryText : OnboardingStyle.secondaryText)
-                        .lineLimit(1)
-                    Spacer(minLength: 6)
-                }
-                .padding(.leading, 10)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .contentShape(Rectangle())
+            HStack(spacing: 10) {
+                OnboardingSymbolPlate(
+                    symbol: kind.systemImage,
+                    size: 26,
+                    tint: isOn ? OnboardingStyle.paper : OnboardingStyle.faintText
+                )
+                Text(name)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(isOn ? OnboardingStyle.primaryText : OnboardingStyle.secondaryText)
+                    .lineLimit(1)
+                Spacer(minLength: 6)
             }
-            .buttonStyle(PressableButtonStyle())
-            .accessibilityLabel(name)
+            .padding(.leading, 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityElement(children: .combine)
             .accessibilityValue(context.t("onboarding.widgets.\(kind.rawValue)"))
-            .accessibilityHint(context.t("onboarding.widgets.spotlight.hint"))
-            .accessibilityAddTraits(isSelected ? .isSelected : [])
 
             Button {
                 context.actions.setWidget(kind, !isOn)
@@ -92,11 +76,6 @@ struct OnboardingWidgetsPage: View {
             .accessibilityValue(context.t(isOn ? "onboarding.widgets.switch.on" : "onboarding.widgets.switch.off"))
         }
         .frame(height: Self.rowHeight)
-        .background(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(isSelected ? OnboardingStyle.selectedFill : Color.clear)
-                .padding(3)
-        )
     }
 }
 

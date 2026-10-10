@@ -13,23 +13,23 @@ struct OnboardingTipTests {
     @Test func aFullSetupWithAgentsFillsThePage() {
         let tips = OnboardingTip.shown(agentsEnabled: true, widgets: Self.everyWidget)
 
-        #expect(tips == [.keepOpen, .dropFiles, .rearrange, .switchPages, .jump, .todoNotes, .quickNotes, .settings])
+        #expect(tips == [.keepOpen, .swipeAway, .dropFiles, .rearrange, .switchPages, .jump, .todoNotes, .settings])
         #expect(tips.count == OnboardingTip.pageLimit)
     }
 
     @Test func withTheAgentsOffNoTipIsAboutAgents() {
         let tips = OnboardingTip.shown(agentsEnabled: false, widgets: Self.everyWidget)
 
-        #expect(tips == [.keepOpen, .dropFiles, .rearrange, .todoNotes, .quickNotes, .speaker, .volume, .settings])
+        #expect(tips == [.keepOpen, .swipeAway, .dropFiles, .rearrange, .todoNotes, .quickNotes, .speaker, .settings])
         #expect(tips.allSatisfy { !$0.needsAgents })
     }
 
     @Test func aTipAboutAWidgetShowsOnlyWhileThatWidgetIsOnThePage() {
         let none = OnboardingTip.shown(agentsEnabled: false, widgets: [])
-        #expect(none == [.keepOpen, .rearrange, .volume, .settings])
+        #expect(none == [.keepOpen, .swipeAway, .rearrange, .volume, .settings])
 
         let music = OnboardingTip.shown(agentsEnabled: false, widgets: [.media])
-        #expect(music == [.keepOpen, .rearrange, .speaker, .volume, .settings])
+        #expect(music == [.keepOpen, .swipeAway, .rearrange, .speaker, .volume, .settings])
 
         for tip in OnboardingTip.allCases {
             guard let widget = tip.widget else { continue }
@@ -70,6 +70,8 @@ struct OnboardingTipTests {
     @Test(arguments: [
         ("Sources/OpenIslandApp/Island/IslandOpenTrigger.swift", "return .pin"),
         ("Sources/OpenIslandApp/Island/IslandOpenTrigger.swift", ".closeFromNotch"),
+        ("Sources/OpenIslandApp/Island/IslandOpenTrigger.swift", "static func swipeAction("),
+        ("Sources/OpenIslandApp/Island/IslandOpenTrigger.swift", "? .toggleClosedContent : .none"),
         ("Sources/OpenIslandApp/Views/IslandPanelView.swift", "model.nook.tray.handleDrop(providers)"),
         ("Sources/OpenIslandApp/Nook/Views/NookWidgetGrid.swift", "LongPressGesture(minimumDuration: Self.longPressDuration).onEnded { _ in onBeginEditing() }"),
         ("Sources/OpenIslandApp/Nook/Views/NookWidgetGrid.swift", "Button(\"Edit Widgets\") { onBeginEditing() }"),
@@ -157,6 +159,7 @@ struct OnboardingStringsTests {
         }
         keys += (1...4).map { "onboarding.todos.sample\($0)" }
         keys += OnboardingAbility.allCases.map(\.textKey)
+        keys += OnboardingFeatureNumbersTests.pageKeys
         keys += OnboardingIntegration.allCases.flatMap { [$0.nameKey, $0.textKey, $0.whereKey] }
         return keys
     }

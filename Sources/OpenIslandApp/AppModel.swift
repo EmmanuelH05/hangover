@@ -1005,7 +1005,7 @@ final class AppModel {
     /// preference and current live state. Returns nil when the preference
     /// is `.none` or there's nothing meaningful to show.
     func islandClosedRightSlotContent() -> IslandRightSlotContent? {
-        islandSlotContent(for: islandRightSlot)
+        closedContentIsHidden ? nil : islandSlotContent(for: islandRightSlot)
     }
 
     /// The count badge or agent grid for either side of the closed island.
@@ -1550,9 +1550,26 @@ final class AppModel {
         nook.displayPreferences(for: activeAppearanceProfile)
     }
 
+    /// Whether a swipe has sent what the closed island shows away (D46).
+    /// An agent that waits on the user is never hidden.
+    var closedContentIsHidden: Bool {
+        nook.closedContentHiddenBySwipe && islandClosedMode != .waiting
+    }
+
+    /// The agent state the closed pill draws: idle while hidden.
+    var islandClosedPillMode: UnifiedBars.Mode {
+        closedContentIsHidden ? .idle : islandClosedMode
+    }
+
+    /// A sideways swipe on the closed island: hide what it shows, or bring
+    /// it back.
+    func toggleClosedContentHidden() {
+        nook.closedContentHiddenBySwipe = !closedContentIsHidden
+    }
+
     /// What the Nook puts in the closed island on the current display.
     var nookClosedActivity: NookClosedActivity? {
-        nook.closedActivity(for: nookDisplay)
+        nook.closedActivity(for: nookDisplay, isHidden: closedContentIsHidden)
     }
 
     static let nookTrackLabelLimit = 26
@@ -1561,6 +1578,7 @@ final class AppModel {
     /// what the island shows and this display asks for it, the agent label
     /// otherwise. An agent waiting on the user always keeps the label.
     func islandClosedLabelWithNook() -> String? {
+        if closedContentIsHidden { return nil }
         guard nookDisplay.centerLabelShowsTrack,
               islandClosedMode != .waiting,
               nookClosedActivity?.showsArtwork == true,
@@ -1583,7 +1601,7 @@ final class AppModel {
     /// means the agent bars, either by choice or because the chosen item
     /// has nothing to show (no battery, no event ahead).
     var nookLeftSlotContent: NookSideSlotContent? {
-        nookLeftSlotContent(for: nookDisplay.leftSlot)
+        closedContentIsHidden ? .hidden : nookLeftSlotContent(for: nookDisplay.leftSlot)
     }
 
     /// The left side for one choice. With the agents switched off there
@@ -1596,7 +1614,8 @@ final class AppModel {
     /// What the right side shows when this display overrides the island's
     /// own right slot. Nil leaves that slot in charge.
     var nookRightSlotContent: NookSideSlotContent? {
-        nookDisplay.rightSlot.flatMap(nookSideSlotContent(for:))
+        if closedContentIsHidden { return nil }
+        return nookDisplay.rightSlot.flatMap(nookSideSlotContent(for:))
     }
 
     /// What one side shows for a choice, nil when the choice has nothing
@@ -1820,7 +1839,7 @@ final class AppModel {
 
     /// Status dot drawn on the album art in the closed notch.
     var nookAgentStatusTint: Color? {
-        guard nookDisplay.showsAgentDotOnArt, !surfacedSessions.isEmpty else { return nil }
+        guard !closedContentIsHidden, nookDisplay.showsAgentDotOnArt, !surfacedSessions.isEmpty else { return nil }
         switch islandClosedMode {
         case .waiting: return IslandDesignPalette.Status.waitingAggregate
         case .running: return IslandDesignPalette.Status.running
@@ -2152,6 +2171,8 @@ final class AppModel {
 
         state.apply(event)
         noteAgentToolsEvent(event, ingress: ingress)
+        // An agent that starts waiting brings the closed island back (D46).
+        if islandClosedMode == .waiting { nook.closedContentHiddenBySwipe = false }
         reconcileIslandSurfaceAfterStateChange()
         if ingress == .bridge {
             monitoring.markSessionAttached(for: event)

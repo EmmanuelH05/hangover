@@ -42,6 +42,10 @@ enum NookAccessMoment: Equatable, Sendable {
     /// The user switched the widget on in Settings, or picked Reminders as
     /// the to-do source there.
     case turnedOn
+    /// The user pressed a button that named the prompt first: "Show my
+    /// calendar" on the welcome tour's features page (D47). Only the click
+    /// raises it; a tour that holds the island open still asks for nothing.
+    case requested
 }
 
 /// The EventKit permissions the Nook uses.

@@ -35,7 +35,7 @@ extension AppModel {
             flashToken: agentsEnabled ? halo.flashToken : nil,
             noticeTint: noticeTint,
             musicTint: musicTint,
-            isRunning: sessions.contains { $0.phase == .running },
+            isRunning: !closedContentIsHidden && sessions.contains { $0.phase == .running },
             palette: display.haloColors.effectivePalette,
             isMusicPlaying: glowsWithMusic
         )

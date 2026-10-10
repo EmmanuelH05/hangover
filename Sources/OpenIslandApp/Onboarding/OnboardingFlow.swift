@@ -27,6 +27,9 @@ enum OnboardingPage: Int, CaseIterable, Identifiable, Sendable {
     case agents
     /// Which widgets are switched on.
     case widgets
+    /// Each switched-on widget in action on the real island, one at a time
+    /// (D47). Shown with the other live pages.
+    case features
     /// A starting layout for those widgets.
     case layout
     /// Moving and resizing the widgets, done for real on the real island.
@@ -59,7 +62,7 @@ enum OnboardingPage: Int, CaseIterable, Identifiable, Sendable {
     var chapter: OnboardingChapter {
         switch self {
         case .welcome, .purpose, .opening: .basics
-        case .closed, .agents, .widgets, .layout, .arrange, .todos, .notes, .weather, .opened, .look: .yours
+        case .closed, .agents, .widgets, .features, .layout, .arrange, .todos, .notes, .weather, .opened, .look: .yours
         case .permissions, .integrations, .tips, .done: .know
         }
     }
@@ -69,7 +72,7 @@ enum OnboardingPage: Int, CaseIterable, Identifiable, Sendable {
     /// open and its window steps aside, narrow, at the left of the screen.
     var isLive: Bool {
         switch self {
-        case .widgets, .layout, .arrange, .todos, .notes, .weather, .opened: true
+        case .widgets, .features, .layout, .arrange, .todos, .notes, .weather, .opened: true
         default: false
         }
     }
@@ -123,6 +126,7 @@ enum OnboardingPage: Int, CaseIterable, Identifiable, Sendable {
         case .closed: "closed"
         case .agents: "agents"
         case .widgets: "widgets"
+        case .features: "features"
         case .todos: "todos"
         case .notes: "notes"
         case .weather: "weather"

@@ -238,6 +238,44 @@ struct NookPhotoStripTests {
         #expect(NookPhotoBoothImaging.pngData(first) == NookPhotoBoothImaging.pngData(second))
     }
 
+    // MARK: The name on every strip
+
+    @Test func everyThemeAndLayoutPrintsTheAppNameInsideTheStripClearOfThePhotos() {
+        for kind in NookPhotoStripLayout.Kind.allCases {
+            let layout = NookPhotoStripLayout.layout(kind)
+            let page = CGRect(origin: .zero, size: layout.pageSize)
+            for theme in NookPhotoStripTheme.all {
+                let mark = NookPhotoStripComposer.wordmark(layout: layout, theme: theme)
+                let label = "\(kind) \(theme.id)"
+                #expect(mark.text == AppBrand.name, "\(label)")
+                #expect(page.contains(mark.rect), "\(label)")
+                #expect(!mark.rect.intersects(layout.footer), "\(label)")
+                #expect(mark.color == theme.footer.captionInk.opacity(1), "\(label)")
+                for slot in layout.slots {
+                    #expect(!mark.rect.intersects(slot), "\(label)")
+                }
+            }
+        }
+    }
+
+    @Test func theNameIsTheAppsOwnAndFitsItsBand() {
+        #expect(AppBrand.name == "Hangover")
+        for kind in NookPhotoStripLayout.Kind.allCases {
+            let layout = NookPhotoStripLayout.layout(kind)
+            let mark = NookPhotoStripComposer.wordmark(layout: layout, theme: NookPhotoStripTheme.theme(id: "classic"))
+            #expect(mark.rect.height >= NookPhotoStripComposer.wordmarkSize + 2, "\(kind)")
+        }
+    }
+
+    @Test func theSavedPDFCarriesTheAppNameAsTextOnEveryLayout() throws {
+        for kind in NookPhotoStripLayout.Kind.allCases {
+            let data = try #require(NookPhotoStripComposer.pdf(Self.input(kind, caption: "")))
+            // Letter spacing makes the text reader put a space between letters.
+            let text = try #require(PDFDocument(data: data)?.string).filter { !$0.isWhitespace }
+            #expect(text.contains(AppBrand.name), "\(kind)")
+        }
+    }
+
     @Test func aCaptionIsOneTrimmedLineOfLimitedLength() {
         let plain = NookPhotoStripTheme.theme(id: "notebook")
         #expect(NookPhotoStripComposer.printedCaption("  two\nlines  ", theme: plain) == "two lines")

@@ -86,21 +86,21 @@ struct OnboardingFlowTests {
         // The names sort in the order of the tour.
         #expect(names.sorted() == names)
         #expect(OnboardingPage.welcome.snapshotName == "01-welcome")
-        #expect(OnboardingPage.todos.snapshotName == "09-todos")
-        #expect(OnboardingPage.notes.snapshotName == "10-notes")
-        #expect(OnboardingPage.weather.snapshotName == "11-weather")
-        #expect(OnboardingPage.done.snapshotName == "17-done")
+        #expect(OnboardingPage.todos.snapshotName == "10-todos")
+        #expect(OnboardingPage.notes.snapshotName == "11-notes")
+        #expect(OnboardingPage.weather.snapshotName == "12-weather")
+        #expect(OnboardingPage.done.snapshotName == "18-done")
     }
 
     // MARK: The pages and their chapters (D43)
 
     @Test func theTourAsksOneThingAPageInThisOrder() {
         #expect(OnboardingPage.allCases == [
-            .welcome, .purpose, .opening, .closed, .agents, .widgets, .layout, .arrange,
+            .welcome, .purpose, .opening, .closed, .agents, .widgets, .features, .layout, .arrange,
             .todos, .notes, .weather, .opened, .look, .permissions, .integrations, .tips, .done,
         ])
-        #expect(OnboardingPage.shown(agentsEnabled: true).count == 17)
-        #expect(OnboardingPage.shown(agentsEnabled: false).count == 16)
+        #expect(OnboardingPage.shown(agentsEnabled: true).count == 18)
+        #expect(OnboardingPage.shown(agentsEnabled: false).count == 17)
     }
 
     /// The to-dos page is about the to-do widget and nothing else. With
@@ -113,7 +113,7 @@ struct OnboardingFlowTests {
         #expect(without == OnboardingPage.allCases.filter { $0 != .todos })
         #expect(OnboardingPage.allCases.filter(\.needsTodoWidget) == [.todos])
         #expect(OnboardingPage.shown(agentsEnabled: false, hasTodoWidget: false) == [
-            .welcome, .purpose, .opening, .closed, .widgets, .layout, .arrange, .notes, .weather, .opened, .look, .permissions, .integrations, .tips, .done,
+            .welcome, .purpose, .opening, .closed, .widgets, .features, .layout, .arrange, .notes, .weather, .opened, .look, .permissions, .integrations, .tips, .done,
         ])
         // Asked for while it is left out, the page before it is shown.
         #expect(OnboardingPage.landing(.todos, in: without) == .arrange)

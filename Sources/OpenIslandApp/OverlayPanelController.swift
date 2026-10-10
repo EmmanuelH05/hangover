@@ -68,6 +68,8 @@ final class OverlayPanelController {
 
     private var panel: NotchPanel?
     private var eventMonitors = NotchEventMonitors()
+    /// Follows the scroll events over the island to tell a swipe (D46).
+    private var swipe = IslandSwipeRecognizer()
     private var lastStrayClickRepair: Date = .distantPast
     private var hoverTimer: DispatchWorkItem?
     private var hoverCancelGrace: DispatchWorkItem?
@@ -579,6 +581,14 @@ final class OverlayPanelController {
             self?.handleMouseDragged(location)
         } mouseUpHandler: { [weak self] in
             self?.handleMouseUp()
+        } scrollHandler: { [weak self] sample, screenLocation, windowLocation, windowNumber, isLocalEvent in
+            self?.handleScroll(
+                sample,
+                screenLocation: screenLocation,
+                windowLocation: windowLocation,
+                windowNumber: windowNumber,
+                isLocalEvent: isLocalEvent
+            ) ?? false
         }
     }
 
@@ -690,6 +700,71 @@ final class OverlayPanelController {
         case .none:
             break
         }
+    }
+
+    // MARK: - Swipes
+
+    /// Turns the scroll events over the island into a swipe (D46). Runs for
+    /// every scroll event on the Mac. The pointer test comes first and
+    /// everything else waits for it.
+    /// - Returns: Whether the local monitor should swallow the event: the
+    ///   island acted on this gesture and the rest of it is not for the view
+    ///   under the pointer. A global event is only observed.
+    func handleScroll(
+        _ sample: IslandScrollSample,
+        screenLocation: NSPoint,
+        windowLocation: NSPoint,
+        windowNumber: Int,
+        isLocalEvent: Bool
+    ) -> Bool {
+        guard let model else { return false }
+
+        let inClosedSurface = isPointInClosedSurfaceArea(screenLocation)
+        let inExpandedArea = isPointInExpandedArea(screenLocation)
+        guard inClosedSurface || inExpandedArea else {
+            swipe.reset()
+            return false
+        }
+
+        let direction = swipe.feed(sample)
+        let swallows = isLocalEvent && swipe.isConsumed
+        guard let direction else { return swallows }
+
+        let isOpened = model.notchStatus == .opened
+        let context = IslandSwipeContext(
+            status: model.notchStatus,
+            direction: direction,
+            isInClosedSurface: inClosedSurface,
+            isInExpandedArea: inExpandedArea,
+            isOverScrollableContent: isLocalEvent && isOpened
+                && isOverScrollableContent(windowLocation: windowLocation, windowNumber: windowNumber),
+            blocksDismiss: isOpened && model.shouldBlockDismissWhileAwaitingDecision,
+            hasOpenPicker: isOpened && model.nook.tray.isSharePickerOpen,
+            holdsOpenForTour: isOpened && model.tourHoldsIslandOpen
+        )
+
+        switch IslandPointerRules.swipeAction(context) {
+        case .close:
+            // The pointer is still on the island. Without this, hover mode
+            // would open it again under the pointer.
+            isHoverSuppressedUntilExit = true
+            model.notchClose()
+        case .toggleClosedContent:
+            model.toggleClosedContentHidden()
+        case .none:
+            return swallows
+        }
+        swipe.markConsumed()
+        return isLocalEvent
+    }
+
+    /// Whether the view under a local scroll event sits in a scroll view
+    /// with more to scroll. Nothing found answers false.
+    private func isOverScrollableContent(windowLocation: NSPoint, windowNumber: Int) -> Bool {
+        guard let panel, panel.windowNumber == windowNumber,
+              let content = panel.contentView, let frameView = content.superview else { return false }
+        let hit = content.hitTest(frameView.convert(windowLocation, from: nil))
+        return IslandScrollContent.isScrollable(from: hit, windowPoint: windowLocation)
     }
 
     // MARK: - Files dragged to the island
@@ -1489,6 +1564,8 @@ final class NotchEventMonitors {
     private var localDragMonitor: Any?
     private var globalUpMonitor: Any?
     private var localUpMonitor: Any?
+    private var globalScrollMonitor: Any?
+    private var localScrollMonitor: Any?
     private var lastMoveTime: TimeInterval = 0
 
     var isActive: Bool { globalMoveMonitor != nil }
@@ -1504,7 +1581,14 @@ final class NotchEventMonitors {
         mouseMoveHandler: @MainActor @escaping @Sendable (NSPoint) -> Void,
         mouseDownHandler: @MainActor @escaping @Sendable (NSPoint, _ isLocalEvent: Bool) -> Void,
         mouseDragHandler: @MainActor @escaping @Sendable (NSPoint) -> Void,
-        mouseUpHandler: @MainActor @escaping @Sendable () -> Void
+        mouseUpHandler: @MainActor @escaping @Sendable () -> Void,
+        scrollHandler: @MainActor @escaping @Sendable (
+            _ sample: IslandScrollSample,
+            _ screenLocation: NSPoint,
+            _ windowLocation: NSPoint,
+            _ windowNumber: Int,
+            _ isLocalEvent: Bool
+        ) -> Bool
     ) {
         let throttleInterval: TimeInterval = 0.05
 
@@ -1565,6 +1649,39 @@ final class NotchEventMonitors {
             Task { @MainActor in mouseUpHandler() }
             return event
         }
+
+        // Scroll events arrive for the whole Mac. A monitor only reads the
+        // numbers and hands plain values to the handler, which tests the
+        // pointer first. The local one runs on the main thread and may
+        // swallow the rest of a swipe the island acted on.
+        globalScrollMonitor = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel) { event in
+            let sample = Self.sample(from: event)
+            let location = NSEvent.mouseLocation
+            Task { @MainActor in _ = scrollHandler(sample, location, .zero, 0, false) }
+        }
+
+        localScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
+            let sample = Self.sample(from: event)
+            let location = NSEvent.mouseLocation
+            let windowLocation = event.locationInWindow
+            let windowNumber = event.windowNumber
+            let swallows = MainActor.assumeIsolated {
+                scrollHandler(sample, location, windowLocation, windowNumber, true)
+            }
+            return swallows ? nil : event
+        }
+    }
+
+    private nonisolated static func sample(from event: NSEvent) -> IslandScrollSample {
+        IslandScrollSample.make(
+            scrollingDeltaX: Double(event.scrollingDeltaX),
+            scrollingDeltaY: Double(event.scrollingDeltaY),
+            hasPreciseScrollingDeltas: event.hasPreciseScrollingDeltas,
+            isDirectionInvertedFromDevice: event.isDirectionInvertedFromDevice,
+            phase: event.phase,
+            momentumPhase: event.momentumPhase,
+            timestamp: event.timestamp
+        )
     }
 
     func stop() {
@@ -1576,6 +1693,8 @@ final class NotchEventMonitors {
         if let m = localDragMonitor { NSEvent.removeMonitor(m) }
         if let m = globalUpMonitor { NSEvent.removeMonitor(m) }
         if let m = localUpMonitor { NSEvent.removeMonitor(m) }
+        if let m = globalScrollMonitor { NSEvent.removeMonitor(m) }
+        if let m = localScrollMonitor { NSEvent.removeMonitor(m) }
         globalMoveMonitor = nil
         localMoveMonitor = nil
         globalClickMonitor = nil
@@ -1584,6 +1703,8 @@ final class NotchEventMonitors {
         localDragMonitor = nil
         globalUpMonitor = nil
         localUpMonitor = nil
+        globalScrollMonitor = nil
+        localScrollMonitor = nil
     }
 }
 

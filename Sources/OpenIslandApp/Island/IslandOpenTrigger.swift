@@ -67,6 +67,34 @@ struct IslandClickContext: Equatable, Sendable {
     var holdsOpenForTour = false
 }
 
+/// What a two-finger swipe means for the island (D46).
+enum IslandSwipeAction: Equatable, Sendable {
+    /// Swipe up on the open island.
+    case close
+    /// Swipe sideways on the closed island: hide what it shows, or bring
+    /// it back.
+    case toggleClosedContent
+    case none
+}
+
+/// Where a swipe landed and what the island was doing.
+struct IslandSwipeContext: Equatable, Sendable {
+    var status: NotchStatus
+    var direction: IslandSwipeDirection
+    var isInClosedSurface: Bool
+    var isInExpandedArea: Bool
+    /// The pointer is over a scroll view with more to scroll. The swipe is
+    /// that list's, not the island's.
+    var isOverScrollableContent = false
+    /// A session waits for approval or an answer and the user asked to keep
+    /// the island open for it.
+    var blocksDismiss = false
+    /// A picker the island put up is still open.
+    var hasOpenPicker = false
+    /// The welcome tour holds the island open (D44).
+    var holdsOpenForTour = false
+}
+
 /// Pure rules for what the pointer does to the island. The panel controller
 /// gathers the facts and acts on the answer.
 enum IslandPointerRules {
@@ -118,6 +146,25 @@ enum IslandPointerRules {
                 // Cards and the boot animation keep their own rules.
                 return .none
             }
+        }
+    }
+
+    /// What a swipe does. Every refusal a click close has applies to a swipe
+    /// close too, and a swipe on a list that can still scroll is the list's.
+    static func swipeAction(_ context: IslandSwipeContext) -> IslandSwipeAction {
+        switch context.status {
+        case .opened:
+            guard context.direction == .up, context.isInExpandedArea else { return .none }
+            if context.holdsOpenForTour || context.blocksDismiss
+                || context.hasOpenPicker || context.isOverScrollableContent {
+                return .none
+            }
+            return .close
+        case .closed:
+            let sideways = context.direction == .left || context.direction == .right
+            return sideways && context.isInClosedSurface ? .toggleClosedContent : .none
+        case .popping:
+            return .none
         }
     }
 

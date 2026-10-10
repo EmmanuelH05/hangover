@@ -395,7 +395,7 @@ struct AgentsSwitchTests {
     @Test
     func theTourLeavesItsAgentsPageOutWhileOff() {
         let off = OnboardingPage.shown(agentsEnabled: false)
-        #expect(off == [.welcome, .purpose, .opening, .closed, .widgets, .layout, .arrange, .todos, .notes, .weather, .opened, .look, .permissions, .integrations, .tips, .done])
+        #expect(off == [.welcome, .purpose, .opening, .closed, .widgets, .features, .layout, .arrange, .todos, .notes, .weather, .opened, .look, .permissions, .integrations, .tips, .done])
         #expect(OnboardingPage.shown(agentsEnabled: true) == OnboardingPage.allCases)
     }
 
@@ -407,7 +407,7 @@ struct AgentsSwitchTests {
             flow.next()
             seen.append(flow.page)
         }
-        #expect(seen == [.welcome, .purpose, .opening, .closed, .widgets, .layout, .arrange, .todos, .notes, .weather, .opened, .look, .permissions, .integrations, .tips, .done])
+        #expect(seen == [.welcome, .purpose, .opening, .closed, .widgets, .features, .layout, .arrange, .todos, .notes, .weather, .opened, .look, .permissions, .integrations, .tips, .done])
 
         flow.go(to: .agents)
         #expect(flow.page == .done)

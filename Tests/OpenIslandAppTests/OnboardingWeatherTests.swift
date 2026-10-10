@@ -56,14 +56,14 @@ struct OnboardingWeatherTests {
     }
 
     @Test func thePageListAndTheStepCountCountTheWeatherPage() {
-        #expect(OnboardingPage.shown(agentsEnabled: true).count == 17)
-        #expect(OnboardingPage.shown(agentsEnabled: true, hasWeatherWidget: false).count == 16)
+        #expect(OnboardingPage.shown(agentsEnabled: true).count == 18)
+        #expect(OnboardingPage.shown(agentsEnabled: true, hasWeatherWidget: false).count == 17)
         // Everything optional off: welcome to the widgets, layout and
         // arrange, then the opened island and the last chapter.
         #expect(OnboardingPage.shown(
             agentsEnabled: false, hasTodoWidget: false, hasNotesWidget: false, hasWeatherWidget: false
         ) == [
-            .welcome, .purpose, .opening, .closed, .widgets, .layout, .arrange, .opened, .look,
+            .welcome, .purpose, .opening, .closed, .widgets, .features, .layout, .arrange, .opened, .look,
             .permissions, .integrations, .tips, .done,
         ])
     }

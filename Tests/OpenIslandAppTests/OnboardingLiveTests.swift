@@ -245,8 +245,8 @@ struct OnboardingHoldTests {
         #expect(store.welcomeTourEnded)
     }
 
-    @Test func theLivePagesAreTheSevenThatUseTheRealIsland() {
-        #expect(OnboardingPage.allCases.filter(\.isLive) == [.widgets, .layout, .arrange, .todos, .notes, .weather, .opened])
+    @Test func theLivePagesAreTheEightThatUseTheRealIsland() {
+        #expect(OnboardingPage.allCases.filter(\.isLive) == [.widgets, .features, .layout, .arrange, .todos, .notes, .weather, .opened])
         #expect(!OnboardingPage.closed.isLive)
         #expect(!OnboardingPage.look.isLive)
     }

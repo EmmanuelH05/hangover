@@ -116,6 +116,13 @@ struct OnboardingState: Equatable, Sendable {
     var hasOpenedIsland = false
     /// True while the real island is in widget editing (D44).
     var isEditingWidgets = false
+    /// What the features page's buttons read from the app (D47).
+    var features = OnboardingFeatureReading()
+    /// The widget the features page shows. Nil until the page picks the
+    /// first one on the user's page.
+    var featureKind: NookWidgetKind?
+    /// What the features page has seen happen since it came up.
+    var featureProgress = OnboardingFeatureProgress()
     /// The widget the arrange page was asked to teach with, and what the
     /// page looked like then. Nil until one is picked, and off that page.
     var arrangePick: OnboardingArrangePick?
@@ -167,12 +174,17 @@ struct OnboardingState: Equatable, Sendable {
         }
     }
 
-    /// The widget the widgets page spotlights. Selecting one only changes
-    /// what the page says; the widget stays as it was.
-    var spotlight: NookWidgetKind = OnboardingState.firstSpotlight
+    /// The features page's list: the widgets on the page, in order, and the
+    /// one shown.
+    var featureWalk: OnboardingFeatureWalk {
+        OnboardingFeatureWalk(kinds: shownPlacements.map(\.kind), current: featureKind)
+    }
 
-    /// The widget selected when the page first comes up.
-    static let firstSpotlight: NookWidgetKind = NookWidgetKind.allCases.first ?? .media
+    /// True once the app showed a "Try it" done. The notes step is the
+    /// notes page's: a note saved while the page was up.
+    func isDone(_ step: OnboardingTry) -> Bool {
+        step == .notesLine ? hasSavedNote : featureProgress.done.contains(step)
+    }
 
     /// True while a widget is on the page the tour draws.
     func showsWidget(_ kind: NookWidgetKind) -> Bool {
@@ -203,9 +215,6 @@ struct OnboardingActions {
     /// Opens Settings on the Setup tab, where every agent is listed.
     var showAllAgents: () -> Void = {}
     var setWidget: (_ kind: NookWidgetKind, _ isEnabled: Bool) -> Void = { _, _ in }
-    /// Picks the widget the widgets page spotlights. Changes nothing in the
-    /// app.
-    var spotlightWidget: (NookWidgetKind) -> Void = { _ in }
     /// Picks where the to-do widget gets its tasks. The same preference as
     /// the Source picker in Settings.
     var setTodoSource: (NookTodoSourceKind) -> Void = { _ in }
@@ -264,6 +273,33 @@ struct OnboardingActions {
     var pickArrangeWidget: (NookWidgetKind) -> Void = { _ in }
     var tryAnotherWidget: () -> Void = {}
     var resetArrangement: () -> Void = {}
+    /// The features page's buttons (D47). Each is the call the widget's own
+    /// button makes, and none raises a macOS prompt except `setMirror`
+    /// (the camera) and `showCalendar`, whose notes name the prompt first.
+    /// Turns the mirror's camera on or off, as the Mirror tile does.
+    var setMirror: (Bool) -> Void = { _ in }
+    /// Switches the mirror's ring light, as its bulb button does.
+    var setRingLight: (Bool) -> Void = { _ in }
+    /// Starts the photo booth, as the mirror's camera button does.
+    var openPhotoBooth: () -> Void = {}
+    /// The music card's play and pause button.
+    var playOrPause: () -> Void = {}
+    /// The music card's next track button.
+    var nextTrack: () -> Void = {}
+    /// Starts a one-off countdown of that many seconds.
+    var startTimer: (TimeInterval) -> Void = { _ in }
+    /// Stops the focus timer, as its reset button does.
+    var stopTimer: () -> Void = {}
+    /// Copies a sentence through the tray's own clipboard door, which the
+    /// clipboard list then shows if its tab is on.
+    var copySampleLine: (String) -> Void = { _ in }
+    /// Lets the calendar ask macOS for access. The one call that can raise
+    /// the Calendar prompt, from the button that names it.
+    var showCalendar: () -> Void = {}
+    /// The features page's next and previous widget. The tour answers them
+    /// with the walk it kept; the app never sees these.
+    var nextFeature: () -> Void = {}
+    var previousFeature: () -> Void = {}
 }
 
 /// What the user chose in one run of the tour, kept by the tour itself.
@@ -280,8 +316,6 @@ struct OnboardingPicks: Equatable, Sendable {
     /// The last media style and switch values picked on the closed page.
     var musicStyle: NookClosedMediaStyle?
     var musicOptions: [NookClosedMusicOption: Bool] = [:]
-    /// The widget picked for the spotlight on the widgets page.
-    var spotlight: NookWidgetKind?
     /// Agents whose Connect button was pressed.
     var connectAttempts: Set<OnboardingAgent> = []
 }
@@ -336,9 +370,19 @@ final class OnboardingTour {
     /// editing ended after that. Read off the island on each draw.
     @ObservationIgnored private var hasSeenEditing = false
     @ObservationIgnored private var hasEndedEditing = false
-    /// How many notes were saved when the notes page came up. Nil off that
-    /// page.
+    /// How many notes were saved when the notes or the features page came
+    /// up. Nil off those pages.
     @ObservationIgnored private var notesBaseline: Int?
+    /// The widget the features page shows (D47). Observed: next and previous
+    /// change the page.
+    private var featureKind: NookWidgetKind?
+    /// True from the moment the features page rang its first widget until
+    /// every way out of the page let go of it.
+    @ObservationIgnored private var featuresActive = false
+    /// What the features page has seen done since it came up.
+    @ObservationIgnored private var featureProgress = OnboardingFeatureProgress()
+    /// What a "Try it" switched on, which the clean-up switches off.
+    @ObservationIgnored private var trials = OnboardingTrials()
     /// Runs once, when the tour ends by its last button, by Skip or by its
     /// window closing.
     @ObservationIgnored private let onEnd: (OnboardingOutcome) -> Void
@@ -388,11 +432,13 @@ final class OnboardingTour {
             state.arrangePick = OnboardingArrangePick(kind: pick.kind, atPick: pick.atPick, hasEndedEditing: hasEndedEditing)
         }
         trackNotes(in: state)
+        trackFeatures(in: state)
+        state.featureKind = featureKind ?? state.featureKind
+        state.featureProgress = state.featureProgress.merged(with: featureProgress)
         state.hasSavedNote = state.hasSavedNote || notesBaseline.map { state.notesSavedCount > $0 } ?? false
         state.arrangeStart = state.arrangeStart ?? arrangeStart
         state.pickedTemplate = picks.template ?? state.pickedTemplate
         state.canKeepOwnLayout = state.canKeepOwnLayout || picks.hasOwnLayout
-        state.spotlight = picks.spotlight ?? state.spotlight
         for agent in picks.connectAttempts {
             var status = state.status(of: agent)
             status.didFail = !status.isConnected && !status.isBusy
@@ -436,14 +482,26 @@ final class OnboardingTour {
             self?.picks.keep(pick)
             appActions.setClosedMusic(pick)
         }
-        actions.spotlightWidget = { [weak self, appActions] kind in
-            self?.picks.spotlight = kind
-            appActions.spotlightWidget(kind)
-        }
         actions.setGlowStyle = { [weak self, appActions] style in
             self?.picks.glowStyle = style
             appActions.setGlowStyle(style)
         }
+        // What a try-it switches on is noted, so that leaving puts it back.
+        // A thing that was already on is not noted, and is left alone.
+        actions.setMirror = { [weak self, appActions, readState] isOn in
+            if isOn, !readState().features.isMirrorOn { self?.trials.mirror = true }
+            appActions.setMirror(isOn)
+        }
+        actions.setRingLight = { [weak self, appActions, readState] isOn in
+            if isOn, !readState().features.isRingLightOn { self?.trials.ringLight = true }
+            appActions.setRingLight(isOn)
+        }
+        actions.startTimer = { [weak self, appActions, readState] length in
+            if !readState().features.isTimerActive { self?.trials.timer = true }
+            appActions.startTimer(length)
+        }
+        actions.nextFeature = { [weak self] in self?.showFeature(self?.currentWalk.next) }
+        actions.previousFeature = { [weak self] in self?.showFeature(self?.currentWalk.previous) }
         actions.pickArrangeWidget = { [weak self] in self?.pickArrangeWidget($0) }
         actions.tryAnotherWidget = { [weak self] in self?.endArrange() }
         actions.resetArrangement = { [weak self, appActions] in
@@ -465,9 +523,13 @@ final class OnboardingTour {
             appIsActive: appIsActive,
             windowIsVisible: windowIsVisible
         )
+        if holds, page == .features { enterFeatures() }
         guard holds != holdsIsland else { return }
         holdsIsland = holds
-        if !holds { endArrange() }
+        if !holds {
+            endArrange()
+            endFeatures()
+        }
         appActions.holdIsland(holds)
     }
 
@@ -484,6 +546,7 @@ final class OnboardingTour {
     /// way it can go away, as a second guard behind the tour's own end.
     func releaseIsland() {
         endArrange()
+        endFeatures()
         guard holdsIsland else { return }
         holdsIsland = false
         appActions.holdIsland(false)
@@ -533,14 +596,80 @@ final class OnboardingTour {
         appActions.setEditingWidgets(false)
     }
 
-    /// Keeps the count of saved notes from when the notes page came up,
-    /// dropped when it is not up.
+    /// Keeps the count of saved notes from when the notes page or the
+    /// features page came up, dropped when neither is up.
     private func trackNotes(in state: OnboardingState) {
-        guard page == .notes, !flow.hasEnded else {
+        guard page == .notes || page == .features, !flow.hasEnded else {
             notesBaseline = nil
             return
         }
         if notesBaseline == nil { notesBaseline = state.notesSavedCount }
+    }
+
+    // MARK: The features page (D47)
+
+    /// The list of the features page as it stands now.
+    private var currentWalk: OnboardingFeatureWalk {
+        OnboardingFeatureWalk(kinds: readState().shownPlacements.map(\.kind), current: featureKind)
+    }
+
+    /// Notes what the app shows while the features page is up, and starts
+    /// over when it is not. It reads and notes; the ring and the clean-up
+    /// are never touched from a draw.
+    private func trackFeatures(in state: OnboardingState) {
+        guard page == .features, !flow.hasEnded else {
+            featureProgress = OnboardingFeatureProgress()
+            return
+        }
+        featureProgress.note(state.features)
+    }
+
+    /// The page came up with the island held: the first widget on the page
+    /// is shown and ringed. Safe to call any number of times.
+    private func enterFeatures() {
+        guard !featuresActive, !flow.hasEnded else { return }
+        featuresActive = true
+        featureKind = currentWalk.current
+        // What was already running is the user's, from the first look.
+        featureProgress.note(readState().features)
+        appActions.outlineWidget(featureKind)
+    }
+
+    /// Next or previous widget. What the widget being left switched on is
+    /// switched off first, and the ring moves to the new one.
+    private func showFeature(_ kind: NookWidgetKind?) {
+        guard featuresActive, !flow.hasEnded, let kind else { return }
+        releaseTrials(leaving: currentWalk.current)
+        featureKind = kind
+        appActions.outlineWidget(kind)
+    }
+
+    /// Lets go of everything the features page started: the camera, the ring
+    /// light and a timer the tour switched on, and the ring on the island.
+    /// Every way out of the page runs it: Next, Back, a dot, Skip,
+    /// finishing, the window closing (`releaseIsland`) and the hold going
+    /// off.
+    private func endFeatures() {
+        releaseTrials(leaving: nil)
+        guard featuresActive else { return }
+        featuresActive = false
+        featureKind = nil
+        appActions.outlineWidget(nil)
+    }
+
+    /// Switches off what the tour switched on for the widget being left, or
+    /// for every widget with nil. The ring light goes before the mirror. A
+    /// thing the user had on before the tour touched it was never noted, and
+    /// stays.
+    private func releaseTrials(leaving kind: NookWidgetKind?) {
+        for release in trials.releases(leaving: kind, reading: readState().features) {
+            switch release {
+            case .ringLightOff: appActions.setRingLight(false)
+            case .mirrorOff: appActions.setMirror(false)
+            case .timerOff: appActions.stopTimer()
+            }
+        }
+        trials = trials.after(leaving: kind)
     }
 
     isolated deinit {
@@ -569,6 +698,7 @@ final class OnboardingTour {
         if flow.pages != pages { flow.pages = pages }
         change(&flow)
         if page != .arrange || flow.hasEnded { endArrange() }
+        if page != .features || flow.hasEnded { endFeatures() }
         trackArrange(in: readState())
         trackNotes(in: readState())
         // The hold goes before the end is recorded and the window closed.

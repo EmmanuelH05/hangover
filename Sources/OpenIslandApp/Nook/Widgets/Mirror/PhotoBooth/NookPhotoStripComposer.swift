@@ -106,6 +106,7 @@ enum NookPhotoStripComposer {
             )
         }
         drawFooter(input, context: context)
+        drawWordmark(input, context: context)
         context.restoreGState()
     }
 
@@ -324,6 +325,39 @@ enum NookPhotoStripComposer {
         }
         drawText(date, font: footer.dateFont, maxSize: dateSize, color: footer.dateInk.cgColor,
                  tracking: footer.dateTracking, alignment: alignment, in: dateBox, context: context)
+    }
+
+    // MARK: - Wordmark
+
+    /// The app's name as it is printed on every strip: what it says, where
+    /// it sits and the ink. Kept apart from the drawing so a test can read it.
+    struct Wordmark: Equatable {
+        var text: String
+        var rect: CGRect
+        var color: NookStripColor
+    }
+
+    /// Largest the name is set. It shrinks to fit a narrow band.
+    static let wordmarkSize: CGFloat = 6
+
+    static func wordmark(layout: NookPhotoStripLayout, theme: NookPhotoStripTheme) -> Wordmark {
+        Wordmark(text: AppBrand.name, rect: layout.wordmarkBox, color: theme.footer.captionInk.opacity(1))
+    }
+
+    /// Small and centered under the footer, in the theme's caption ink. Every
+    /// strip gets it, whatever the theme, layout or file it is saved as.
+    private static func drawWordmark(_ input: NookPhotoStripInput, context: CGContext) {
+        let mark = wordmark(layout: input.layout, theme: input.theme)
+        drawText(
+            mark.text,
+            font: input.theme.footer.captionFont,
+            maxSize: wordmarkSize,
+            color: mark.color.cgColor,
+            tracking: 1,
+            alignment: .center,
+            in: mark.rect,
+            context: context
+        )
     }
 
     // MARK: - Text and pictures in a turned-over context

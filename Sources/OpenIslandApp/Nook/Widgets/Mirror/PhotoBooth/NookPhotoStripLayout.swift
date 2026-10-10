@@ -45,6 +45,9 @@ struct NookPhotoStripLayout: Identifiable, Equatable, Sendable {
     let captionBox: CGRect
     /// Where the date goes inside the footer.
     let dateBox: CGRect
+    /// The band under the footer where the app's name is printed. It lies
+    /// on the page and clear of every picture and of the footer.
+    let wordmarkBox: CGRect
     let footerStyle: FooterStyle
     /// A theme's type sizes are given for the classic strip. Other
     /// layouts scale them by these.
@@ -82,6 +85,7 @@ struct NookPhotoStripLayout: Identifiable, Equatable, Sendable {
             footer: footer,
             captionBox: CGRect(x: footer.minX, y: footer.minY, width: footer.width, height: 32),
             dateBox: CGRect(x: footer.minX, y: footer.minY + 32, width: footer.width, height: 18),
+            wordmarkBox: CGRect(x: footer.minX, y: footer.maxY, width: footer.width, height: 10),
             footerStyle: .stacked,
             captionScale: 1,
             dateScale: 1
@@ -100,7 +104,9 @@ struct NookPhotoStripLayout: Identifiable, Equatable, Sendable {
                 height: 112.5
             )
         }
-        let footer = CGRect(x: 12, y: 253, width: 408, height: 23)
+        // The footer is short to leave the band under it clear of the film
+        // theme's holes along the bottom edge.
+        let footer = CGRect(x: 12, y: 253, width: 408, height: 17)
         return NookPhotoStripLayout(
             kind: .grid,
             pageSize: CGSize(width: 6 * pointsPerInch, height: 4 * pointsPerInch),
@@ -108,6 +114,7 @@ struct NookPhotoStripLayout: Identifiable, Equatable, Sendable {
             footer: footer,
             captionBox: footer,
             dateBox: footer,
+            wordmarkBox: CGRect(x: footer.minX, y: footer.maxY, width: footer.width, height: 11),
             footerStyle: .inline,
             captionScale: 0.9,
             dateScale: 1
@@ -126,6 +133,7 @@ struct NookPhotoStripLayout: Identifiable, Equatable, Sendable {
             footer: footer,
             captionBox: CGRect(x: 8, y: 330, width: 128, height: 60),
             dateBox: CGRect(x: 8, y: 396, width: 128, height: 20),
+            wordmarkBox: CGRect(x: footer.minX, y: footer.maxY, width: footer.width, height: 10),
             footerStyle: .stacked,
             captionScale: 1.6,
             dateScale: 1.2

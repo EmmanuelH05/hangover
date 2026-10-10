@@ -304,6 +304,10 @@ final class NookModel {
     /// Short notice currently occupying the closed notch, if any.
     private(set) var transient: NookTransientActivity?
 
+    /// A sideways swipe on the closed island sent what it shows away (D46).
+    /// Not saved: a new launch starts with the island showing everything.
+    var closedContentHiddenBySwipe = false
+
     @ObservationIgnored private let defaults = UserDefaults.standard
     @ObservationIgnored private var cachedArtwork: (key: String, image: NSImage)?
     @ObservationIgnored private var lingerTask: Task<Void, Never>?
@@ -557,7 +561,8 @@ final class NookModel {
     // MARK: - Closed island
 
     /// What the closed island shows on a display with these preferences.
-    func closedActivity(for preferences: NookDisplayPreferences) -> NookClosedActivity? {
+    /// `isHidden` keeps only the notices (D46).
+    func closedActivity(for preferences: NookDisplayPreferences, isHidden: Bool = false) -> NookClosedActivity? {
         .resolve(
             transient: transient,
             timerText: timer.closedText,
@@ -566,7 +571,8 @@ final class NookModel {
                 NookPomodoroLook.tint(for: timer.pomodoro)
             ),
             media: closedMediaActivity,
-            preferences: preferences
+            preferences: preferences,
+            isHidden: isHidden
         )
     }
 

@@ -31,6 +31,7 @@ struct OnboardingPageView: View {
             case .closed: OnboardingClosedPage(context: context)
             case .agents: OnboardingAgentsPage(context: context)
             case .widgets: OnboardingWidgetsPage(context: context)
+            case .features: OnboardingFeaturesPage(context: context)
             case .todos: OnboardingTodosPage(context: context)
             case .notes: OnboardingNotesPage(context: context)
             case .weather: OnboardingWeatherPage(context: context)

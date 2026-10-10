@@ -217,6 +217,11 @@ final class OverlayUICoordinator {
     }
 
     func notchOpen(reason: NotchOpenReason, surface: IslandSurface = .sessionList()) {
+        // A card has news to bring (D46). Opening by hover or click leaves
+        // the swipe's hidden state alone.
+        if reason == .notification {
+            appModel?.nook.closedContentHiddenBySwipe = false
+        }
         transitionOverlay(
             to: .opened,
             reason: reason,

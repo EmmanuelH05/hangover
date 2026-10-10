@@ -135,6 +135,7 @@ extension AppModel {
             openedLook: display.openedLook,
             displayProfile: profile,
             isEditingWidgets: nook.isEditingLayout,
+            features: onboardingFeatureReading,
             approveKeys: keys.isApproveEnabled
                 ? OnboardingShortcutWords.caps(for: keys.approve, keyName: keyName)
                 : nil,
@@ -151,8 +152,10 @@ extension AppModel {
     }
 
     /// What the tour's buttons do. Each runs from a click and from nothing
-    /// else, and none of them asks macOS for a permission. `own` holds, for
-    /// one run of the tour, the layout a display had before a template.
+    /// else. Only two can raise a macOS prompt, the mirror's camera and the
+    /// calendar's access, each from a button whose note names the prompt
+    /// first (D47). `own` holds, for one run of the tour, the layout a
+    /// display had before a template.
     private func onboardingActions(keeping own: OnboardingOwnLayouts) -> OnboardingActions {
         OnboardingActions(
             setAgentsEnabled: { [weak self] in self?.agentsEnabled = $0 },
@@ -249,7 +252,50 @@ extension AppModel {
             // The tour's doors into widget editing: what a long press does,
             // and the ring the grid draws on the widget it names.
             setEditingWidgets: { [weak self] in self?.nook.isEditingLayout = $0 },
-            outlineWidget: { [weak self] in self?.nook.tourOutlinedWidget = $0 }
+            outlineWidget: { [weak self] in self?.nook.tourOutlinedWidget = $0 },
+            // The features page's buttons: each makes the real widget do the
+            // thing, through the call the widget's own button makes (D47).
+            setMirror: { [weak self] isOn in
+                guard let self else { return }
+                withMotion(Motion.reflow) { nook.isMirrorOn = isOn }
+            },
+            setRingLight: { [weak self] in self?.nook.isRingLightOn = $0 },
+            openPhotoBooth: { [weak self] in self?.nook.photoBooth.start() },
+            playOrPause: { [weak self] in self?.nook.media.togglePlayPause() },
+            nextTrack: { [weak self] in self?.nook.media.nextTrack() },
+            startTimer: { [weak self] in self?.nook.timer.start(length: $0) },
+            stopTimer: { [weak self] in self?.nook.timer.reset() },
+            copySampleLine: { [weak self] text in _ = self?.nook.tray.clipboard.copy(text: text) },
+            // The click that raises the Calendar prompt, after the note that
+            // names it. `NookAccessTiming` allows it for a widget that is on.
+            showCalendar: { [weak self] in
+                guard let nook = self?.nook else { return }
+                Task { await nook.askForAccess(for: .calendar, at: .requested) }
+            }
+        )
+    }
+
+    /// What the features page's buttons read: the mirror, the booth, the
+    /// music, the timer, the clipboard list and the calendar's access.
+    private var onboardingFeatureReading: OnboardingFeatureReading {
+        let sample = NookClipboardContent.text(lang.t(OnboardingFeatureSample.clipboardKey))
+        let calendar: OnboardingCalendarAccess = switch nook.calendar.authorization {
+        case .fullAccess: .allowed
+        case .notDetermined: .undecided
+        default: .refused
+        }
+        return OnboardingFeatureReading(
+            isMirrorOn: nook.isMirrorOn,
+            isRingLightOn: nook.isRingLightOn,
+            canStartBooth: nook.photoBooth.canStart,
+            isBoothShowing: nook.photoBooth.isShowing,
+            music: nook.media.state.map {
+                OnboardingMusicReading(isPlaying: $0.isPlaying, track: $0.itemIdentifier ?? $0.title)
+            },
+            isTimerActive: nook.timer.isActive,
+            isClipboardOn: nook.tray.clipboard.isEnabled,
+            hasSampleLine: nook.tray.clipboard.history.entries.contains { $0.content == sample },
+            calendar: calendar
         )
     }
 

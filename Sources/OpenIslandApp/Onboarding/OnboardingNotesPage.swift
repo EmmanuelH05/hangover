@@ -55,7 +55,7 @@ struct OnboardingNotesPage: View {
                 }
 
                 detail
-                tryIt
+                OnboardingNotesTryStep(context: context)
             }
         }
     }
@@ -138,10 +138,17 @@ struct OnboardingNotesPage: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
+}
 
-    // MARK: Try it
+/// The step that ticks when a note is saved on the real island: type a line
+/// in the notes card and press Return (D44). The notes page and the features
+/// page (D47) both show it, and it ticks from `state.hasSavedNote`.
+struct OnboardingNotesTryStep: View {
+    let context: OnboardingPageContext
 
-    private var tryIt: some View {
+    private var state: OnboardingState { context.state }
+
+    var body: some View {
         let isDone = state.hasSavedNote
         return VStack(alignment: .leading, spacing: 9) {
             HStack(alignment: .top, spacing: 10) {

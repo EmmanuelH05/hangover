@@ -4,7 +4,8 @@ import SwiftUI
 import Testing
 @testable import OpenIslandApp
 
-// The widget spotlight and the integrations page of the welcome tour (D43).
+// The features page's lines and the integrations page of the welcome tour
+// (D43, D47).
 
 // MARK: - What each line and each card stands on
 
@@ -12,11 +13,11 @@ struct OnboardingShowcaseProofTests {
     private static let abilityProofs = OnboardingAbility.allCases.flatMap { $0.proofs }
     private static let integrationProofs = OnboardingIntegration.allCases.flatMap { $0.proofs }
 
-    /// Each spotlight line names something a widget does. These are the
+    /// Each feature line names something a widget does. These are the
     /// pieces of code that do it, and a line whose code is renamed fails
     /// here first.
     @Test(arguments: abilityProofs)
-    func theCodeBehindASpotlightLineIsStillThere(proof: OnboardingProof) throws {
+    func theCodeBehindAFeatureLineIsStillThere(proof: OnboardingProof) throws {
         let source = try HangoverBrandTests.text(of: proof.file)
         #expect(source.contains(proof.text), "\(proof.file) no longer has: \(proof.text)")
     }
@@ -37,19 +38,20 @@ struct OnboardingShowcaseProofTests {
         }
     }
 
-    @Test func everyWidgetHasAtLeastOneLineAndAtMostThree() {
+    @Test func everyWidgetHasFourToSevenLines() {
         for kind in NookWidgetKind.allCases {
             let lines = OnboardingAbility.lines(for: kind)
-            #expect(!lines.isEmpty, "\(kind) has no spotlight line")
-            #expect(lines.count <= 3, "\(kind) has \(lines.count) lines")
+            #expect((4...7).contains(lines.count), "\(kind) has \(lines.count) lines")
         }
         #expect(OnboardingAbility.allCases.allSatisfy { OnboardingAbility.lines(for: $0.widget).contains($0) })
     }
 
     @Test func aWidgetsLinesAreItsOwnInTheOrderTheyAreTold() {
-        #expect(OnboardingAbility.lines(for: .mirror) == [.mirrorBooth, .mirrorStrip, .mirrorFrames])
-        #expect(OnboardingAbility.lines(for: .tray) == [.trayDrag, .trayActions, .trayClipboard])
-        #expect(OnboardingAbility.lines(for: .notes) == [.notesAdd, .notesWhere])
+        #expect(OnboardingAbility.lines(for: .mirror) == [
+            .mirrorOn, .mirrorRing, .mirrorBooth, .mirrorLooks, .mirrorSaved, .mirrorStrip, .mirrorFrames,
+        ])
+        #expect(OnboardingAbility.lines(for: .tray) == [.trayDrag, .trayActions, .trayClipboard, .trayPrivate])
+        #expect(OnboardingAbility.lines(for: .notes) == [.notesAdd, .notesRecent, .notesDelete, .notesWhere])
     }
 }
 
@@ -105,7 +107,7 @@ struct OnboardingIntegrationsTests {
         let index = pages.firstIndex(of: .integrations) ?? -1
         #expect(index >= 0 && pages[index + 1] == .tips)
         #expect(OnboardingPage.integrations.chapter == .know)
-        #expect(OnboardingPage.integrations.snapshotName == "15-integrations")
+        #expect(OnboardingPage.integrations.snapshotName == "16-integrations")
         #expect(!OnboardingPage.integrations.isAgentsOnly)
         #expect(!OnboardingPage.integrations.needsTodoWidget)
     }
@@ -116,12 +118,12 @@ struct OnboardingIntegrationsTests {
         let tour = OnboardingTour(startingAt: .integrations, state: { state })
         let pages = tour.pages
 
-        #expect(pages.count == 16)
-        #expect(pages.firstIndex(of: .integrations) == 13)
+        #expect(pages.count == 17)
+        #expect(pages.firstIndex(of: .integrations) == 14)
         var nookOnly = state
         nookOnly.agentsEnabled = false
-        #expect(OnboardingTour.pages(for: nookOnly).count == 15)
-        #expect(OnboardingView.progressFraction(step: 14, count: pages.count) == CGFloat(14) / CGFloat(16))
+        #expect(OnboardingTour.pages(for: nookOnly).count == 16)
+        #expect(OnboardingView.progressFraction(step: 15, count: pages.count) == CGFloat(15) / CGFloat(17))
     }
 }
 
@@ -132,47 +134,12 @@ struct OnboardingShowcaseRenderTests {
     private static let scale: CGFloat = 2
     private static let snapshotEnvKey = "OPEN_ISLAND_RENDER_SNAPSHOTS"
 
-    private static func state(agents: Bool = true, spotlight: NookWidgetKind? = nil) -> OnboardingState {
+    private static func state(agents: Bool = true) -> OnboardingState {
         var state = OnboardingState()
         state.agentsEnabled = agents
         state.enabledWidgets = Set(NookWidgetKind.defaultEnabled)
         state.appliedTemplate = .planner
-        if let spotlight { state.spotlight = spotlight }
         return state
-    }
-
-    @Test func theFirstWidgetIsSelectedToBeginWith() {
-        #expect(OnboardingState().spotlight == NookWidgetKind.allCases.first)
-    }
-
-    /// Every widget has its own spotlight, the ones that are off included.
-    @Test func selectingAWidgetChangesTheSpotlight() throws {
-        var pictures: [Data] = []
-        for kind in NookWidgetKind.allCases {
-            let page = try render("widgets-spotlight-\(kind.rawValue)") { tourView(.widgets, Self.state(spotlight: kind)) }
-            pictures.append(page)
-        }
-        #expect(Set(pictures).count == NookWidgetKind.allCases.count, "every widget should draw its own spotlight")
-
-        let off = Self.state(spotlight: .mirror)
-        #expect(!off.showsWidget(.mirror), "the mirror starts switched off")
-    }
-
-    @Test func aClickOnARowSelectsItAndLeavesTheSwitchAlone() {
-        var chosen: [NookWidgetKind] = []
-        var switched: [NookWidgetKind] = []
-        var actions = OnboardingActions()
-        actions.spotlightWidget = { chosen.append($0) }
-        actions.setWidget = { kind, _ in switched.append(kind) }
-        let tour = OnboardingTour(startingAt: .widgets, state: { Self.state() }, actions: actions)
-
-        tour.actions.spotlightWidget(.timer)
-
-        #expect(chosen == [.timer])
-        #expect(switched.isEmpty)
-        #expect(tour.state.spotlight == .timer)
-        tour.actions.spotlightWidget(.tray)
-        #expect(tour.state.spotlight == .tray)
     }
 
     @Test func theIntegrationsPageLeavesTheAgentsOutWithTheSwitchOff() throws {

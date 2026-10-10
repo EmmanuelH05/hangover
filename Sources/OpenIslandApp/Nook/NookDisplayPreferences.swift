@@ -314,12 +314,15 @@ extension NookClosedActivity {
     /// what this display allows. Priority: a notice, a running timer, music.
     /// `timerLeading` is the symbol beside the countdown: the timer by
     /// default, a round number or a cup during a pomodoro.
+    /// `isHidden` is the swipe's hidden state (D46): a notice still shows
+    /// through, and the timer and the music do not.
     static func resolve(
         transient: NookTransientActivity?,
         timerText: String?,
         timerLeading: NookClosedActivity.Leading = .symbol("timer", .orange),
         media: NookClosedMediaActivity?,
-        preferences: NookDisplayPreferences
+        preferences: NookDisplayPreferences,
+        isHidden: Bool = false
     ) -> NookClosedActivity? {
         if preferences.showsNotices {
             if let transient {
@@ -330,7 +333,7 @@ extension NookClosedActivity {
                     yieldsToAgents: false
                 )
             }
-            if let timerText {
+            if let timerText, !isHidden {
                 return NookClosedActivity(
                     leading: timerLeading,
                     trailing: .text(timerText),
@@ -338,7 +341,7 @@ extension NookClosedActivity {
                 )
             }
         }
-        guard let media else { return nil }
+        guard let media, !isHidden else { return nil }
         switch preferences.mediaStyle {
         case .off:
             return nil

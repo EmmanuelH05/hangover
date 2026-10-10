@@ -80,11 +80,11 @@ OPEN_ISLAND_SKIP_SMOKE_TEST=true zsh scripts/package-app.sh
 
 The last line writes `output/package/Hangover.app`. Move it to Applications and open it. If you change the code, `zsh scripts/harness.sh ci` runs the same checks GitHub runs on every push.
 
-A few names inside the code still say `OpenIsland`. That's on purpose: the hooks Hangover installs for your agents point at those names. `README.zh-CN.md` and most of the design notes in [docs/index.md](docs/index.md) still belong to the original project.
+A few names inside the code still say `OpenIsland`. That's on purpose: the hooks Hangover installs for your agents point at those names.
 
 ## Privacy
 
-There's no account and no analytics, and Hangover has no server of its own. Almost everything stays on your Mac. The weather tile and a to-do list kept in Notion or TickTick are the things that go online, and only after you turn them on. The full list is in [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
+There's no account and no analytics, and Hangover has no server of its own. Almost everything stays on your Mac. The weather tile and a to-do list kept in Notion or TickTick are the things that go online, and only after you turn them on. About once a day the app also asks GitHub whether there's a new version. If you turn on the iPhone and Apple Watch relay, it talks to your own devices over your local network, and that traffic isn't encrypted.
 
 ## Credit and license
 

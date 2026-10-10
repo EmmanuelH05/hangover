@@ -9,6 +9,10 @@ enum OnboardingTip: String, CaseIterable, Identifiable, Sendable {
     /// it open. With the click trigger, a second click on the notch closes
     /// it (`closeFromNotch`).
     case keepOpen
+    /// `IslandPointerRules.swipeAction`: a two-finger swipe up closes the
+    /// open island, and one sideways on the closed island hides what it
+    /// shows (D46).
+    case swipeAway
     /// `IslandPanelView`: files dropped on the closed or the opened island
     /// go to `nook.tray.handleDrop`.
     case dropFiles
@@ -48,13 +52,14 @@ enum OnboardingTip: String, CaseIterable, Identifiable, Sendable {
         case .todoNotes: .todo
         case .quickNotes: .notes
         case .speaker: .media
-        case .keepOpen, .rearrange, .switchPages, .jump, .volume, .settings: nil
+        case .keepOpen, .swipeAway, .rearrange, .switchPages, .jump, .volume, .settings: nil
         }
     }
 
     var symbol: String {
         switch self {
         case .keepOpen: "pin.fill"
+        case .swipeAway: "hand.draw.fill"
         case .dropFiles: "arrow.down.doc.fill"
         case .rearrange: "square.grid.2x2.fill"
         case .switchPages: "arrow.left.arrow.right"
