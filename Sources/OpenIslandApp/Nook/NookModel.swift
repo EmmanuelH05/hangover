@@ -97,21 +97,21 @@ final class NookModel {
 
     // MARK: Services (one per widget folder under Nook/Widgets)
 
-    let media = MediaRemoteService()
+    let media: MediaRemoteService
     let calendar: NookCalendarService
     let reminders: NookRemindersService
     let todo: NookTodoHub
-    let notes = NookNotesService()
-    let tray = NookTrayStore()
-    let timer = NookFocusTimer()
+    let notes: NookNotesService
+    let tray: NookTrayStore
+    let timer: NookFocusTimer
     /// The photo booth in the mirror.
-    let photoBooth = NookPhotoBoothModel()
-    let power = NookPowerMonitor()
+    let photoBooth: NookPhotoBoothModel
+    let power: NookPowerMonitor
     /// Sound outputs for the speaker picker on the now-playing card.
     let audioOutputs = NookAudioOutputs()
     /// Volume and brightness notices, and the optional key takeover.
-    let volume = NookVolumeMonitor()
-    let weather = NookWeatherService()
+    let volume: NookVolumeMonitor
+    let weather: NookWeatherService
     /// Dominant album-art color for the music halo.
     let artworkTint = NookArtworkTintService()
 
@@ -308,23 +308,47 @@ final class NookModel {
     /// Not saved: a new launch starts with the island showing everything.
     var closedContentHiddenBySwipe = false
 
-    @ObservationIgnored private let defaults = UserDefaults.standard
+    @ObservationIgnored private let defaults: UserDefaults
+    /// False in the demo mode, which keeps `allowsAccessRequests` off for
+    /// good.
+    @ObservationIgnored private let asksMacOSForAccess: Bool
     @ObservationIgnored private var cachedArtwork: (key: String, image: NSImage)?
     @ObservationIgnored private var lingerTask: Task<Void, Never>?
     @ObservationIgnored private var transientTask: Task<Void, Never>?
     @ObservationIgnored private var hasStarted = false
 
     /// The three services default to the real ones. A test of permission
-    /// timing hands in services that carry permissions of its own.
+    /// timing hands in services that carry permissions of its own. Every
+    /// setting is read from and saved to `defaults`: the app uses the
+    /// standard store and a test one held in memory. `looksForImportedGIF`
+    /// is off for a test, which keeps it out of the real support folder.
+    /// The demo mode (D51) hands in services that hold sample content, and
+    /// sets `asksMacOSForAccess` off, which keeps every prompt from coming up.
     init(
         calendar: NookCalendarService? = nil,
         reminders: NookRemindersService? = nil,
-        todo: NookTodoHub? = nil
+        todo: NookTodoHub? = nil,
+        media: MediaRemoteService? = nil,
+        notes: NookNotesService? = nil,
+        tray: NookTrayStore? = nil,
+        weather: NookWeatherService? = nil,
+        defaults: UserDefaults = .standard,
+        looksForImportedGIF: Bool = true,
+        asksMacOSForAccess: Bool = true
     ) {
-        self.calendar = calendar ?? NookCalendarService()
-        self.reminders = reminders ?? NookRemindersService()
-        self.todo = todo ?? NookTodoHub()
-        let defaults = UserDefaults.standard
+        self.defaults = defaults
+        self.asksMacOSForAccess = asksMacOSForAccess
+        self.media = media ?? MediaRemoteService()
+        power = NookPowerMonitor(defaults: defaults)
+        self.calendar = calendar ?? NookCalendarService(defaults: defaults)
+        self.reminders = reminders ?? NookRemindersService(defaults: defaults)
+        self.todo = todo ?? NookTodoHub(defaults: defaults)
+        self.notes = notes ?? NookNotesService(defaults: defaults)
+        self.tray = tray ?? NookTrayStore(defaults: defaults)
+        timer = NookFocusTimer(defaults: defaults)
+        photoBooth = NookPhotoBoothModel(defaults: defaults)
+        volume = NookVolumeMonitor(defaults: defaults)
+        self.weather = weather ?? NookWeatherService(defaults: defaults)
         forcedPage = ProcessInfo.processInfo.environment["OPEN_ISLAND_NOOK_PAGE"].flatMap(NookOpenedPage.init(rawValue:))
         // OPEN_ISLAND_NOOK_EDITING=1 opens the page in edit mode for harness screenshots.
         isEditingLayout = ProcessInfo.processInfo.environment["OPEN_ISLAND_NOOK_EDITING"] == "1"
@@ -342,7 +366,7 @@ final class NookModel {
         if let path = defaults.string(forKey: Self.gifPathKey) {
             gifURL = URL(fileURLWithPath: path)
         } else {
-            gifURL = Self.importedNotchNookGIF()
+            gifURL = looksForImportedGIF ? Self.importedNotchNookGIF() : nil
         }
         gifScale = defaults.object(forKey: Self.gifScaleKey) as? Double ?? 1
         gifOffsetX = defaults.object(forKey: Self.gifOffsetXKey) as? Double ?? 0
@@ -369,7 +393,7 @@ final class NookModel {
         observeScreenGoingAway()
         // Nothing above asks macOS for the calendar or Reminders. From here
         // on a widget that is shown or turned on may (`NookAccessTiming`).
-        allowsAccessRequests = true
+        allowsAccessRequests = asksMacOSForAccess
     }
 
     // MARK: - Calendar and Reminders access

@@ -334,18 +334,9 @@ import Testing
     // MARK: The model
 
     @Test @MainActor func theModelAddsSelectsRecolorsAndClears() {
-        // A real model saves to the shared settings. Whatever was there is
-        // put back, and the test is one straight run with no waits, which
-        // keeps another test from seeing these stickers.
-        let saved = UserDefaults.standard.object(forKey: NookMirrorDecorationStore.key)
-        defer {
-            if let saved {
-                UserDefaults.standard.set(saved, forKey: NookMirrorDecorationStore.key)
-            } else {
-                UserDefaults.standard.removeObject(forKey: NookMirrorDecorationStore.key)
-            }
-        }
-        let nook = NookModel()
+        // The model saves to a store held in memory.
+        let defaults = MemoryDefaults()
+        let nook = NookModel(defaults: defaults, looksForImportedGIF: false)
         nook.presentRingLight = { _ in }
         nook.clearMirrorDecorations()
         let design = NookMirrorDesigns.stickers[0]
@@ -355,7 +346,7 @@ import Testing
         let placed = nook.mirrorDecorations.stickers
         #expect(placed.count == 1)
         #expect(nook.selectedMirrorStickerID == placed[0].id)
-        #expect(UserDefaults.standard.data(forKey: NookMirrorDecorationStore.key) != nil)
+        #expect(defaults.data(forKey: NookMirrorDecorationStore.key) != nil)
 
         nook.cycleMirrorStickerVariant(placed[0].id)
         #expect(nook.mirrorDecorations.stickers[0].variant == 1)
@@ -375,19 +366,12 @@ import Testing
 
         nook.clearMirrorDecorations()
         #expect(nook.mirrorDecorations == .none)
-        #expect(UserDefaults.standard.object(forKey: NookMirrorDecorationStore.key) == nil)
+        #expect(defaults.object(forKey: NookMirrorDecorationStore.key) == nil)
     }
 
     @Test @MainActor func aFullMirrorRefusesOneMoreSticker() {
-        let saved = UserDefaults.standard.object(forKey: NookMirrorDecorationStore.key)
-        defer {
-            if let saved {
-                UserDefaults.standard.set(saved, forKey: NookMirrorDecorationStore.key)
-            } else {
-                UserDefaults.standard.removeObject(forKey: NookMirrorDecorationStore.key)
-            }
-        }
-        let nook = NookModel()
+        let defaults = MemoryDefaults()
+        let nook = NookModel(defaults: defaults, looksForImportedGIF: false)
         nook.presentRingLight = { _ in }
         nook.clearMirrorDecorations()
 

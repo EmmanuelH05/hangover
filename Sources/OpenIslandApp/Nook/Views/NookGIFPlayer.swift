@@ -14,6 +14,10 @@ struct GIFFrames: @unchecked Sendable {
 
     var duration: Double { delays.reduce(0, +) }
 
+    /// What the decoded frames take in memory, in bytes: the cost the cache
+    /// counts for this GIF.
+    var decodedBytes: Int { images.reduce(0) { $0 + $1.bytesPerRow * $1.height } }
+
     /// What a frame gets when the file gives it no time, or one too short
     /// to be meant: the tenth of a second browsers use.
     static let defaultDelay = 0.1
@@ -50,11 +54,29 @@ struct GIFFrames: @unchecked Sendable {
     }
 
     /// The longest side to decode to, which keeps a GIF of many frames
-    /// inside the memory budget.
-    static func side(frameCount: Int) -> Int {
+    /// inside the memory budget. A count the budget cannot hold even at the
+    /// smallest side is cut down first (`keptIndices`).
+    static func side(frameCount: Int, budget: Int = memoryBudget) -> Int {
         guard frameCount > 0 else { return largestSide }
-        let pixels = Double(memoryBudget) / Double(4 * frameCount)
+        let pixels = Double(budget) / Double(4 * frameCount)
         return max(smallestSide, min(largestSide, Int(pixels.squareRoot())))
+    }
+
+    /// Which frames to decode. All of them while the budget holds them at
+    /// the smallest side, otherwise an evenly spread subset that does.
+    static func keptIndices(frameCount: Int, budget: Int = memoryBudget) -> [Int] {
+        let capacity = max(1, budget / (4 * smallestSide * smallestSide))
+        guard frameCount > capacity else { return Array(0..<max(0, frameCount)) }
+        return (0..<capacity).map { $0 * frameCount / capacity }
+    }
+
+    /// The delay of each kept frame: its own plus those of the frames
+    /// dropped after it, which keeps the length of the loop.
+    static func keptDelays(_ delays: [Double], kept: [Int]) -> [Double] {
+        kept.enumerated().map { position, index in
+            let end = position + 1 < kept.count ? kept[position + 1] : delays.count
+            return delays[index..<end].reduce(0, +)
+        }
     }
 
     /// The size a frame is drawn at: it fits `side` and is never enlarged.
@@ -67,18 +89,23 @@ struct GIFFrames: @unchecked Sendable {
 
     /// Decodes every frame into a bitmap of its own. Nil for data that is
     /// not an image. Safe off the main thread.
-    static func decode(_ data: Data) -> GIFFrames? {
+    static func decode(_ data: Data, budget: Int = memoryBudget) -> GIFFrames? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         let count = CGImageSourceGetCount(source)
         guard count > 0 else { return nil }
-        let side = side(frameCount: count)
+        // More frames than the budget holds at the smallest side: keep an
+        // evenly spread few, each showing as long as its dropped followers did.
+        let kept = keptIndices(frameCount: count, budget: budget)
+        let allDelays = (0..<count).map { delay(of: source, at: $0) }
+        let shownFor = keptDelays(allDelays, kept: kept)
+        let side = side(frameCount: kept.count, budget: budget)
         var images: [CGImage] = []
         var delays: [Double] = []
-        for index in 0..<count {
+        for (position, index) in kept.enumerated() {
             guard let frame = CGImageSourceCreateImageAtIndex(source, index, nil),
                   let bitmap = bitmap(of: frame, side: side) else { continue }
             images.append(bitmap)
-            delays.append(delay(of: source, at: index))
+            delays.append(shownFor[position])
         }
         return images.isEmpty ? nil : GIFFrames(images: images, delays: delays)
     }
@@ -111,37 +138,83 @@ struct GIFFrames: @unchecked Sendable {
     }
 }
 
+/// The decoded GIFs kept, oldest first. Exact, unlike `NSCache`, which may
+/// drop an entry whenever it likes: a GIF dropped behind the island's back
+/// is decoded again, and a test of "decoded once" failed one run in four.
+@MainActor
+final class GIFFrameStore {
+    let countLimit: Int
+    let totalCostLimit: Int
+    private var entries: [(url: URL, frames: GIFFrames)] = []
+
+    init(countLimit: Int, totalCostLimit: Int) {
+        self.countLimit = countLimit
+        self.totalCostLimit = totalCostLimit
+    }
+
+    func frames(for url: URL) -> GIFFrames? {
+        entries.first { $0.url == url }?.frames
+    }
+
+    /// Adds or replaces, then drops the oldest until both limits hold. The
+    /// newest stays even when it alone is over the cost limit.
+    func store(_ frames: GIFFrames, for url: URL) {
+        entries.removeAll { $0.url == url }
+        entries.append((url, frames))
+        while entries.count > 1, entries.count > countLimit || totalCost > totalCostLimit {
+            entries.removeFirst()
+        }
+    }
+
+    private var totalCost: Int {
+        entries.reduce(0) { $0 + $1.frames.decodedBytes }
+    }
+}
+
 /// Decoded GIFs by file URL, so the same file is never decoded twice (the
 /// island and the Settings preview show the same one). The file is read
 /// and decoded off the main thread.
 @MainActor
 enum GIFFrameCache {
-    private final class Entry {
-        let frames: GIFFrames
-        init(_ frames: GIFFrames) { self.frames = frames }
+    /// Two GIFs at most, and no more decoded bytes than one GIF may take
+    /// (`GIFFrames.memoryBudget`): the closed island shows one at a time.
+    static let entryLimit = 2
+
+    private static let cache = makeCache()
+
+    static func makeCache() -> GIFFrameStore {
+        GIFFrameStore(countLimit: entryLimit, totalCostLimit: GIFFrames.memoryBudget)
     }
 
-    private static let cache: NSCache<NSURL, Entry> = {
-        let cache = NSCache<NSURL, Entry>()
-        cache.countLimit = 4
-        return cache
-    }()
+    /// Puts `frames` in `cache` with its decoded size as the cost.
+    static func store(_ frames: GIFFrames, for url: URL, in cache: GIFFrameStore) {
+        cache.store(frames, for: url)
+    }
 
-    static func cachedFrames(for url: URL) -> GIFFrames? {
-        cache.object(forKey: url as NSURL)?.frames
+    static func storedFrames(for url: URL, in cache: GIFFrameStore) -> GIFFrames? {
+        cache.frames(for: url)
+    }
+
+    static func cachedFrames(for url: URL, in cache: GIFFrameStore = cache) -> GIFFrames? {
+        storedFrames(for: url, in: cache)
     }
 
     /// The frames for `url`: from the cache, or read and decoded once. Nil
-    /// when the file cannot be read or is not an image.
-    static func frames(for url: URL) async -> GIFFrames? {
-        if let cached = cachedFrames(for: url) { return cached }
+    /// when the file cannot be read or is not an image. The cache and the
+    /// decoder are the app's own unless a test hands in others.
+    static func frames(
+        for url: URL,
+        in cache: GIFFrameStore = cache,
+        decode: @escaping @Sendable (Data) -> GIFFrames? = { GIFFrames.decode($0) }
+    ) async -> GIFFrames? {
+        if let cached = cachedFrames(for: url, in: cache) { return cached }
         let decoded = await Task.detached(priority: .userInitiated) {
-            (try? Data(contentsOf: url)).flatMap(GIFFrames.decode)
+            (try? Data(contentsOf: url)).flatMap(decode)
         }.value
         // A second request for the same file may have finished while this one read.
-        if let cached = cachedFrames(for: url) { return cached }
+        if let cached = cachedFrames(for: url, in: cache) { return cached }
         guard let decoded else { return nil }
-        cache.setObject(Entry(decoded), forKey: url as NSURL)
+        store(decoded, for: url, in: cache)
         return decoded
     }
 }
@@ -178,6 +251,12 @@ struct AnimatedGIFView: NSViewRepresentable {
     final class Coordinator {
         private var url: URL?
         private var loadTask: Task<Void, Never>?
+        /// Reads and decodes a file. A test hands in one it can hold back.
+        private let load: (URL) async -> GIFFrames?
+
+        init(load: @escaping (URL) async -> GIFFrames? = { await GIFFrameCache.frames(for: $0) }) {
+            self.load = load
+        }
 
         /// Shows `url` in `view`: at once when it is cached, otherwise after
         /// it has loaded. Does nothing when `url` is already the one shown.
@@ -191,8 +270,8 @@ struct AnimatedGIFView: NSViewRepresentable {
                 view.show(cached)
                 return
             }
-            loadTask = Task { [weak self, weak view] in
-                let frames = await GIFFrameCache.frames(for: url)
+            loadTask = Task { [weak self, weak view, load] in
+                let frames = await load(url)
                 guard !Task.isCancelled, let self, let view, self.url == url, let frames else { return }
                 view.show(frames)
             }
@@ -233,28 +312,37 @@ final class GIFLayerView: NSView {
         apply()
     }
 
-    /// Same value, nothing happens: a redraw never restarts the loop.
+    /// Same value, nothing happens: a redraw never restarts the loop. Off
+    /// freezes the frame on screen and on picks up from it.
     func setAnimating(_ isAnimating: Bool) {
         guard self.isAnimating != isAnimating else { return }
         self.isAnimating = isAnimating
-        apply()
+        if isAnimating { resume() } else { pause() }
     }
 
     /// A layer taken off a window loses its animations.
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window != nil { apply() }
+        if window != nil, layer?.animation(forKey: Self.loopKey) == nil { apply() }
     }
 
+    /// Whether the loop is stopped on a frame. For tests.
+    var isPaused: Bool { layer?.speed == 0 }
+
+    /// A layer taken off a window loses its animations; the loop is put
+    /// back, from the first frame, only when it is gone.
     private func apply() {
         guard let layer else { return }
         layer.removeAnimation(forKey: Self.loopKey)
+        layer.speed = 1
+        layer.timeOffset = 0
+        layer.beginTime = 0
         guard let frames, let first = frames.images.first else {
             layer.contents = nil
             return
         }
         layer.contents = first
-        guard isAnimating, frames.images.count > 1, frames.duration > 0 else { return }
+        guard frames.images.count > 1, frames.duration > 0 else { return }
 
         let loop = CAKeyframeAnimation(keyPath: "contents")
         loop.values = frames.images
@@ -264,5 +352,24 @@ final class GIFLayerView: NSView {
         loop.repeatCount = .infinity
         loop.isRemovedOnCompletion = false
         layer.add(loop, forKey: Self.loopKey)
+        if !isAnimating { pause() }
+    }
+
+    /// Freezes the loop where it is: the layer's clock stops and keeps its
+    /// reading, and the frame on screen stays.
+    private func pause() {
+        guard let layer, layer.speed != 0 else { return }
+        layer.timeOffset = layer.convertTime(CACurrentMediaTime(), from: nil)
+        layer.speed = 0
+    }
+
+    /// Starts the clock again from the reading it stopped at.
+    private func resume() {
+        guard let layer, layer.speed == 0 else { return }
+        let pausedAt = layer.timeOffset
+        layer.timeOffset = 0
+        layer.beginTime = 0
+        layer.speed = 1
+        layer.beginTime = layer.convertTime(CACurrentMediaTime(), from: nil) - pausedAt
     }
 }

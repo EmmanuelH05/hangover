@@ -129,7 +129,7 @@ struct NookAccessTimingTests {
     func startingTheCalendarServiceAsksForNothing(status: EKAuthorizationStatus) {
         let permission = FakeEventKitPermission(status: status)
         let service = NookCalendarService(access: permission.access)
-        let nook = NookModel(calendar: service)
+        let nook = NookModel(calendar: service, defaults: MemoryDefaults(), looksForImportedGIF: false)
         let before = service.revision
 
         service.start(nook: nook)
@@ -149,7 +149,7 @@ struct NookAccessTimingTests {
         let before: EKAuthorizationStatus = status == .denied ? .restricted : .denied
         let permission = FakeEventKitPermission(status: before)
         let service = NookRemindersService(access: permission.access)
-        let nook = NookModel(reminders: service)
+        let nook = NookModel(reminders: service, defaults: MemoryDefaults(), looksForImportedGIF: false)
         #expect(service.authorization == before)
         permission.status = status
 
@@ -160,7 +160,7 @@ struct NookAccessTimingTests {
     }
 
     @Test func aRealServiceThatWasNeverStartedCannotAskMacOS() async {
-        // What `AppModel()` and `NookModel()` hold in every other test:
+        // What `AppModel(defaults: MemoryDefaults())` and `NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)` hold in every other test:
         // services on the real EventKit, never started. Asking returns
         // before anything reaches EventKit.
         let askedCalendar = await NookCalendarService().requestAccessIfUndecided()
@@ -257,7 +257,9 @@ struct NookAccessTimingTests {
         return NookModel(
             calendar: NookCalendarService(access: calendar.access),
             reminders: NookRemindersService(access: reminders.access),
-            todo: hub
+            todo: hub,
+            defaults: MemoryDefaults(),
+            looksForImportedGIF: false
         )
     }
 
@@ -457,7 +459,7 @@ struct NookAccessTimingTests {
     // MARK: The live island
 
     @Test func theAppModelShowsNoTilesToAnyoneWhileClosedOrBootOpened() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         let none: Set<NookWidgetKind> = []
         #expect(model.nookWidgetsInUserView == none)
 

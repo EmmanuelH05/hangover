@@ -29,20 +29,32 @@ final class NookRemindersService {
     private(set) var lists: [NookReminderList] = []
     private(set) var authorization: EKAuthorizationStatus = .notDetermined
 
-    var selectedListID: String? = UserDefaults.standard.string(forKey: "nook.todo.listID") {
+    var selectedListID: String? {
         didSet {
             guard selectedListID != oldValue else { return }
             if let selectedListID {
-                UserDefaults.standard.set(selectedListID, forKey: Self.listKey)
+                defaults.set(selectedListID, forKey: Self.listKey)
             } else {
-                UserDefaults.standard.removeObject(forKey: Self.listKey)
+                defaults.removeObject(forKey: Self.listKey)
             }
             refresh()
         }
     }
 
     @ObservationIgnored private(set) weak var nook: NookModel?
-    @ObservationIgnored private let store: EKEventStore
+    /// Made on first use. The demo mode (D51) never makes one.
+    @ObservationIgnored private var madeStore: EKEventStore?
+    private var store: EKEventStore {
+        if let madeStore { return madeStore }
+        let made = EKEventStore()
+        madeStore = made
+        return made
+    }
+    @ObservationIgnored private let defaults: UserDefaults
+    /// True in the demo mode (D51): the tasks are samples held in memory,
+    /// and EventKit is never touched.
+    @ObservationIgnored private let holdsSampleTasks: Bool
+    @ObservationIgnored private var sampleAdds = 0
     /// The reminders permission: its status and the one way to ask for it.
     @ObservationIgnored private let access: NookEventKitAccess
     /// True while a request is up, which keeps a second one from going out.
@@ -55,17 +67,28 @@ final class NookRemindersService {
 
     var hasAccess: Bool { authorization == .fullAccess }
 
-    /// `access` is EventKit itself unless a test hands in its own.
-    init(access: NookEventKitAccess? = nil) {
-        let store = EKEventStore()
-        self.store = store
-        self.access = access ?? .reminders(in: store)
-        asksRealEventKit = access == nil
+    /// `access` is EventKit itself unless a test hands in its own. The demo
+    /// mode hands in `sample` tasks and no store is ever made (D51).
+    init(access: NookEventKitAccess? = nil, defaults: UserDefaults = .standard, sample: [NookTodoItem]? = nil) {
+        self.defaults = defaults
+        selectedListID = defaults.string(forKey: Self.listKey)
+        holdsSampleTasks = sample != nil
+        if let sample {
+            self.access = NookEventKitAccess(status: { .fullAccess }, request: {})
+            asksRealEventKit = false
+            items = sample
+        } else {
+            let store = EKEventStore()
+            madeStore = store
+            self.access = access ?? .reminders(in: store)
+            asksRealEventKit = access == nil
+        }
         authorization = self.access.status()
     }
 
     /// Name of the list the card shows.
     var currentListName: String {
+        if holdsSampleTasks { return DemoTodo.listName }
         if let selectedListID, let match = lists.first(where: { $0.id == selectedListID }) {
             return match.title
         }
@@ -79,6 +102,10 @@ final class NookRemindersService {
         self.nook = nook
         hasStarted = true
         guard observer == nil else { return }
+        guard !holdsSampleTasks else {
+            refresh()
+            return
+        }
         observer = NotificationCenter.default.addObserver(
             forName: .EKEventStoreChanged, object: store, queue: .main
         ) { [weak self] _ in
@@ -121,6 +148,10 @@ final class NookRemindersService {
 
     func refresh() {
         authorization = access.status()
+        if holdsSampleTasks {
+            lists = [NookReminderList(id: "demo-list", title: DemoTodo.listName, color: .blue)]
+            return
+        }
         guard hasAccess else {
             items = []
             lists = []
@@ -170,6 +201,15 @@ final class NookRemindersService {
 
     func add(_ title: String) {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if holdsSampleTasks {
+            guard !trimmed.isEmpty else { return }
+            sampleAdds += 1
+            items.append(NookTodoItem(
+                id: "demo-added-task-\(sampleAdds)", title: trimmed, dueDate: nil,
+                isCompleted: false, listName: DemoTodo.listName
+            ))
+            return
+        }
         guard hasAccess, !trimmed.isEmpty, let calendar = resolveCalendar() else { return }
         let reminder = EKReminder(eventStore: store)
         reminder.title = trimmed
@@ -183,6 +223,10 @@ final class NookRemindersService {
     }
 
     func complete(_ id: String) {
+        if holdsSampleTasks {
+            items.removeAll { $0.id == id }
+            return
+        }
         guard hasAccess, let reminder = store.calendarItem(withIdentifier: id) as? EKReminder else { return }
         reminder.isCompleted = true
         do {
@@ -196,6 +240,11 @@ final class NookRemindersService {
 
     /// Writes the reminder's notes. Empty text clears them.
     func setNotes(_ notes: String, for id: String) {
+        if holdsSampleTasks {
+            guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+            items[index].notes = notes.isEmpty ? nil : notes
+            return
+        }
         guard hasAccess, let reminder = store.calendarItem(withIdentifier: id) as? EKReminder else { return }
         reminder.notes = notes.isEmpty ? nil : notes
         do {

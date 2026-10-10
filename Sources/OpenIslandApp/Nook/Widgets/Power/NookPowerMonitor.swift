@@ -28,8 +28,14 @@ final class NookPowerMonitor {
     /// through this bridge and hops to the main actor.
     private static var current: NookPowerMonitor?
 
+    @ObservationIgnored private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
     private var isEnabled: Bool {
-        UserDefaults.standard.object(forKey: Self.enabledKey) as? Bool ?? true
+        defaults.object(forKey: Self.enabledKey) as? Bool ?? true
     }
 
     func start(nook: NookModel) {
@@ -65,7 +71,7 @@ final class NookPowerMonitor {
 
     // MARK: Power
 
-    private struct PowerState {
+    struct PowerState {
         let isOnAC: Bool
         let percent: Int
     }
@@ -97,7 +103,9 @@ final class NookPowerMonitor {
         showPower(state)
     }
 
-    private func showPower(_ state: PowerState) {
+    /// The notice for the charger going in or out. A real power change
+    /// calls it, and the demo script does too (D51).
+    func showPower(_ state: PowerState) {
         if state.isOnAC {
             nook?.showTransient(
                 symbol: "bolt.fill",

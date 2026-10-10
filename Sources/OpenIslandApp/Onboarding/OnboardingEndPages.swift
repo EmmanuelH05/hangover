@@ -171,7 +171,8 @@ struct OnboardingDonePage: View {
             agentsEnabled: state.agentsEnabled,
             hasTodoWidget: state.showsWidget(.todo),
             hasNotesWidget: state.showsWidget(.notes),
-            hasWeatherWidget: state.showsWidget(.weather)
+            hasWeatherWidget: state.showsWidget(.weather),
+            hasCalendarWidget: state.showsWidget(.calendar)
         )
         VStack(spacing: 0) {
             OnboardingPillArt(
@@ -219,6 +220,7 @@ struct OnboardingDonePage: View {
         case .approve: recapKeys(state.approveKeys)
         case .deny: recapKeys(state.denyKeys)
         case .widgets: recapValue(widgetsText)
+        case .calendar: recapValue(context.t(OnboardingCalendarLooks.nameKey(state.calendarStyle)))
         case .todos: recapValue(context.t(OnboardingTodoGuide.nameKey(for: state.todoSource)))
         case .notes: recapValue(context.t(OnboardingNotesGuide.titleKey(for: state.notesDestination)))
         case .weather: recapValue(weatherText)
@@ -292,7 +294,7 @@ struct OnboardingDonePage: View {
             value()
         }
         .padding(.horizontal, 14)
-        // Twelve rows have to fit the window above its buttons.
+        // Thirteen rows have to fit the window above its buttons.
         .frame(height: 27)
         .accessibilityElement(children: .combine)
     }
@@ -324,6 +326,8 @@ enum OnboardingRecapRow: String, CaseIterable, Sendable {
     case approve
     case deny
     case widgets
+    /// The calendar look, while the calendar is on the page (D50).
+    case calendar
     /// Where the to-do widget gets its tasks.
     case todos
     /// Where quick notes go.
@@ -345,13 +349,15 @@ enum OnboardingRecapRow: String, CaseIterable, Sendable {
         agentsEnabled: Bool,
         hasTodoWidget: Bool = true,
         hasNotesWidget: Bool = true,
-        hasWeatherWidget: Bool = true
+        hasWeatherWidget: Bool = true,
+        hasCalendarWidget: Bool = true
     ) -> [OnboardingRecapRow] {
         allCases.filter { row in
             (agentsEnabled || !row.isAgentsOnly)
                 && (hasTodoWidget || row != .todos)
                 && (hasNotesWidget || row != .notes)
                 && (hasWeatherWidget || row != .weather)
+                && (hasCalendarWidget || row != .calendar)
         }
     }
 }

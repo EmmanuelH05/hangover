@@ -7,7 +7,7 @@ import Testing
 @MainActor
 @Suite struct NookMirrorScreenAwayTests {
     @Test func theMirrorGoesOffWhenTheScreenGoesAway() {
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         nook.presentRingLight = { _ in }
         nook.isMirrorOn = true
 
@@ -17,7 +17,7 @@ import Testing
     }
 
     @Test func aMirrorThatIsOffStaysOff() {
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         nook.presentRingLight = { _ in }
 
         nook.screenWentAway()

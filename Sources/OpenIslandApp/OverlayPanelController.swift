@@ -70,6 +70,14 @@ final class OverlayPanelController {
     private var eventMonitors = NotchEventMonitors()
     /// Follows the scroll events over the island to tell a swipe (D46).
     private var swipe = IslandSwipeRecognizer()
+    /// The closed pill's rectangle, worked out with the placement, which means a
+    /// scroll event never asks the screen (`computeNotchRect`).
+    private var pillBounds = IslandPillBounds()
+    /// How long the panel keeps taking events after a swipe closed the
+    /// island. The rest of the finger travel is swallowed here and does not
+    /// reach the window under it. A hard limit, not a promise to wait for
+    /// the gesture's end.
+    private static let swipeHoldLimit: TimeInterval = 0.6
     private var lastStrayClickRepair: Date = .distantPast
     private var hoverTimer: DispatchWorkItem?
     private var hoverCancelGrace: DispatchWorkItem?
@@ -102,6 +110,10 @@ final class OverlayPanelController {
     /// Test seam for the synthetic click, which would otherwise be posted
     /// to the real screen.
     var mouseDownReposter: ((NSPoint) -> Void)?
+    /// Test seam for the screen. Off, the panel is built and placed but
+    /// never ordered front, and no mouse monitor starts. The app model turns
+    /// it off for a model on a store of its own (a test or a preview).
+    var putsPanelOnScreen = true
     /// Test seams for the drag pasteboard. Only its change count and its
     /// types are ever read, never what is on it.
     var dragPasteboardChangeCount: () -> Int = { NSPasteboard(name: .drag).changeCount }
@@ -131,6 +143,12 @@ final class OverlayPanelController {
         panel?.frame
     }
 
+    /// The island's window number, nil before the panel exists. The demo
+    /// mode orders its backdrop just under it (D51).
+    var windowNumber: Int? {
+        panel?.windowNumber
+    }
+
     /// A click opens the island with the keyboard. The tour's hold (D44)
     /// never does: Return, Escape and the arrows stay with the tour's window.
     nonisolated static func shouldActivatePanel(for reason: NotchOpenReason?, holdsOpenForTour: Bool = false) -> Bool {
@@ -147,7 +165,7 @@ final class OverlayPanelController {
         let panel = self.panel ?? makePanel(model: model)
         self.panel = panel
         positionPanel(preferredScreenID: preferredScreenID)
-        panel.orderFrontRegardless()
+        if putsPanelOnScreen { panel.orderFrontRegardless() }
         panel.ignoresMouseEvents = true
         panel.acceptsMouseMovedEvents = false
         startEventMonitoring()
@@ -518,6 +536,7 @@ final class OverlayPanelController {
     }
 
     private func presentPanel(_ panel: NSPanel, activates: Bool) {
+        guard putsPanelOnScreen else { return }
         if activates {
             panel.makeKeyAndOrderFront(nil)
         } else {
@@ -528,6 +547,7 @@ final class OverlayPanelController {
     private func computeNotchRect(screen: NSScreen?) {
         guard let screen else {
             notchRect = .zero
+            pillBounds.refresh { .zero }
             return
         }
 
@@ -536,6 +556,17 @@ final class OverlayPanelController {
         let notchX = screenFrame.midX - notchSize.width / 2
         let notchY = screenFrame.maxY - notchSize.height
         notchRect = NSRect(x: notchX, y: notchY, width: notchSize.width, height: notchSize.height)
+        let isNotched = screen.safeAreaInsets.top > 0
+        pillBounds.refresh {
+            Self.closedSurfaceRect(
+                notchRect: notchRect,
+                closedWidth: Self.closedPanelWidth(
+                    notchWidth: notchSize.width,
+                    isNotchedDisplay: isNotched,
+                    notchStatus: .closed
+                )
+            )
+        }
     }
 
     /// Picks the screen to anchor the overlay to.
@@ -567,12 +598,14 @@ final class OverlayPanelController {
     /// and click-outside dismissal. Skipped during deterministic harness
     /// runs; a no-op while monitors are already active.
     private func startEventMonitoring() {
+        guard putsPanelOnScreen else { return }
         if model?.disablesOverlayEventMonitoringDuringHarness == true {
             return
         }
 
         guard !eventMonitors.isActive else { return }
 
+        defer { setSwipeMonitoring(enabled: model?.swipeGesturesEnabled == true) }
         eventMonitors.start { [weak self] location in
             self?.handleMouseMoved(location)
         } mouseDownHandler: { [weak self] location, isLocalEvent in
@@ -581,7 +614,22 @@ final class OverlayPanelController {
             self?.handleMouseDragged(location)
         } mouseUpHandler: { [weak self] in
             self?.handleMouseUp()
-        } scrollHandler: { [weak self] sample, screenLocation, windowLocation, windowNumber, isLocalEvent in
+        }
+    }
+
+    /// Installs the two scroll monitors while the swipe is on and removes
+    /// them when it goes off (D46). Off, a scroll anywhere on the Mac does not
+    /// wake the app. Does nothing before the other monitors are running.
+    var hasScrollMonitors: Bool { eventMonitors.hasScrollMonitors }
+
+    func setSwipeMonitoring(enabled: Bool) {
+        guard eventMonitors.isActive else { return }
+        guard enabled else {
+            eventMonitors.stopScroll()
+            swipe.reset()
+            return
+        }
+        eventMonitors.startScroll { [weak self] sample, screenLocation, windowLocation, windowNumber, isLocalEvent in
             self?.handleScroll(
                 sample,
                 screenLocation: screenLocation,
@@ -606,7 +654,8 @@ final class OverlayPanelController {
         if model.notchStatus == .closed && inClosedSurfaceArea {
             if IslandPointerRules.hoverOpens(
                 trigger: model.islandOpenTrigger,
-                isSuppressed: isHoverSuppressedUntilExit
+                isSuppressed: isHoverSuppressedUntilExit,
+                isScrolling: swipe.isInProgress(at: ProcessInfo.processInfo.systemUptime)
             ) {
                 scheduleHoverOpen()
             }
@@ -705,8 +754,9 @@ final class OverlayPanelController {
     // MARK: - Swipes
 
     /// Turns the scroll events over the island into a swipe (D46). Runs for
-    /// every scroll event on the Mac. The pointer test comes first and
-    /// everything else waits for it.
+    /// every scroll event on the Mac while the swipe is on, and the monitors
+    /// are removed while it is off. The pointer test comes first, against the
+    /// stored pill rectangle, and everything else waits for it.
     /// - Returns: Whether the local monitor should swallow the event: the
     ///   island acted on this gesture and the rest of it is not for the view
     ///   under the pointer. A global event is only observed.
@@ -719,56 +769,81 @@ final class OverlayPanelController {
     ) -> Bool {
         guard let model else { return false }
 
-        let inClosedSurface = isPointInClosedSurfaceArea(screenLocation)
-        let inExpandedArea = isPointInExpandedArea(screenLocation)
-        guard IslandPointerRules.swipeListens(
+        let isOpened = model.notchStatus == .opened
+        let inClosedSurface = pillBounds.contains(screenLocation)
+        let facts = IslandScrollFacts(
             isEnabled: model.swipeGesturesEnabled,
+            status: model.notchStatus,
             isInClosedSurface: inClosedSurface,
-            isInExpandedArea: inExpandedArea
-        ) else {
-            swipe.reset()
-            return false
+            isInExpandedArea: isOpened ? isPointInExpandedArea(screenLocation) : inClosedSurface,
+            isLocalEvent: isLocalEvent,
+            refusals: isOpened ? model.swipeRefusals : IslandSwipeRefusals()
+        )
+        let outcome = IslandPointerRules.scrollStep(
+            recognizer: &swipe,
+            sample: sample,
+            facts: facts
+        ) { direction in
+            isOverScrollableContent(
+                windowLocation: windowLocation,
+                windowNumber: windowNumber,
+                travel: IslandScrollTravel.of(direction, isNaturalScrolling: sample.isNaturalScrolling)
+            )
         }
 
-        let direction = swipe.feed(sample)
-        let swallows = isLocalEvent && swipe.isConsumed
-        guard let direction else { return swallows }
-
-        let isOpened = model.notchStatus == .opened
-        let context = IslandSwipeContext(
-            status: model.notchStatus,
-            direction: direction,
-            isInClosedSurface: inClosedSurface,
-            isInExpandedArea: inExpandedArea,
-            isOverScrollableContent: isLocalEvent && isOpened
-                && isOverScrollableContent(windowLocation: windowLocation, windowNumber: windowNumber),
-            blocksDismiss: isOpened && model.shouldBlockDismissWhileAwaitingDecision,
-            hasOpenPicker: isOpened && model.nook.tray.isSharePickerOpen,
-            holdsOpenForTour: isOpened && model.tourHoldsIslandOpen
-        )
-
-        switch IslandPointerRules.swipeAction(context) {
-        case .close:
-            // The pointer is still on the island. Without this, hover mode
-            // would open it again under the pointer.
+        // Fingers on the pill are making a swipe: a hover-open that is
+        // waiting must not fire under them, and none is scheduled.
+        if outcome.cancelsHoverOpen {
+            cancelHoverOpenImmediately()
+        }
+        if outcome.suppressesHover {
+            // The pointer is still on the island, and hover mode would open
+            // it again under the pointer.
             isHoverSuppressedUntilExit = true
+        }
+        switch outcome.action {
+        case .close:
             model.notchClose()
+            holdPanelForSwipeEnd()
+        case .closeAndToggleClosedContent:
+            model.notchClose()
+            model.toggleClosedContentHidden()
+            holdPanelForSwipeEnd()
         case .toggleClosedContent:
             model.toggleClosedContentHidden()
         case .none:
-            return swallows
+            break
         }
-        swipe.markConsumed()
-        return isLocalEvent
+        model.noteSwipe(outcome.action)
+        return outcome.swallows
+    }
+
+    /// Keeps the panel taking events for a moment after a swipe closed the
+    /// island, with the mechanism that keeps the closed panel receptive for a
+    /// dropped file. The rest of the finger travel then reaches the local
+    /// monitor, which swallows it, and not the window under the island.
+    private func holdPanelForSwipeEnd() {
+        setClosedPanelDragReceptive(true)
+        guard isClosedPanelDragReceptive else { return }
+        let item = DispatchWorkItem { [weak self] in
+            self?.setClosedPanelDragReceptive(false)
+        }
+        pendingDragReceptiveRestore?.cancel()
+        pendingDragReceptiveRestore = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.swipeHoldLimit, execute: item)
     }
 
     /// Whether the view under a local scroll event sits in a scroll view
-    /// with more to scroll. Nothing found answers false.
-    private func isOverScrollableContent(windowLocation: NSPoint, windowNumber: Int) -> Bool {
-        guard let panel, panel.windowNumber == windowNumber,
+    /// that can still travel `travel`. Nothing found answers false.
+    private func isOverScrollableContent(
+        windowLocation: NSPoint,
+        windowNumber: Int,
+        travel: IslandScrollTravel?
+    ) -> Bool {
+        guard let travel, let panel, panel.windowNumber == windowNumber,
               let content = panel.contentView, let frameView = content.superview else { return false }
         let hit = content.hitTest(frameView.convert(windowLocation, from: nil))
-        return IslandScrollContent.isScrollable(from: hit, windowPoint: windowLocation)
+        return IslandScrollContent.isScrollable(from: hit, windowPoint: windowLocation, travel: travel)
     }
 
     // MARK: - Files dragged to the island
@@ -1573,6 +1648,7 @@ final class NotchEventMonitors {
     private var lastMoveTime: TimeInterval = 0
 
     var isActive: Bool { globalMoveMonitor != nil }
+    var hasScrollMonitors: Bool { globalScrollMonitor != nil || localScrollMonitor != nil }
 
     /// Registers throttled mouse-move monitors plus click monitors for both
     /// event destinations. The click handler receives `isLocalEvent: true`
@@ -1585,14 +1661,7 @@ final class NotchEventMonitors {
         mouseMoveHandler: @MainActor @escaping @Sendable (NSPoint) -> Void,
         mouseDownHandler: @MainActor @escaping @Sendable (NSPoint, _ isLocalEvent: Bool) -> Void,
         mouseDragHandler: @MainActor @escaping @Sendable (NSPoint) -> Void,
-        mouseUpHandler: @MainActor @escaping @Sendable () -> Void,
-        scrollHandler: @MainActor @escaping @Sendable (
-            _ sample: IslandScrollSample,
-            _ screenLocation: NSPoint,
-            _ windowLocation: NSPoint,
-            _ windowNumber: Int,
-            _ isLocalEvent: Bool
-        ) -> Bool
+        mouseUpHandler: @MainActor @escaping @Sendable () -> Void
     ) {
         let throttleInterval: TimeInterval = 0.05
 
@@ -1653,21 +1722,31 @@ final class NotchEventMonitors {
             Task { @MainActor in mouseUpHandler() }
             return event
         }
+    }
 
-        // Scroll events arrive for the whole Mac. A monitor only reads the
-        // numbers and hands plain values to the handler, which tests the
-        // pointer first. The local one runs on the main thread and may
-        // swallow the rest of a swipe the island acted on. With the swipe
-        // switched off, which is how it starts, neither does anything.
+    /// Registers the two scroll monitors. Scroll events arrive for the whole
+    /// Mac. These exist only while the swipe is on. A monitor only reads
+    /// the numbers and hands plain values to the handler, which tests the
+    /// pointer first. The local one runs on the main thread and may swallow
+    /// the rest of a swipe the island acted on.
+    func startScroll(
+        _ scrollHandler: @MainActor @escaping @Sendable (
+            _ sample: IslandScrollSample,
+            _ screenLocation: NSPoint,
+            _ windowLocation: NSPoint,
+            _ windowNumber: Int,
+            _ isLocalEvent: Bool
+        ) -> Bool
+    ) {
+        stopScroll()
+
         globalScrollMonitor = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel) { event in
-            guard IslandSwipeSetting.isEnabled else { return }
             let sample = Self.sample(from: event)
             let location = NSEvent.mouseLocation
             Task { @MainActor in _ = scrollHandler(sample, location, .zero, 0, false) }
         }
 
         localScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
-            guard IslandSwipeSetting.isEnabled else { return event }
             let sample = Self.sample(from: event)
             let location = NSEvent.mouseLocation
             let windowLocation = event.locationInWindow
@@ -1677,6 +1756,13 @@ final class NotchEventMonitors {
             }
             return swallows ? nil : event
         }
+    }
+
+    func stopScroll() {
+        if let m = globalScrollMonitor { NSEvent.removeMonitor(m) }
+        if let m = localScrollMonitor { NSEvent.removeMonitor(m) }
+        globalScrollMonitor = nil
+        localScrollMonitor = nil
     }
 
     private nonisolated static func sample(from event: NSEvent) -> IslandScrollSample {
@@ -1700,8 +1786,7 @@ final class NotchEventMonitors {
         if let m = localDragMonitor { NSEvent.removeMonitor(m) }
         if let m = globalUpMonitor { NSEvent.removeMonitor(m) }
         if let m = localUpMonitor { NSEvent.removeMonitor(m) }
-        if let m = globalScrollMonitor { NSEvent.removeMonitor(m) }
-        if let m = localScrollMonitor { NSEvent.removeMonitor(m) }
+        stopScroll()
         globalMoveMonitor = nil
         localMoveMonitor = nil
         globalClickMonitor = nil
@@ -1710,8 +1795,6 @@ final class NotchEventMonitors {
         localDragMonitor = nil
         globalUpMonitor = nil
         localUpMonitor = nil
-        globalScrollMonitor = nil
-        localScrollMonitor = nil
     }
 }
 

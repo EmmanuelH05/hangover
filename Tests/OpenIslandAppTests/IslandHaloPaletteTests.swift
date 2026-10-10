@@ -40,7 +40,7 @@ struct IslandHaloPaletteTests {
 
     @MainActor
     @Test func theRealHaloIsGivenTheDisplaysPalette() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.nook.presentRingLight = { _ in }
         let profile = model.activeAppearanceProfile
         let before = model.nook.displayPreferences(for: profile).haloColors

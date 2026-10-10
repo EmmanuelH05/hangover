@@ -298,7 +298,7 @@ import Testing
     // MARK: On the Nook
 
     @Test @MainActor func eachChangeOfRoundSaysWhatItIsInTheClosedIsland() {
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         nook.presentRingLight = { _ in }
         // Wires the timer to the model without starting the other widgets.
         nook.timer.start(nook: nook)

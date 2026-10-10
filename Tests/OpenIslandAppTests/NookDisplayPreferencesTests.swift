@@ -295,7 +295,7 @@ import Testing
     }
 
     @Test @MainActor func editingTheOtherProfileDoesNotRepositionTheIsland() {
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         nook.activeProfile = { .notch }
         var repositionCount = 0
         nook.onDisplayPreferencesChanged = { repositionCount += 1 }

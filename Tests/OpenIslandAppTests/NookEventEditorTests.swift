@@ -14,7 +14,7 @@ import Testing
     // MARK: Opening and closing
 
     @Test func thePlusOpensTheEditorOnThatDay() {
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         let day = Date(timeIntervalSince1970: 1_800_000_000)
 
         nook.beginAddingEvent(on: day)
@@ -24,7 +24,7 @@ import Testing
     }
 
     @Test func cancelDropsWhatWasTyped() {
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         nook.beginAddingEvent(on: Date())
         nook.eventForm?.title = "Dinner"
 
@@ -35,7 +35,7 @@ import Testing
     }
 
     @Test func theIslandClosingKeepsWhatWasTypedForTheNextPlus() {
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         nook.beginAddingEvent(on: Date())
         nook.eventForm?.title = "Dinner"
         nook.eventForm?.notes = "at eight"
@@ -55,7 +55,7 @@ import Testing
     }
 
     @Test func anEmptyFormIsNotKept() {
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         let first = Date(timeIntervalSince1970: 1_800_000_000)
         let second = first.addingTimeInterval(5 * 86_400)
         nook.beginAddingEvent(on: first)
@@ -67,7 +67,7 @@ import Testing
     }
 
     @Test func theEditorHoldsTheIslandOpenAndClosingTheIslandFoldsItAway() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.nook.presentRingLight = { _ in }
         model.nook.pageOverride = .nook
         model.notchStatus = .opened
@@ -90,7 +90,7 @@ import Testing
     }
 
     @Test func leavingTheNookPageFoldsTheEditorAway() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.nook.presentRingLight = { _ in }
         model.nook.pageOverride = .nook
         model.nook.beginAddingEvent(on: Date())
@@ -101,7 +101,7 @@ import Testing
     }
 
     @Test func openingAndClosingTheEditorResizesTheIsland() {
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         var resizeCount = 0
         nook.onDisplayPreferencesChanged = { resizeCount += 1 }
 
@@ -131,7 +131,7 @@ import Testing
     }
 
     @Test func theEditorFitsItsHeightAtBothIslandWidths() throws {
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         nook.beginAddingEvent(on: Date())
         nook.eventForm?.title = "Dinner with Sam"
 
@@ -146,7 +146,7 @@ import Testing
     }
 
     @Test func theEditorRenders() throws {
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         nook.beginAddingEvent(on: Date(timeIntervalSince1970: 1_791_500_000))
         nook.eventForm?.title = "Dinner with Sam"
         nook.eventForm?.location = "Westwood"
@@ -213,7 +213,7 @@ import Testing
     }
 
     @Test func growingTheCalendarResizesTheIslandAndAnyPageChangePutsItBack() {
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         var resizeCount = 0
         nook.onDisplayPreferencesChanged = { resizeCount += 1 }
 

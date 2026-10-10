@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreText
 import Foundation
 import PDFKit
 import Testing
@@ -6,6 +7,7 @@ import Testing
 
 /// The picture work, the strip drawing and the file naming, on pictures
 /// drawn in code.
+@Suite(.serialized, .oneStripAtATime)
 struct NookPhotoStripTests {
     private static let date = Date(timeIntervalSince1970: 1_791_600_420)
     private static let calendar: Calendar = {
@@ -250,20 +252,106 @@ struct NookPhotoStripTests {
                 #expect(mark.text == AppBrand.name, "\(label)")
                 #expect(page.contains(mark.rect), "\(label)")
                 #expect(!mark.rect.intersects(layout.footer), "\(label)")
-                #expect(mark.color == theme.footer.captionInk.opacity(1), "\(label)")
                 for slot in layout.slots {
                     #expect(!mark.rect.intersects(slot), "\(label)")
+                }
+                if let plate = mark.plate {
+                    #expect(mark.rect.contains(plate), "\(label)")
                 }
             }
         }
     }
 
-    @Test func theNameIsTheAppsOwnAndFitsItsBand() {
-        #expect(AppBrand.name == "Hangover")
+    @Test func theNameKeepsEightPointsOfPaperUnderItOnEveryLayout() {
         for kind in NookPhotoStripLayout.Kind.allCases {
             let layout = NookPhotoStripLayout.layout(kind)
             let mark = NookPhotoStripComposer.wordmark(layout: layout, theme: NookPhotoStripTheme.theme(id: "classic"))
-            #expect(mark.rect.height >= NookPhotoStripComposer.wordmarkSize + 2, "\(kind)")
+            #expect(layout.pageSize.height - mark.rect.maxY >= NookPhotoStripLayout.wordmarkMargin, "\(kind)")
+            #expect(mark.rect.minX >= NookPhotoStripLayout.wordmarkMargin, "\(kind)")
+        }
+    }
+
+    @Test func theNamesInkReadsOnTheGroundUnderItOnEveryThemeAndLayout() {
+        var lowest = Double.infinity
+        for kind in NookPhotoStripLayout.Kind.allCases {
+            let layout = NookPhotoStripLayout.layout(kind)
+            for theme in NookPhotoStripTheme.all {
+                let mark = NookPhotoStripComposer.wordmark(layout: layout, theme: theme)
+                #expect(!mark.grounds.isEmpty, "\(kind) \(theme.id)")
+                for ground in mark.grounds {
+                    let ratio = NookStripColor.contrast(mark.color, ground)
+                    lowest = min(lowest, ratio)
+                    #expect(ratio >= NookPhotoStripComposer.wordmarkContrast, "\(kind) \(theme.id) \(ratio)")
+                }
+            }
+        }
+        #expect(lowest >= NookPhotoStripComposer.wordmarkContrast)
+    }
+
+    @Test func contrastFollowsTheWCAGFormula() {
+        #expect(abs(NookStripColor.contrast(.black, .white) - 21) < 0.001)
+        #expect(abs(NookStripColor.contrast(.white, .black) - 21) < 0.001)
+        #expect(abs(NookStripColor.contrast(.white, .white) - 1) < 0.001)
+        // Mid gray 777777 on white is the textbook 4.48.
+        #expect(abs(NookStripColor.contrast(NookStripColor(0x777777), .white) - 4.48) < 0.01)
+        // The old gingham ink on its paper was the failing case.
+        #expect(NookStripColor.contrast(NookStripColor(0xFF4D8B), NookStripColor(0xFFE3F0)) < 4.5)
+    }
+
+    @Test func aWeakInkIsTakenDarkerOrLighterUntilItReads() {
+        let pink = NookStripColor(0xFF4D8B)
+        let paper = NookStripColor(0xFFE3F0)
+        let ink = NookPhotoStripComposer.readableInk(from: [pink], on: [paper])
+        #expect(NookStripColor.contrast(ink, paper) >= 4.5)
+        // An ink that already reads is left alone.
+        #expect(NookPhotoStripComposer.readableInk(from: [.black], on: [paper]) == .black)
+        // The second of the theme's own inks is used before any is bent.
+        #expect(NookPhotoStripComposer.readableInk(from: [pink, .black], on: [paper]) == .black)
+    }
+
+    @Test func theNamesFaceAndSizeAreTheSameOnEveryTheme() {
+        #expect(NookPhotoStripComposer.wordmarkSize >= 7)
+        #expect(NookPhotoStripComposer.wordmarkFont.name == "HelveticaNeue-Medium")
+    }
+
+    @Test func noPatternIsDrawnUnderTheName() throws {
+        let scale = 2
+        for kind in NookPhotoStripLayout.Kind.allCases {
+            for theme in NookPhotoStripTheme.all {
+                var bare = Self.input(kind, themeID: theme.id)
+                bare.theme.patterns = theme.patterns.filter { if case .vignette = $0 { true } else { false } }
+                let full = Self.input(kind, themeID: theme.id)
+                let band = NookPhotoStripComposer.wordmark(layout: full.layout, theme: theme).clear
+                let withPattern = try #require(NookPhotoStripComposer.bitmap(full, scale: CGFloat(scale)))
+                let without = try #require(NookPhotoStripComposer.bitmap(bare, scale: CGFloat(scale)))
+                // Every pixel of the clear rectangle is the same with and without the pattern.
+                for y in Int((band.minY * CGFloat(scale)).rounded(.up))..<Int((band.maxY * CGFloat(scale)).rounded(.down)) {
+                    for x in Int((band.minX * CGFloat(scale)).rounded(.up))..<Int((band.maxX * CGFloat(scale)).rounded(.down)) {
+                        let a = PhotoBoothTestPictures.pixel(withPattern, x: x, y: y)
+                        let b = PhotoBoothTestPictures.pixel(without, x: x, y: y)
+                        if a != b {
+                            Issue.record("\(kind) \(theme.id) differs at \(x),\(y)")
+                            return
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test func theGridFooterHasItsFullHeightAndTheCaptionsKeepTheirSize() {
+        let grid = NookPhotoStripLayout.layout(.grid)
+        let twentyThree: CGFloat = 23
+        #expect(grid.footer.height == twentyThree)
+        // The one line the caption is set on is the footer less two points
+        // above and below. A theme's caption fits it at the size it asks for.
+        for id in ["ribbon", "chrome"] {
+            let footer = NookPhotoStripTheme.theme(id: id).footer
+            let size = footer.captionSize * grid.captionScale
+            let font = footer.captionFont.font(size: size)
+            let lineHeight = CTFontGetAscent(font) + CTFontGetDescent(font) + CTFontGetLeading(font)
+            #expect(lineHeight <= grid.footer.height - 4, "\(id) \(lineHeight)")
+            #expect(abs(size - 13.5) < 0.001, "\(id)")
         }
     }
 

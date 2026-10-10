@@ -6,10 +6,6 @@ import OpenIslandCore
 @MainActor
 @Suite(.serialized)
 struct KeepNotchOpenUntilDecisionTests {
-    init() {
-        UserDefaults.standard.removeObject(forKey: "app.keepNotchOpenUntilDecision")
-    }
-
     private static func approvalSession(
         id: String = "approval-session",
         transcriptPath: String? = nil
@@ -33,10 +29,7 @@ struct KeepNotchOpenUntilDecisionTests {
 
     @Test
     func preferenceIsOffByDefaultSoClickOutsideStillDismisses() {
-        // Cleared here and not only in init: another suite's test can switch
-        // the saved preference on between this suite's init and this body.
-        UserDefaults.standard.removeObject(forKey: "app.keepNotchOpenUntilDecision")
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         #expect(model.keepNotchOpenUntilDecision == false)
 
         model.state = SessionState(sessions: [Self.approvalSession()])
@@ -48,7 +41,7 @@ struct KeepNotchOpenUntilDecisionTests {
 
     @Test
     func blocksClickOutsideDismissWhileAwaitingApprovalWhenEnabled() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.keepNotchOpenUntilDecision = true
 
         model.state = SessionState(sessions: [Self.approvalSession()])
@@ -60,7 +53,7 @@ struct KeepNotchOpenUntilDecisionTests {
 
     @Test
     func hiddenSubagentAwaitingApprovalDoesNotPinTheIsland() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.keepNotchOpenUntilDecision = true
 
         model.state = SessionState(sessions: [
@@ -77,7 +70,7 @@ struct KeepNotchOpenUntilDecisionTests {
 
     @Test
     func doesNotBlockWhenPreferenceDisabled() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.keepNotchOpenUntilDecision = false
 
         model.state = SessionState(sessions: [
@@ -103,7 +96,7 @@ struct KeepNotchOpenUntilDecisionTests {
 
     @Test
     func doesNotBlockWhenOnlyRunningSessions() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.state = SessionState(sessions: [
             AgentSession(
                 id: "running",
@@ -122,7 +115,7 @@ struct KeepNotchOpenUntilDecisionTests {
 
     @Test
     func blocksWhileAwaitingQuestionAnswerWhenEnabled() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.keepNotchOpenUntilDecision = true
         model.state = SessionState(sessions: [
             AgentSession(

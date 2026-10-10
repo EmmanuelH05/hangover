@@ -70,7 +70,7 @@ struct NookMediaToolsRenderTests {
 
     @Test
     func aTileWithNoCityIsNeverBlank() throws {
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         nook.presentRingLight = { _ in }
         // A bare model's weather service has no city and stays off the network.
         #expect(nook.weather.place == nil)

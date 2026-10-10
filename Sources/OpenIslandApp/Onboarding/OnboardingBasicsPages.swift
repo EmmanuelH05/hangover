@@ -164,6 +164,10 @@ struct OnboardingOpeningPage: View {
 
     private var state: OnboardingState { context.state }
 
+    /// Sized to leave room for the swipe switch under the two cards.
+    private static let cardHeight: CGFloat = 224
+    private static let artHeight: CGFloat = 96
+
     var body: some View {
         OnboardingPageScaffold(
             page: .opening,
@@ -171,9 +175,9 @@ struct OnboardingOpeningPage: View {
             title: context.t("onboarding.opening.title"),
             text: context.t("onboarding.opening.body"),
             footnote: context.t("onboarding.opening.note"),
-            gap: 20
+            gap: 18
         ) {
-            VStack(spacing: 18) {
+            VStack(spacing: 14) {
                 HStack(spacing: 16) {
                     ForEach(IslandOpenTrigger.allCases) { trigger in
                         OnboardingChoiceCard(isSelected: state.openTrigger == trigger) {
@@ -193,9 +197,11 @@ struct OnboardingOpeningPage: View {
                             }
                             .padding(16)
                         }
-                        .frame(height: 256)
+                        .frame(height: Self.cardHeight)
                     }
                 }
+
+                swipeCard
 
                 VStack(spacing: 7) {
                     tryItLine
@@ -206,25 +212,55 @@ struct OnboardingOpeningPage: View {
         }
     }
 
-    /// Invites the user to open the real island, and answers when they do.
-    /// The answer stays once it is given: the island closing again does not
+    /// The swipe setting as a switch (D46). It is off until the user turns
+    /// it on, here or in Settings, and a tap writes the same preference.
+    private var swipeCard: some View {
+        let isOn = state.swipeEnabled
+        let title = context.t("onboarding.opening.swipe.title")
+        return OnboardingChoiceCard(isSelected: isOn, showsTick: false) {
+            context.actions.setSwipeEnabled(!isOn)
+        } content: {
+            HStack(spacing: 12) {
+                OnboardingSymbolPlate(symbol: "hand.draw.fill", size: 34)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(OnboardingStyle.primaryText)
+                    Text(context.t("onboarding.opening.swipe.text"))
+                        .font(.system(size: 12))
+                        .foregroundStyle(OnboardingStyle.secondaryText)
+                        .lineSpacing(1.5)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                OnboardingSwitchArt(isOn: isOn)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityLabel(title)
+        .accessibilityValue(context.t(isOn ? "onboarding.opening.swipe.on" : "onboarding.opening.swipe.off"))
+    }
+
+    /// Invites the user to open the real island, and with the swipe on to
+    /// swipe it away, and answers when they do (`OnboardingOpeningStep`).
+    /// An answer stays once it is given: the island closing again does not
     /// take it back.
     private var tryItLine: some View {
-        let hasTried = state.hasOpenedIsland || state.isIslandOpen
-        let key = hasTried
-            ? "onboarding.opening.tried"
-            : (state.openTrigger == .hover ? "onboarding.opening.try.hover" : "onboarding.opening.try.click")
+        let step = OnboardingOpeningStep.reading(state)
         return HStack(spacing: 7) {
-            Image(systemName: hasTried ? "checkmark.circle.fill" : "arrow.up")
+            Image(systemName: step.isDone ? "checkmark.circle.fill" : "arrow.up")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(hasTried ? OnboardingStyle.finished : OnboardingStyle.paper)
-            Text(context.t(key))
+                .foregroundStyle(step.isDone ? OnboardingStyle.finished : OnboardingStyle.paper)
+            Text(context.t(step.textKey))
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(OnboardingStyle.primaryText)
         }
         .padding(.horizontal, 14)
         .frame(height: 34)
-        .background(Capsule().fill(Color.white.opacity(hasTried ? 0.06 : 0.1)))
+        .background(Capsule().fill(Color.white.opacity(step.isDone ? 0.06 : 0.1)))
         .accessibilityElement(children: .combine)
     }
 
@@ -240,6 +276,6 @@ struct OnboardingOpeningPage: View {
                         .offset(x: 2, y: 26)
                 }
         }
-        .frame(height: 120)
+        .frame(height: Self.artHeight)
     }
 }

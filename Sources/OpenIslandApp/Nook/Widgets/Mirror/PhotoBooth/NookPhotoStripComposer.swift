@@ -90,6 +90,14 @@ enum NookPhotoStripComposer {
         drawPaper(theme.paper, in: page, context: context)
         for pattern in theme.patterns {
             context.saveGState()
+            // Nothing of the paper's pattern runs under the name or its plate. A vignette
+            // is a smooth shade, not a mark, and the name's ink is checked
+            // against it at its darkest.
+            if case .vignette = pattern {} else {
+                context.addRect(page)
+                context.addRect(wordmark(layout: layout, theme: theme).clear)
+                context.clip(using: .evenOdd)
+            }
             NookPhotoStripPatterns.draw(pattern, layout: layout, context: context)
             context.restoreGState()
         }
@@ -330,30 +338,98 @@ enum NookPhotoStripComposer {
     // MARK: - Wordmark
 
     /// The app's name as it is printed on every strip: what it says, where
-    /// it sits and the ink. Kept apart from the drawing so a test can read it.
+    /// it sits, the plate under it if the theme has one, the ink, and the
+    /// grounds that ink has to read on. Kept apart from the drawing to let a
+    /// test read it.
     struct Wordmark: Equatable {
         var text: String
         var rect: CGRect
+        /// A small plate of the footer's kind, where the footer has one.
+        var plate: CGRect?
+        var plateColor: NookStripColor?
+        /// What the paper's pattern must leave clear: the plate, or the whole
+        /// band when there is no plate.
+        var clear: CGRect { plate ?? rect }
         var color: NookStripColor
+        /// The colors that can lie directly under the name: the plate or the
+        /// paper at the top and the bottom of the band, and under a vignette
+        /// at its darkest. The ink reads on every one of them.
+        var grounds: [NookStripColor]
     }
 
-    /// Largest the name is set. It shrinks to fit a narrow band.
-    static let wordmarkSize: CGFloat = 6
+    /// The least contrast the name's ink has against its ground (WCAG AA
+    /// for text).
+    static let wordmarkContrast: Double = 4.5
+
+    /// Set in 7 points of one plain face for every theme. A theme's own
+    /// script or hand face turns to mush at this size, and 7 points is the
+    /// smallest that stays crisp on a strip printed at its real size.
+    static let wordmarkSize: CGFloat = 7
+    static let wordmarkFont = NookStripFont.named("HelveticaNeue-Medium")
+    private static let wordmarkTracking: CGFloat = 0.6
+    private static let wordmarkPlateReach: CGFloat = 7
 
     static func wordmark(layout: NookPhotoStripLayout, theme: NookPhotoStripTheme) -> Wordmark {
-        Wordmark(text: AppBrand.name, rect: layout.wordmarkBox, color: theme.footer.captionInk.opacity(1))
+        let rect = layout.wordmarkBox
+        let page = layout.pageSize
+        let paper = [rect.minY, rect.maxY].map { theme.paper.color(at: $0 / page.height) }
+        var grounds = paper
+        for case let .vignette(color) in theme.patterns {
+            grounds += paper.map { color.opacity(1).composited(over: $0) }
+        }
+
+        var plate: CGRect?
+        if let color = theme.footer.plate {
+            let width = lineWidth(AppBrand.name, font: wordmarkFont, size: wordmarkSize, tracking: wordmarkTracking)
+            let reach = min(rect.width, width + 2 * wordmarkPlateReach)
+            plate = CGRect(x: rect.midX - reach / 2, y: rect.minY, width: reach, height: rect.height)
+            grounds = grounds.map { color.composited(over: $0) }
+        }
+
+        let candidates = [theme.footer.captionInk, theme.footer.dateInk].map { $0.opacity(1) }
+        return Wordmark(
+            text: AppBrand.name,
+            rect: rect,
+            plate: plate,
+            plateColor: theme.footer.plate,
+            color: readableInk(from: candidates, on: grounds),
+            grounds: grounds
+        )
     }
 
-    /// Small and centered under the footer, in the theme's caption ink. Every
-    /// strip gets it, whatever the theme, layout or file it is saved as.
+    /// The first of the theme's inks that reads on every ground. When none
+    /// does, the first one taken darker or lighter by the least that works.
+    static func readableInk(from candidates: [NookStripColor], on grounds: [NookStripColor]) -> NookStripColor {
+        func passes(_ ink: NookStripColor) -> Bool {
+            grounds.allSatisfy { NookStripColor.contrast(ink, $0) >= wordmarkContrast }
+        }
+        if let ink = candidates.first(where: passes) { return ink }
+        guard let base = candidates.first else { return .black }
+        let step = 0.05
+        for amount in stride(from: step, through: 1, by: step) {
+            let darker = base.mixed(with: .black, amount)
+            if passes(darker) { return darker }
+            let lighter = base.mixed(with: .white, amount)
+            if passes(lighter) { return lighter }
+        }
+        return .black
+    }
+
+    /// Small and centered under the footer, on a calm ground: the page's
+    /// patterns are held back from the band in `draw`.
     private static func drawWordmark(_ input: NookPhotoStripInput, context: CGContext) {
         let mark = wordmark(layout: input.layout, theme: input.theme)
+        if let plate = mark.plate, let color = mark.plateColor {
+            context.addPath(rounded(plate, min(input.theme.footer.plateRadius, plate.height / 2)))
+            context.setFillColor(color.cgColor)
+            context.fillPath()
+        }
         drawText(
             mark.text,
-            font: input.theme.footer.captionFont,
+            font: wordmarkFont,
             maxSize: wordmarkSize,
             color: mark.color.cgColor,
-            tracking: 1,
+            tracking: wordmarkTracking,
             alignment: .center,
             in: mark.rect,
             context: context

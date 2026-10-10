@@ -243,20 +243,16 @@ import Testing
 // MARK: - Setting and live behavior
 
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .noNewWindows)
 struct IslandOpenTriggerTests {
     private static let far = NSPoint(x: -10_000, y: -10_000)
     /// Comfortably past `AppModel.hoverOpenDelay`.
     private static let hoverWait: Duration = .milliseconds(500)
 
-    init() {
-        UserDefaults.standard.removeObject(forKey: AppModel.islandOpenTriggerDefaultsKey)
-    }
-
-    /// A model with a real panel and no live mouse monitors. Only the
+    /// A model with a real panel, kept off screen, and no live mouse monitors. Only the
     /// events a test sends reach the controller.
     private func modelWithPanel() -> (AppModel, OverlayPanelController) {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.disablesOverlayEventMonitoringDuringHarness = true
         model.overlay.pointerLocationProvider = { Self.far }
         model.overlay.ensureOverlayPanel()
@@ -276,21 +272,21 @@ struct IslandOpenTriggerTests {
     // MARK: Setting
 
     @Test func theIslandOpensOnHoverUnlessToldOtherwise() {
-        #expect(AppModel().islandOpenTrigger == .hover)
+        let defaults = MemoryDefaults()
+        #expect(AppModel(defaults: defaults).islandOpenTrigger == .hover)
 
-        UserDefaults.standard.set("sideways", forKey: AppModel.islandOpenTriggerDefaultsKey)
-        #expect(AppModel().islandOpenTrigger == .hover)
-        UserDefaults.standard.removeObject(forKey: AppModel.islandOpenTriggerDefaultsKey)
+        defaults.set("sideways", forKey: AppModel.islandOpenTriggerDefaultsKey)
+        #expect(AppModel(defaults: defaults).islandOpenTrigger == .hover)
     }
 
     @Test func theChoiceIsSaved() {
-        let model = AppModel()
+        let defaults = MemoryDefaults()
+        let model = AppModel(defaults: defaults)
         model.islandOpenTrigger = .click
-        #expect(AppModel().islandOpenTrigger == .click)
+        #expect(AppModel(defaults: defaults).islandOpenTrigger == .click)
 
         model.islandOpenTrigger = .hover
-        #expect(AppModel().islandOpenTrigger == .hover)
-        UserDefaults.standard.removeObject(forKey: AppModel.islandOpenTriggerDefaultsKey)
+        #expect(AppModel(defaults: defaults).islandOpenTrigger == .hover)
     }
 
     @Test func everySettingStringExistsInEveryLanguage() throws {
@@ -313,7 +309,7 @@ struct IslandOpenTriggerTests {
     // MARK: Pinning
 
     @Test func pinningAHoverOpenedIslandStopsItFollowingThePointer() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.notchStatus = .opened
         model.notchOpenReason = .hover
         #expect(model.overlay.shouldAutoCollapseOnMouseLeave)
@@ -325,7 +321,7 @@ struct IslandOpenTriggerTests {
     }
 
     @Test func pinningLeavesCardsAndAClosedIslandAlone() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.notchStatus = .opened
         model.notchOpenReason = .notification
         model.pinHoverOpenedIsland()
@@ -367,10 +363,7 @@ struct IslandOpenTriggerTests {
         guard !NSScreen.screens.isEmpty else { return }
         let (model, controller) = modelWithPanel()
         model.islandOpenTrigger = .click
-        defer {
-            model.islandOpenTrigger = .hover
-            UserDefaults.standard.removeObject(forKey: AppModel.islandOpenTriggerDefaultsKey)
-        }
+
 
         controller.handleMouseMoved(pill(controller))
         try await Task.sleep(for: Self.hoverWait)
@@ -464,10 +457,7 @@ struct IslandOpenTriggerTests {
         let (model, controller) = modelWithPanel()
         guard model.nookVisibleWidgets.contains(.tray) else { return }
         model.islandOpenTrigger = .click
-        defer {
-            model.islandOpenTrigger = .hover
-            UserDefaults.standard.removeObject(forKey: AppModel.islandOpenTriggerDefaultsKey)
-        }
+
         var changeCount = 5
         controller.dragPasteboardChangeCount = { changeCount }
         controller.dragPasteboardTypes = { ["NSFilenamesPboardType"] }

@@ -33,15 +33,25 @@ final class MediaRemoteService {
     /// Starts one adapter command and says whether it could be started.
     /// Nil runs the real adapter; tests pass their own.
     @ObservationIgnored private let commandLauncher: (@MainActor ([String]) -> Bool)?
+    /// The demo mode's player (D51). When it is set the service never
+    /// starts the adapter: the sample track is the state, and a command
+    /// moves the sample and nothing else.
+    @ObservationIgnored private let sample: DemoPlayer?
 
-    init(commandLauncher: (@MainActor ([String]) -> Bool)? = nil) {
+    init(commandLauncher: (@MainActor ([String]) -> Bool)? = nil, sample: DemoPlayer? = nil) {
         self.commandLauncher = commandLauncher
+        self.sample = sample
     }
 
     func start() {
         guard stopped else { return }
         stopped = false
         restartAttempts = 0
+        if let sample {
+            isAvailable = true
+            apply(sample.state)
+            return
+        }
         observeAppTermination()
         launchStream()
     }
@@ -88,10 +98,20 @@ final class MediaRemoteService {
     // MARK: - Commands
 
     func send(_ command: MediaRemoteCommand) {
+        if let sample {
+            sample.handle(command)
+            apply(sample.state)
+            return
+        }
         runOneShot(arguments: ["send", String(command.rawValue)])
     }
 
     func seek(to seconds: TimeInterval) {
+        if let sample {
+            sample.seek(to: seconds)
+            apply(sample.state)
+            return
+        }
         let micros = Int64((max(0, seconds) * 1_000_000).rounded())
         // A seek that was never sent is not the player's to answer: the
         // track must not be blamed for it.

@@ -272,7 +272,9 @@ struct ClaudeHooksTests {
         ).withRuntimeContext(
             environment: ["WARP_IS_LOCAL_SHELL_SESSION": "1"],
             currentTTYProvider: { nil },
-            terminalLocatorProvider: { _ in (sessionID: nil, tty: nil, title: nil) }
+            terminalLocatorProvider: { _ in (sessionID: nil, tty: nil, title: nil) },
+            // The real resolver reads Warp's own database in the user's library.
+            warpPaneResolver: { _ in nil }
         )
 
         #expect(payload.terminalApp == "Warp")
@@ -285,7 +287,9 @@ struct ClaudeHooksTests {
         ).withRuntimeContext(
             environment: ["TERM_PROGRAM": "WarpTerminal"],
             currentTTYProvider: { nil },
-            terminalLocatorProvider: { _ in (sessionID: nil, tty: nil, title: nil) }
+            terminalLocatorProvider: { _ in (sessionID: nil, tty: nil, title: nil) },
+            // The real resolver reads Warp's own database in the user's library.
+            warpPaneResolver: { _ in nil }
         )
 
         #expect(payload.terminalApp == "Warp")
@@ -311,7 +315,9 @@ struct ClaudeHooksTests {
                 "GHOSTTY_BIN_DIR": "/Applications/Ghostty.app/Contents/MacOS",
             ],
             currentTTYProvider: { nil },
-            terminalLocatorProvider: { _ in (sessionID: nil, tty: nil, title: nil) }
+            terminalLocatorProvider: { _ in (sessionID: nil, tty: nil, title: nil) },
+            // The real resolver reads Warp's own database in the user's library.
+            warpPaneResolver: { _ in nil }
         )
 
         #expect(payload.terminalApp == "Warp")

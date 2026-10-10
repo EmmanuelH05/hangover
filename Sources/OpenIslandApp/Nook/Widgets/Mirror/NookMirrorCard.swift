@@ -36,10 +36,28 @@ final class NookMirrorController {
     @ObservationIgnored private var isSessionRequested = false
     @ObservationIgnored private var isRequestingAccess = false
     @ObservationIgnored private var pendingStop: Task<Void, Never>?
+    /// True from the moment the mirror is switched on until `stopNow`. A
+    /// start that arrives while it is false, such as the answer to the
+    /// camera prompt after the mirror went off, does not run.
+    @ObservationIgnored private var isMirrorWanted = false
 
     var session: AVCaptureSession { box.session }
 
     private init() {}
+
+    /// Whether the camera may start now: access is granted, a card is
+    /// attached to show it, and the mirror is still wanted.
+    nonisolated static func shouldStart(isAuthorized: Bool, attachedCards: Int, isMirrorWanted: Bool) -> Bool {
+        isAuthorized && attachedCards > 0 && isMirrorWanted
+    }
+
+    /// The camera list in System Settings, Privacy & Security: where a
+    /// refusal is changed. The mirror's message and the welcome tour both
+    /// open it here.
+    static func openCameraSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") else { return }
+        NSWorkspace.shared.open(url)
+    }
 
     func attach() {
         attachedCards += 1
@@ -49,7 +67,7 @@ final class NookMirrorController {
         guard !isSessionRequested else { return }
         switch authorization {
         case .authorized:
-            configureAndRun()
+            startIfWanted()
         case .notDetermined:
             requestAccess()
         default:
@@ -73,6 +91,9 @@ final class NookMirrorController {
     func stopNow() {
         pendingStop?.cancel()
         pendingStop = nil
+        // Marks the mirror as no longer wanted, which also cancels a start
+        // still on its way: the camera prompt may be answered after this.
+        isMirrorWanted = false
         isSessionRequested = false
         let box = box
         sessionQueue.async {
@@ -84,9 +105,10 @@ final class NookMirrorController {
     /// the mirror off and on quickly can reuse the view, and a reused view
     /// never calls `attach` a second time.
     func resumeIfAttached() {
+        isMirrorWanted = true
         guard attachedCards > 0, !isSessionRequested else { return }
         authorization = AVCaptureDevice.authorizationStatus(for: .video)
-        if authorization == .authorized { configureAndRun() }
+        startIfWanted()
     }
 
     /// Hands the capture session to work that must run on its queue. The
@@ -117,11 +139,19 @@ final class NookMirrorController {
             Task { @MainActor in
                 self.isRequestingAccess = false
                 self.authorization = AVCaptureDevice.authorizationStatus(for: .video)
-                if self.attachedCards > 0, !self.isSessionRequested, self.authorization == .authorized {
-                    self.configureAndRun()
-                }
+                if !self.isSessionRequested { self.startIfWanted() }
             }
         }
+    }
+
+    /// Starts the camera when `shouldStart` allows it.
+    private func startIfWanted() {
+        guard Self.shouldStart(
+            isAuthorized: authorization == .authorized,
+            attachedCards: attachedCards,
+            isMirrorWanted: isMirrorWanted
+        ) else { return }
+        configureAndRun()
     }
 
     private func stopSession() {
@@ -465,9 +495,7 @@ struct NookMirrorView: View {
                 .lineLimit(1)
             if showButton {
                 Button("Open System Settings") {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
-                        NSWorkspace.shared.open(url)
-                    }
+                    NookMirrorController.openCameraSettings()
                 }
                 .controlSize(.small)
             }

@@ -6,7 +6,7 @@ import OpenIslandCore
 /// The close snapshot keeps a copy of the notification card's session, so the
 /// card does not change identity or turn into the list while it fades out.
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .noNewWindows)
 struct IslandOpenedPresentationTests {
     private func approvalSession(id: String = "session-1") -> AgentSession {
         var session = AgentSession(
@@ -29,7 +29,7 @@ struct IslandOpenedPresentationTests {
 
     /// An open island showing the approval card for `session-1`.
     private func openNotificationModel() -> AppModel {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.state = SessionState(sessions: [approvalSession()])
         model.notchStatus = .opened
         model.notchOpenReason = .notification

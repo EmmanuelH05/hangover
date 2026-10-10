@@ -171,6 +171,8 @@ struct OnboardingStringsTests {
         }
         keys += (1...4).map { "onboarding.todos.sample\($0)" }
         keys += OnboardingAbility.allCases.map(\.textKey)
+        keys += OnboardingCalendarLooks.all.flatMap { [OnboardingCalendarLooks.nameKey($0), OnboardingCalendarLooks.lineKey($0)] }
+        keys += [OnboardingCalendarLooks.titleKey, OnboardingCalendarLooks.noteKey]
         keys += OnboardingFeatureNumbersTests.pageKeys
         keys += OnboardingIntegration.allCases.flatMap { [$0.nameKey, $0.textKey, $0.whereKey] }
         return keys

@@ -250,7 +250,7 @@ final class NookRingLight {
         panel.hidesOnDeactivate = false
         // One step under the island, which keeps the island and the mirror
         // in front of the light.
-        panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue - 1)
+        panel.level = DemoMode.raised(NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue - 1))
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         // A light for the room, not for the people watching a shared screen.
         // This asks capture to leave the window out. Newer capture paths

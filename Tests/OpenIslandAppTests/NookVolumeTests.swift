@@ -462,7 +462,7 @@ import Testing
                 filter: FakeKeyFilter(),
                 defaults: store.defaults
             )
-            nook = NookModel()
+            nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
             // A bare model lights nothing; this keeps it that way.
             nook.presentRingLight = { _ in }
             let clock = clock

@@ -94,11 +94,11 @@ import Testing
     }
 
     @Test @MainActor func theMirrorStartsOff() {
-        #expect(NookModel().isMirrorOn == false)
+        #expect(NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false).isMirrorOn == false)
     }
 
     @Test @MainActor func turningTheMirrorOnOrOffResizesTheIsland() {
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         var resizeCount = 0
         nook.onDisplayPreferencesChanged = { resizeCount += 1 }
 
@@ -110,7 +110,7 @@ import Testing
     }
 
     @Test @MainActor func onlyAMirrorOnThePageHoldsTheIslandOpenAndClosingTheIslandTurnsItOff() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         // Nothing in this test may light the real screen.
         model.nook.presentRingLight = { _ in }
         model.nook.pageOverride = .nook
@@ -130,7 +130,7 @@ import Testing
     }
 
     @Test @MainActor func leavingTheNookPageTurnsTheMirrorOff() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.nook.presentRingLight = { _ in }
         model.nook.pageOverride = .nook
         model.nook.isMirrorOn = true
@@ -143,7 +143,7 @@ import Testing
     // MARK: Ring light
 
     @Test @MainActor func theRingLightShowsOnlyWhileTheMirrorIsOn() {
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         let wasOn = nook.isRingLightOn
         defer { nook.isRingLightOn = wasOn }
         var shown: [Bool] = []
@@ -210,7 +210,7 @@ import Testing
     // MARK: Tile
 
     @Test @MainActor func theTileRendersOffAndOnAtEverySize() throws {
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         for size in NookWidgetSize.allCases {
             let width: CGFloat = size == .small ? 219 : 448
             let frame = CGSize(width: width, height: NookMirrorCard.height(for: size))

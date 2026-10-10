@@ -11,7 +11,7 @@ private final class ChangeCounter: @unchecked Sendable {
 }
 
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .noNewWindows)
 struct IslandPanelSizingTests {
     // MARK: - resizeStep
 
@@ -151,7 +151,7 @@ struct IslandPanelSizingTests {
 
     @Test
     func contentChangesThroughTheModelCoalesce() async {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         let before = model.overlay.performedLayoutRefreshCount
 
         model.measuredNotificationContentHeight = 200
@@ -213,7 +213,7 @@ struct IslandPanelSizingTests {
     // MARK: - Close snapshot
 
     private func notificationModel() -> AppModel {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         var session = AgentSession(
             id: "session-1",
             title: "Claude · project",
@@ -325,7 +325,7 @@ struct IslandPanelSizingTests {
 
     @Test
     func contentRectUsesTheVisibleShapeWhileOpenAndTheWindowWhileClosed() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         let controller = OverlayPanelController()
         let bounds = NSRect(x: 0, y: 0, width: 576, height: 400)
         model.overlay.openedLayout = IslandOpenedLayout(headerHeight: 32, contentHeight: 200)
@@ -340,7 +340,7 @@ struct IslandPanelSizingTests {
 
     @Test
     func hostingViewIgnoresClicksBelowTheVisibleShape() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         let controller = OverlayPanelController()
         controller.model = model
         model.overlay.openedLayout = IslandOpenedLayout(headerHeight: 32, contentHeight: 200)

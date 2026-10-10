@@ -20,7 +20,7 @@ import OpenIslandCore
     }
 
     @Test func aDenialForASessionThatIsNoLongerWaitingChangesNothing() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.nook.presentRingLight = { _ in }
         model.state = SessionState(sessions: [Self.session(.running)])
 
@@ -32,7 +32,7 @@ import OpenIslandCore
     }
 
     @Test func anApprovalForASessionThatIsNoLongerWaitingChangesNothing() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.nook.presentRingLight = { _ in }
         model.state = SessionState(sessions: [Self.session(.completed)])
 

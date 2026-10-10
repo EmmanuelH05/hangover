@@ -8,7 +8,7 @@ import OpenIslandCore
 /// shortcuts run through `FakeHotkeyRegistrar`: nothing is registered with
 /// macOS and no real agent is approved, denied or answered.
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .noNewWindows)
 struct AgentToolsModelTests {
     /// Long enough after a card comes on screen for a shortcut to decide it.
     private static var later: Date { Date.now.addingTimeInterval(5) }
@@ -38,7 +38,7 @@ struct AgentToolsModelTests {
 
     /// A model whose cards make no sound.
     private static func silentModel() -> AppModel {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.overlay.isSoundMutedAccessor = { true }
         return model
     }
@@ -53,7 +53,7 @@ struct AgentToolsModelTests {
 
     @Test
     func theApproveShortcutApprovesTheRequestOnTheCard() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         let session = AgentToolsFixtures.approvalSession()
         model.state = SessionState(sessions: [session])
         Self.showCard(for: session.id, on: model)
@@ -67,7 +67,7 @@ struct AgentToolsModelTests {
 
     @Test
     func theDenyShortcutDeniesIt() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         let session = AgentToolsFixtures.approvalSession()
         model.state = SessionState(sessions: [session])
         Self.showCard(for: session.id, on: model)
@@ -81,7 +81,7 @@ struct AgentToolsModelTests {
 
     @Test
     func aPressRightAfterTheCardComesUpDecidesNothing() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         let session = AgentToolsFixtures.approvalSession()
         model.state = SessionState(sessions: [session])
         Self.showCard(for: session.id, on: model)
@@ -93,7 +93,7 @@ struct AgentToolsModelTests {
 
     @Test
     func aPressWithNothingWaitingDoesNothing() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         let session = AgentToolsFixtures.questionSession()
         model.state = SessionState(sessions: [session])
         Self.showCard(for: session.id, on: model)
@@ -106,7 +106,7 @@ struct AgentToolsModelTests {
 
     @Test
     func withSeveralWaitingOnlyTheOneOnTheCardIsDecided() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         let first = AgentToolsFixtures.approvalSession(id: "first")
         let second = AgentToolsFixtures.approvalSession(id: "second")
         model.state = SessionState(sessions: [first, second])
@@ -303,7 +303,7 @@ struct AgentToolsModelTests {
 
     @Test
     func aRequestOffScreenIsShownByTheFirstPressAndDecidedByALaterOne() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         let session = AgentToolsFixtures.approvalSession()
         model.state = SessionState(sessions: [session])
         #expect(model.notchStatus == .closed)
@@ -327,7 +327,7 @@ struct AgentToolsModelTests {
 
     @Test
     func theKeysAreHeldOnlyWhileARequestWaitsAndAPressGoesThroughTheModel() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         let registrar = FakeHotkeyRegistrar()
         model.agentHotkeys.activate(registrar: registrar)
         #expect(registrar.registered.isEmpty)
@@ -354,7 +354,7 @@ struct AgentToolsModelTests {
 
     @Test
     func onlyTheCardTheShortcutsActOnNamesTheKeys() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.agentHotkeys.activate(registrar: FakeHotkeyRegistrar())
         let first = AgentToolsFixtures.approvalSession(id: "first")
         let second = AgentToolsFixtures.approvalSession(id: "second")
@@ -368,7 +368,7 @@ struct AgentToolsModelTests {
 
     @Test
     func aCardNamesNoKeysTheSystemNeverTook() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         let session = AgentToolsFixtures.approvalSession()
         model.state = SessionState(sessions: [session])
         Self.showCard(for: session.id, on: model)
@@ -379,7 +379,7 @@ struct AgentToolsModelTests {
 
     @Test
     func theKeysAreNotHeldForARequestNoPressCanReach() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         let registrar = FakeHotkeyRegistrar()
         model.agentHotkeys.activate(registrar: registrar)
 
@@ -549,7 +549,7 @@ struct AgentToolsModelTests {
 
     @Test
     func aReplyThatCouldNotBeSentGoesBackIntoItsField() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         var session = AgentToolsFixtures.questionSession(id: "done")
         session.phase = .completed
         session.questionPrompt = nil
@@ -576,7 +576,7 @@ struct AgentToolsModelTests {
 
     @Test
     func aReplyThatCouldNotBeSentIsNotPutBackOnASessionThatWorksAgain() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         var session = AgentToolsFixtures.questionSession(id: "done")
         session.phase = .running
         session.questionPrompt = nil
@@ -589,7 +589,7 @@ struct AgentToolsModelTests {
 
     @Test
     func aHalfTypedAnswerSurvivesTheIslandClosingAndGoesWhenAnswered() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         let session = AgentToolsFixtures.questionSession()
         model.state = SessionState(sessions: [session])
         Self.showCard(for: session.id, on: model)
@@ -610,7 +610,7 @@ struct AgentToolsModelTests {
 
     @Test
     func aHalfTypedReplyToAFinishedAgentSurvivesToo() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         var session = AgentToolsFixtures.questionSession(id: "done")
         session.phase = .completed
         session.questionPrompt = nil
@@ -629,7 +629,7 @@ struct AgentToolsModelTests {
 
     @Test
     func theIslandStaysOpenUnderAReplyBeingTyped() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         var session = AgentToolsFixtures.questionSession(id: "done")
         session.phase = .completed
         session.questionPrompt = nil
@@ -652,7 +652,7 @@ struct AgentToolsModelTests {
 
     @Test
     func typingStopsCountingOnceTheIslandIsClosedOrTheSessionIsGone() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         let session = AgentToolsFixtures.questionSession()
         model.state = SessionState(sessions: [session])
         model.notchStatus = .opened
@@ -671,7 +671,7 @@ struct AgentToolsModelTests {
 
     @Test
     func onlyAgentsTheIslandCanAnswerGetAField() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         let claude = AgentToolsFixtures.questionSession(id: "claude", tool: .claudeCode)
         let codex = AgentToolsFixtures.questionSession(
             id: "codex",
@@ -702,7 +702,7 @@ struct AgentToolsModelTests {
     /// A model that never shows a completion card: every finished session
     /// counts as already in front.
     private static func quietModel() -> AppModel {
-        AppModel(isNotificationSessionAlreadyFrontmost: { _ in true })
+        AppModel(isNotificationSessionAlreadyFrontmost: { _ in true }, defaults: MemoryDefaults())
     }
 
     /// One prompt, one edit and a finish, 60 seconds apart end to end.

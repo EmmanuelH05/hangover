@@ -234,3 +234,63 @@ struct NookPhotoStripTheme: Identifiable, Equatable, Sendable {
 
     static let all: [NookPhotoStripTheme] = NookPhotoStripThemes.catalog
 }
+
+// MARK: - Contrast
+
+extension NookStripColor {
+    /// Relative luminance as WCAG 2 defines it, from 0 for black to 1 for
+    /// white. Alpha is ignored: composite first.
+    var luminance: Double {
+        func linear(_ channel: Double) -> Double {
+            channel <= 0.039_28 ? channel / 12.92 : pow((channel + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
+    }
+
+    /// WCAG contrast ratio of two colors, from 1 (alike) to 21 (black on
+    /// white). Order does not matter.
+    static func contrast(_ first: NookStripColor, _ second: NookStripColor) -> Double {
+        let lights = [first.luminance, second.luminance]
+        return ((lights.max() ?? 0) + 0.05) / ((lights.min() ?? 0) + 0.05)
+    }
+
+    /// This color laid over an opaque one, as printed. Opaque in the result.
+    func composited(over ground: NookStripColor) -> NookStripColor {
+        func blend(_ top: Double, _ bottom: Double) -> Double { top * alpha + bottom * (1 - alpha) }
+        var result = NookStripColor(0)
+        result.red = blend(red, ground.red)
+        result.green = blend(green, ground.green)
+        result.blue = blend(blue, ground.blue)
+        return result
+    }
+
+    /// This color moved `amount` of the way (0 to 1) toward another.
+    func mixed(with other: NookStripColor, _ amount: Double) -> NookStripColor {
+        var result = NookStripColor(0)
+        result.red = red + (other.red - red) * amount
+        result.green = green + (other.green - green) * amount
+        result.blue = blue + (other.blue - blue) * amount
+        result.alpha = alpha
+        return result
+    }
+}
+
+extension NookStripPaper {
+    /// The paper's color `fraction` of the way down the page, 0 to 1.
+    func color(at fraction: CGFloat) -> NookStripColor {
+        switch self {
+        case let .solid(color):
+            return color
+        case let .gradient(colors, stops):
+            guard colors.count == stops.count, let first = colors.first, let last = colors.last else {
+                return colors.first ?? .white
+            }
+            if fraction <= stops[0] { return first }
+            for index in 1..<colors.count where fraction <= stops[index] {
+                let span = max(stops[index] - stops[index - 1], .leastNonzeroMagnitude)
+                return colors[index - 1].mixed(with: colors[index], Double((fraction - stops[index - 1]) / span))
+            }
+            return last
+        }
+    }
+}

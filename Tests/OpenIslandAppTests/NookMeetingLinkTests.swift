@@ -350,7 +350,7 @@ import Testing
     // MARK: On the model
 
     @Test @MainActor func joiningOpensTheLinkOnceAndPutsTheBarAway() {
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         var opened: [URL] = []
         var resizes = 0
         nook.openURL = { opened.append($0) }
@@ -374,7 +374,7 @@ import Testing
     }
 
     @Test @MainActor func puttingTheBarAwayOpensNothingAndOffersTheNextMeeting() {
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         var opened: [URL] = []
         nook.openURL = { opened.append($0) }
         let first = Self.event("first", startsIn: -60)
@@ -390,7 +390,7 @@ import Testing
     }
 
     @Test @MainActor func anEventCarryingSomeOtherLinkIsNeverOpened() {
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         var opened: [URL] = []
         nook.openURL = { opened.append($0) }
         // The finder would never produce this. Join checks again anyway.

@@ -74,6 +74,10 @@ enum IslandSwipeAction: Equatable, Sendable {
     /// Swipe sideways on the closed island: hide what it shows, or bring
     /// it back.
     case toggleClosedContent
+    /// Swipe sideways on the closed pill's rectangle while the island is
+    /// open (hover opens it before a swipe can be made): close it, then hide
+    /// what the pill shows or bring it back.
+    case closeAndToggleClosedContent
     case none
 }
 
@@ -110,8 +114,11 @@ enum IslandPointerRules {
     /// `isSuppressed` is true right after a click on the notch closed the
     /// island, until the pointer has left it once. Without that the island
     /// would open again under the pointer that just closed it.
-    static func hoverOpens(trigger: IslandOpenTrigger, isSuppressed: Bool) -> Bool {
-        trigger == .hover && !isSuppressed
+    /// `isScrolling` is true while a scroll gesture is under way over the
+    /// pill: a swipe is being made there, and an island that opens under the
+    /// fingers would take it.
+    static func hoverOpens(trigger: IslandOpenTrigger, isSuppressed: Bool, isScrolling: Bool = false) -> Bool {
+        trigger == .hover && !isSuppressed && !isScrolling
     }
 
     /// Whether the pointer leaving the open island closes it, given what
@@ -160,11 +167,17 @@ enum IslandPointerRules {
     static func swipeAction(_ context: IslandSwipeContext) -> IslandSwipeAction {
         switch context.status {
         case .opened:
-            guard context.direction == .up, context.isInExpandedArea else { return .none }
-            if context.holdsOpenForTour || context.blocksDismiss
-                || context.hasOpenPicker || context.isOverScrollableContent {
+            // The tour's hold, a pending decision and an open picker refuse
+            // every close, whichever way the swipe goes.
+            if context.holdsOpenForTour || context.blocksDismiss || context.hasOpenPicker {
                 return .none
             }
+            let sideways = context.direction == .left || context.direction == .right
+            if sideways {
+                return context.isInClosedSurface ? .closeAndToggleClosedContent : .none
+            }
+            guard context.direction == .up, context.isInExpandedArea,
+                  !context.isOverScrollableContent else { return .none }
             return .close
         case .closed:
             let sideways = context.direction == .left || context.direction == .right
@@ -213,6 +226,25 @@ enum IslandPointerRules {
             width: closedSurface.width + fileDragSidePadding * 2,
             height: closedSurface.height + fileDragBottomPadding
         )
+    }
+}
+
+/// The closed pill's rectangle, worked out when the placement is refreshed or
+/// the screens change and tested against once for each scroll event. Working
+/// it out asks the screen several questions (the safe area, the auxiliary
+/// areas), which a scroll event, many a second, must not do.
+struct IslandPillBounds: Equatable, Sendable {
+    private(set) var rect: CGRect = .zero
+
+    /// Works the rectangle out again. `compute` is where the screen is asked.
+    mutating func refresh(_ compute: () -> CGRect) {
+        rect = compute()
+    }
+
+    /// Edges count as inside, as they do for a click.
+    func contains(_ point: CGPoint) -> Bool {
+        point.x >= rect.minX && point.x <= rect.maxX
+            && point.y >= rect.minY && point.y <= rect.maxY
     }
 }
 

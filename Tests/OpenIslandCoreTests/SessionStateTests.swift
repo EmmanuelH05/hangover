@@ -1487,15 +1487,26 @@ struct SessionStateTests {
             transcriptPath: nil
         )
 
-        let inferredITerm = payload.withRuntimeContext(environment: [
-            "TERM_PROGRAM": "iTerm.app",
-            "ITERM_SESSION_ID": "w0t0p0",
-        ])
+        // The locator and the tty are stand-ins. The real ones run `osascript`
+        // against the terminal and `tty` and `ps`, which a test never does.
+        let noLocator: (String) -> (sessionID: String?, tty: String?, title: String?) = { _ in (nil, nil, nil) }
+        let noTTY: () -> String? = { nil }
+
+        let inferredITerm = payload.withRuntimeContext(
+            environment: [
+                "TERM_PROGRAM": "iTerm.app",
+                "ITERM_SESSION_ID": "w0t0p0",
+            ],
+            currentTTYProvider: noTTY,
+            terminalLocatorProvider: noLocator
+        )
         #expect(inferredITerm.terminalApp == "iTerm")
 
-        let inferredGhostty = payload.withRuntimeContext(environment: [
-            "TERM_PROGRAM": "ghostty",
-        ])
+        let inferredGhostty = payload.withRuntimeContext(
+            environment: ["TERM_PROGRAM": "ghostty"],
+            currentTTYProvider: noTTY,
+            terminalLocatorProvider: noLocator
+        )
         #expect(inferredGhostty.terminalApp == "Ghostty")
         #expect(inferredGhostty.defaultJumpTarget.workingDirectory == "/tmp/worktree")
     }

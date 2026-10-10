@@ -118,7 +118,7 @@ import Testing
             cache: NotionTodoCache(directory: harness.directory)
         )
         let hub = NookTodoHub(defaults: harness.defaults, notion: notion, tickTick: harness.service)
-        hub.start(nook: NookModel())
+        hub.start(nook: NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false))
         #expect(harness.service.isActive == false)
 
         hub.selectedKind = .tickTick
@@ -147,7 +147,7 @@ import Testing
         let harness = TickTickHarness()
         harness.serve(inbox: Self.inbox)
         let hub = NookTodoHub(defaults: harness.defaults, tickTick: harness.service)
-        hub.start(nook: NookModel())
+        hub.start(nook: NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false))
         hub.selectedKind = .tickTick
         await harness.service.setupTask?.value
         harness.transport.setResponder { _, _ in StubTodoResponse(status: 500) }

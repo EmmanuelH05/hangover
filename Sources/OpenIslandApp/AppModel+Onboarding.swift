@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import Foundation
 
 /// The welcome tour on the live app: when it shows, what its pages read
@@ -93,6 +94,7 @@ extension AppModel {
         return OnboardingState(
             agentsEnabled: agentsEnabled,
             swipeEnabled: swipeGesturesEnabled,
+            swipeCount: swipeActionCount,
             openTrigger: islandOpenTrigger,
             isIslandOpen: notchStatus == .opened,
             agents: [
@@ -146,6 +148,14 @@ extension AppModel {
         )
     }
 
+    /// A pick of what the closed island shows brings back what a swipe hid
+    /// (D46). A sideways swipe tried on the opening page would otherwise
+    /// leave the real island blank while the picks are made.
+    private func showClosedContentForPick() {
+        guard nook.closedContentHiddenBySwipe else { return }
+        nook.closedContentHiddenBySwipe = false
+    }
+
     /// The same rule the Setup tab uses: these agents need the hooks
     /// helper, which is found a moment after launch.
     private func agentStatus(installed: Bool, busy: Bool) -> OnboardingAgentStatus {
@@ -161,9 +171,19 @@ extension AppModel {
         OnboardingActions(
             setAgentsEnabled: { [weak self] in self?.agentsEnabled = $0 },
             setOpenTrigger: { [weak self] in self?.islandOpenTrigger = $0 },
-            setClosedSide: { [weak self] in self?.chooseClosedSide($0) },
-            setClosedLeft: { [weak self] in self?.chooseClosedLeft($0) },
-            setClosedMusic: { [weak self] in self?.chooseClosedMusic($0) },
+            setSwipeEnabled: { [weak self] in self?.swipeGesturesEnabled = $0 },
+            setClosedSide: { [weak self] in
+                self?.showClosedContentForPick()
+                self?.chooseClosedSide($0)
+            },
+            setClosedLeft: { [weak self] in
+                self?.showClosedContentForPick()
+                self?.chooseClosedLeft($0)
+            },
+            setClosedMusic: { [weak self] in
+                self?.showClosedContentForPick()
+                self?.chooseClosedMusic($0)
+            },
             connect: { [weak self] in self?.connect($0) },
             showAllAgents: { [weak self] in self?.showSetupSettings() },
             setWidget: { [weak self] kind, isEnabled in self?.setTourWidget(kind, enabled: isEnabled) },
@@ -258,20 +278,30 @@ extension AppModel {
             // thing, through the call the widget's own button makes (D47).
             setMirror: { [weak self] isOn in
                 guard let self else { return }
-                withMotion(Motion.reflow) { nook.isMirrorOn = isOn }
+                // The link's own switch: it shows the widgets page first, and turns down
+                // a mirror with no tile or an approval on screen.
+                _ = withMotion(Motion.reflow) { setMirror(isOn) }
             },
             setRingLight: { [weak self] in self?.nook.isRingLightOn = $0 },
             openPhotoBooth: { [weak self] in self?.nook.photoBooth.start() },
+            cancelPhotoBooth: { [weak self] in self?.nook.photoBooth.cancel() },
+            openCameraSettings: { NookMirrorController.openCameraSettings() },
             playOrPause: { [weak self] in self?.nook.media.togglePlayPause() },
             nextTrack: { [weak self] in self?.nook.media.nextTrack() },
             startTimer: { [weak self] in self?.nook.timer.start(length: $0) },
             stopTimer: { [weak self] in self?.nook.timer.reset() },
-            copySampleLine: { [weak self] text in _ = self?.nook.tray.clipboard.copy(text: text) },
+            copySampleLine: { [weak self] text in self?.nook.tray.clipboard.copy(text: text) ?? false },
             // The click that raises the Calendar prompt, after the note that
             // names it. `NookAccessTiming` allows it for a widget that is on.
             showCalendar: { [weak self] in
                 guard let nook = self?.nook else { return }
                 Task { await nook.askForAccess(for: .calendar, at: .requested) }
+            },
+            // The write the calendar look picker in Settings makes, for the
+            // display the island is on.
+            setCalendarStyle: { [weak self] style in
+                guard let self else { return }
+                nook.updateDisplayPreferences(for: activeAppearanceProfile) { $0.calendarStyle = style }
             }
         )
     }
@@ -288,16 +318,31 @@ extension AppModel {
         return OnboardingFeatureReading(
             isMirrorOn: nook.isMirrorOn,
             isRingLightOn: nook.isRingLightOn,
+            camera: onboardingCameraAccess,
             canStartBooth: nook.photoBooth.canStart,
             isBoothShowing: nook.photoBooth.isShowing,
+            hasBoothStrip: nook.photoBooth.result != nil,
             music: nook.media.state.map {
                 OnboardingMusicReading(isPlaying: $0.isPlaying, track: $0.itemIdentifier ?? $0.title)
             },
             isTimerActive: nook.timer.isActive,
+            // A pomodoro round has a length too, and is not the tour's minute.
+            timerOneOff: nook.timer.pomodoro == nil ? nook.timer.oneOffTotal : nil,
             isClipboardOn: nook.tray.clipboard.isEnabled,
             hasSampleLine: nook.tray.clipboard.history.entries.contains { $0.content == sample },
             calendar: calendar
         )
+    }
+
+    /// The camera permission as macOS has it right now. This only reads: the
+    /// prompt is raised by the mirror's button and nothing else.
+    private var onboardingCameraAccess: OnboardingCameraAccess {
+        // The demo mode (D51) never looks at the camera or its list.
+        if DemoMode.isActive { return .unavailable }
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        // The device list is looked up only when the answer is not a refusal.
+        let hasCamera = status == .denied || status == .restricted || NookMirrorDevices.selectedDevice() != nil
+        return OnboardingCameraAccess(status: status, hasCamera: hasCamera)
     }
 
     /// The to-dos page's door to the task services.
@@ -371,4 +416,18 @@ extension AppModel {
 @MainActor
 final class OnboardingOwnLayouts {
     var setups: [IslandAppearanceDisplayProfile: PersonalizationSetup] = [:]
+}
+
+extension OnboardingCameraAccess {
+    /// What the page needs of macOS's camera answer. A refusal wins over a
+    /// missing camera, because it is the one the user can fix. Plain values
+    /// in, which keeps a test from touching the camera.
+    init(status: AVAuthorizationStatus, hasCamera: Bool) {
+        switch status {
+        case .denied, .restricted: self = .refused
+        case .authorized: self = hasCamera ? .allowed : .unavailable
+        case .notDetermined: self = hasCamera ? .undecided : .unavailable
+        @unknown default: self = .refused
+        }
+    }
 }

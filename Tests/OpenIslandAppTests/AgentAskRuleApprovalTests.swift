@@ -97,12 +97,12 @@ struct AgentAskRuleRulesTests {
 /// shortcuts run through `FakeHotkeyRegistrar`: no agent is answered and
 /// nothing is registered with macOS.
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .noNewWindows)
 struct AgentAskRuleModelTests {
     private static var later: Date { Date.now.addingTimeInterval(5) }
 
     private static func silentModel() -> AppModel {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.overlay.isSoundMutedAccessor = { true }
         return model
     }

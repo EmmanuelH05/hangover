@@ -347,7 +347,7 @@ import OpenIslandCore
     // MARK: On the live models
 
     @Test @MainActor func linksAreIgnoredWhileSwitchedOff() throws {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.nook.presentRingLight = { _ in }
         let timer = model.nook.timer
         timer.reset()
@@ -369,7 +369,7 @@ import OpenIslandCore
     }
 
     @Test @MainActor func timerLinksStartAndStopTheTimer() throws {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.nook.presentRingLight = { _ in }
         let timer = model.nook.timer
         defer { timer.reset() }
@@ -397,7 +397,7 @@ import OpenIslandCore
     }
 
     @Test @MainActor func aLinkThatDoesNotReadChangesNothing() throws {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.nook.presentRingLight = { _ in }
         let timer = model.nook.timer
         let wasLit = model.nook.isRingLightOn
@@ -413,7 +413,7 @@ import OpenIslandCore
     }
 
     @Test @MainActor func ringLightLinksFlipTheSavedSwitchAndLightNothingWithTheMirrorOff() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         var lit: [Bool] = []
         // Nothing in this test may light the real screen.
         model.nook.presentRingLight = { lit.append($0) }
@@ -435,7 +435,7 @@ import OpenIslandCore
     }
 
     @Test @MainActor func aPageLinkTurnsAnOpenIslandAndKeepsItOpen() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.nook.presentRingLight = { _ in }
         model.notchStatus = .opened
         model.notchOpenReason = .hover
@@ -465,7 +465,7 @@ import OpenIslandCore
     }
 
     @Test @MainActor func anApprovalInTheOpenListIsNeverCoveredByAPageLink() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.nook.presentRingLight = { _ in }
         model.state = SessionState(sessions: [Self.waitingSession()])
         // "Show all" on a card leaves the list open with the approval in
@@ -489,7 +489,7 @@ import OpenIslandCore
     }
 
     @Test @MainActor func aWaitingRequestThatIsNotOnScreenDoesNotBlockAPageLink() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.nook.presentRingLight = { _ in }
         model.state = SessionState(sessions: [Self.waitingSession(.waitingForAnswer)])
         // The Nook page shows no rows.
@@ -511,7 +511,7 @@ import OpenIslandCore
     }
 
     @Test @MainActor func aPageLinkDuringTheBootAnimationPinsTheIslandOpen() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.nook.presentRingLight = { _ in }
         model.notchStatus = .opened
         model.notchOpenReason = .boot
@@ -524,7 +524,7 @@ import OpenIslandCore
     }
 
     @Test @MainActor func aCardWaitingForAnAnswerIsNeverPushedAside() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.nook.presentRingLight = { _ in }
         model.notchStatus = .opened
         model.notchOpenReason = .notification
@@ -540,7 +540,7 @@ import OpenIslandCore
     }
 
     @Test @MainActor func turningTheMirrorOffNeedsNoPage() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.nook.presentRingLight = { _ in }
         model.nook.isMirrorOn = true
 

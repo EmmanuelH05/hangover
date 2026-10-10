@@ -201,6 +201,9 @@ final class ManualClock: @unchecked Sendable {
 final class MemoryDefaults: UserDefaults, @unchecked Sendable {
     private let lock = NSLock()
     private var values: [String: Any] = [:]
+    /// What `register(defaults:)` was given. Read after `values`, never
+    /// part of `all`, like the registration domain of a real store.
+    private var registered: [String: Any] = [:]
 
     init() {
         // The name is only what `super` asks for. It is never written to.
@@ -214,7 +217,11 @@ final class MemoryDefaults: UserDefaults, @unchecked Sendable {
     }
 
     override func object(forKey defaultName: String) -> Any? {
-        lock.withLock { values[defaultName] }
+        lock.withLock { values[defaultName] ?? registered[defaultName] }
+    }
+
+    override func register(defaults registrationDictionary: [String: Any]) {
+        lock.withLock { registered.merge(registrationDictionary) { current, _ in current } }
     }
 
     override func set(_ value: Any?, forKey defaultName: String) {

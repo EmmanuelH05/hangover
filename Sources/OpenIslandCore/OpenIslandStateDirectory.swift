@@ -15,16 +15,32 @@ public enum OpenIslandStateDirectory {
             environment: ProcessInfo.processInfo.environment,
             loadedBundlePaths: Bundle.allBundles.map(\.bundlePath)
         ),
+        isDemoRun: isDemoRun(environment: ProcessInfo.processInfo.environment),
         home: FileManager.default.homeDirectoryForCurrentUser,
         temporary: FileManager.default.temporaryDirectory,
         processID: ProcessInfo.processInfo.processIdentifier
     )
 
-    public static func resolve(isTestRun: Bool, home: URL, temporary: URL, processID: Int32) -> URL {
+    public static func resolve(
+        isTestRun: Bool,
+        isDemoRun: Bool = false,
+        home: URL,
+        temporary: URL,
+        processID: Int32
+    ) -> URL {
+        if isDemoRun {
+            return temporary.appendingPathComponent("open-island-demo-\(processID)", isDirectory: true)
+        }
         guard isTestRun else {
             return home.appendingPathComponent(realFolderPath, isDirectory: true)
         }
         return temporary.appendingPathComponent("open-island-tests-\(processID)", isDirectory: true)
+    }
+
+    /// True when the environment asks for the demo mode (D51), which keeps
+    /// what it saves out of the real folder too.
+    public static func isDemoRun(environment: [String: String]) -> Bool {
+        environment["OPEN_ISLAND_DEMO"] == "1"
     }
 
     /// True inside `swift test` and Xcode's test runner. The runner's name,

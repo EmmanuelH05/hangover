@@ -26,7 +26,7 @@ final class AppModel {
     static let allowsLinksFromOtherAppsDefaultsKey = "app.allowsLinksFromOtherApps"
     private static let islandRightSlotDefaultsKey = "appearance.island.v6.rightSlot"
     private static let islandCenterLabelDefaultsKey = "appearance.island.v6.centerLabel"
-    private static let showCodexUsageDefaultsKey = "app.showCodexUsage"
+    static let showCodexUsageDefaultsKey = "app.showCodexUsage"
     private static let completionReplyEnabledDefaultsKey = "feature.completionReply.enabled"
     private static let suppressFrontmostNotificationsDefaultsKey = "app.suppressFrontmostNotifications"
     private static let legacyIslandSessionStateIndicatorDefaultsKey = "appearance.island.v8.stateIndicator"
@@ -69,7 +69,7 @@ final class AppModel {
     @ObservationIgnored private var _agentsGridObservedSequence: [String: Int] = [:]
     @ObservationIgnored private var _agentsGridNextTicket: Int = 0
     var selectedSessionID: String?
-    let hooks = HookInstallationCoordinator()
+    let hooks: HookInstallationCoordinator
     let overlay = OverlayUICoordinator()
     /// Completion flashes for the status halo.
     let halo = IslandHaloController()
@@ -77,12 +77,12 @@ final class AppModel {
     let monitoring = ProcessMonitoringCoordinator()
     let codexAppServer = CodexAppServerCoordinator()
     let updateChecker = UpdateChecker()
-    let nook = NookModel()
+    let nook: NookModel
 
     /// Approve and deny from the keyboard, replies being typed, and what
     /// each session did since its last prompt. Glue in
     /// `AppModel+AgentTools`.
-    let agentHotkeys = AgentHotkeyController()
+    let agentHotkeys: AgentHotkeyController
     var agentReplies = AgentReplyDraftStore()
     var agentTurns = AgentTurnLedger()
     var agentApprovals = AgentApprovalTracker()
@@ -269,7 +269,7 @@ final class AppModel {
     var showDockIcon: Bool = false {
         didSet {
             guard hasFinishedInit, showDockIcon != oldValue else { return }
-            UserDefaults.standard.set(showDockIcon, forKey: Self.showDockIconDefaultsKey)
+            defaults.set(showDockIcon, forKey: Self.showDockIconDefaultsKey)
             NSApp.setActivationPolicy(showDockIcon ? .regular : .accessory)
             if !showDockIcon {
                 // macOS does not immediately refresh the Dock when switching to
@@ -294,6 +294,12 @@ final class AppModel {
     /// Where the agents switch is saved. A test hands in its own store.
     @ObservationIgnored
     private let agentsDefaults: UserDefaults
+    /// Where every setting this model keeps is read and saved. The app uses
+    /// the standard store. A test hands in one held in memory.
+    @ObservationIgnored
+    private let defaults: UserDefaults
+    /// False for a model on a store of its own, which is a test or a preview.
+    private var usesTheStandardStore: Bool { defaults === UserDefaults.standard }
     /// What this launch asked the agent half to run. Nil until the app has
     /// started, and kept for the agents switch, which starts the same parts
     /// when it is switched on later.
@@ -316,13 +322,13 @@ final class AppModel {
     var allowsLinksFromOtherApps: Bool = true {
         didSet {
             guard hasFinishedInit, allowsLinksFromOtherApps != oldValue else { return }
-            UserDefaults.standard.set(allowsLinksFromOtherApps, forKey: Self.allowsLinksFromOtherAppsDefaultsKey)
+            defaults.set(allowsLinksFromOtherApps, forKey: Self.allowsLinksFromOtherAppsDefaultsKey)
         }
     }
     var hapticFeedbackEnabled: Bool = false {
         didSet {
             guard hasFinishedInit, hapticFeedbackEnabled != oldValue else { return }
-            UserDefaults.standard.set(hapticFeedbackEnabled, forKey: Self.hapticFeedbackEnabledDefaultsKey)
+            defaults.set(hapticFeedbackEnabled, forKey: Self.hapticFeedbackEnabledDefaultsKey)
         }
     }
     /// Keep the island open until the user acts on a pending approval /
@@ -333,7 +339,7 @@ final class AppModel {
     var keepNotchOpenUntilDecision: Bool = false {
         didSet {
             guard hasFinishedInit, keepNotchOpenUntilDecision != oldValue else { return }
-            UserDefaults.standard.set(keepNotchOpenUntilDecision, forKey: Self.keepNotchOpenUntilDecisionDefaultsKey)
+            defaults.set(keepNotchOpenUntilDecision, forKey: Self.keepNotchOpenUntilDecisionDefaultsKey)
         }
     }
     /// Two-finger swipes on the island (Settings → General, D46). Opt-in:
@@ -342,36 +348,41 @@ final class AppModel {
     var swipeGesturesEnabled: Bool = false {
         didSet {
             guard hasFinishedInit, swipeGesturesEnabled != oldValue else { return }
-            UserDefaults.standard.set(swipeGesturesEnabled, forKey: IslandSwipeSetting.defaultsKey)
+            defaults.set(swipeGesturesEnabled, forKey: IslandSwipeSetting.defaultsKey)
             if !swipeGesturesEnabled { nook.closedContentHiddenBySwipe = false }
+            // The scroll monitors exist only while the swipe is on.
+            overlay.overlayPanelController.setSwipeMonitoring(enabled: swipeGesturesEnabled)
         }
     }
+    /// How many swipes the island has acted on since the app started. Not
+    /// saved. The welcome tour reads it to tell that its swipe was tried.
+    private(set) var swipeActionCount = 0
     /// Whether the closed island opens when the pointer rests on it or only
     /// on a click (Settings → General). Files dragged to the island open it
     /// either way.
     var islandOpenTrigger: IslandOpenTrigger = .hover {
         didSet {
             guard hasFinishedInit, islandOpenTrigger != oldValue else { return }
-            UserDefaults.standard.set(islandOpenTrigger.rawValue, forKey: Self.islandOpenTriggerDefaultsKey)
+            defaults.set(islandOpenTrigger.rawValue, forKey: Self.islandOpenTriggerDefaultsKey)
         }
     }
     var showCodexUsage: Bool = false {
         didSet {
             guard hasFinishedInit, showCodexUsage != oldValue else { return }
-            UserDefaults.standard.set(showCodexUsage, forKey: Self.showCodexUsageDefaultsKey)
+            defaults.set(showCodexUsage, forKey: Self.showCodexUsageDefaultsKey)
         }
     }
     var completionReplyEnabled: Bool = false {
         didSet {
             guard hasFinishedInit, completionReplyEnabled != oldValue else { return }
-            UserDefaults.standard.set(completionReplyEnabled, forKey: Self.completionReplyEnabledDefaultsKey)
+            defaults.set(completionReplyEnabled, forKey: Self.completionReplyEnabledDefaultsKey)
             refreshOverlayPlacementIfVisible()
         }
     }
     var suppressFrontmostNotifications: Bool = true {
         didSet {
             guard hasFinishedInit, suppressFrontmostNotifications != oldValue else { return }
-            UserDefaults.standard.set(suppressFrontmostNotifications, forKey: Self.suppressFrontmostNotificationsDefaultsKey)
+            defaults.set(suppressFrontmostNotifications, forKey: Self.suppressFrontmostNotificationsDefaultsKey)
         }
     }
     var launchAtLoginEnabled: Bool = false {
@@ -402,7 +413,7 @@ final class AppModel {
                 return
             }
 
-            UserDefaults.standard.set(isSoundMuted, forKey: Self.soundMutedDefaultsKey)
+            defaults.set(isSoundMuted, forKey: Self.soundMutedDefaultsKey)
             lastActionMessage = isSoundMuted
                 ? "Island sound notifications muted."
                 : "Island sound notifications enabled."
@@ -411,7 +422,7 @@ final class AppModel {
     var selectedSoundName: String = NotificationSoundService.defaultSoundName {
         didSet {
             guard selectedSoundName != oldValue else { return }
-            NotificationSoundService.selectedSoundName = selectedSoundName
+            NotificationSoundService.setSelectedSoundName(selectedSoundName, in: defaults)
         }
     }
     var overlayDisplaySelectionID: String {
@@ -424,7 +435,7 @@ final class AppModel {
     var appearanceSettingsProfile: IslandAppearanceDisplayProfile = .topBar {
         didSet {
             guard appearanceSettingsProfile != oldValue else { return }
-            UserDefaults.standard.set(appearanceSettingsProfile.rawValue, forKey: Self.appearanceProfileSettingsDefaultsKey)
+            defaults.set(appearanceSettingsProfile.rawValue, forKey: Self.appearanceProfileSettingsDefaultsKey)
         }
     }
 
@@ -531,7 +542,6 @@ final class AppModel {
         _ preferences: IslandAppearancePreferences,
         for profile: IslandAppearanceDisplayProfile
     ) {
-        let defaults = UserDefaults.standard
         defaults.set(preferences.rightSlot.rawValue, forKey: Self.appearanceDefaultsKey(profile, "rightSlot"))
         defaults.set(preferences.centerLabel.rawValue, forKey: Self.appearanceDefaultsKey(profile, "centerLabel"))
         defaults.set(preferences.usageDisplay.rawValue, forKey: Self.appearanceDefaultsKey(profile, "usageDisplay"))
@@ -548,7 +558,7 @@ final class AppModel {
     var watchNotificationEnabled: Bool = false {
         didSet {
             guard watchNotificationEnabled != oldValue else { return }
-            UserDefaults.standard.set(watchNotificationEnabled, forKey: Self.watchNotificationEnabledKey)
+            defaults.set(watchNotificationEnabled, forKey: Self.watchNotificationEnabledKey)
             if watchNotificationEnabled {
                 startWatchRelay()
             } else {
@@ -657,8 +667,10 @@ final class AppModel {
         "appearance.island.v8.\(profile.rawValue).\(name)"
     }
 
-    private static func loadAppearancePreferences(for profile: IslandAppearanceDisplayProfile) -> IslandAppearancePreferences {
-        let defaults = UserDefaults.standard
+    private static func loadAppearancePreferences(
+        for profile: IslandAppearanceDisplayProfile,
+        from defaults: UserDefaults
+    ) -> IslandAppearancePreferences {
         return IslandAppearancePreferences(
             rightSlot: IslandRightSlot(
                 rawValue: defaults.string(forKey: appearanceDefaultsKey(profile, "rightSlot"))
@@ -704,12 +716,22 @@ final class AppModel {
         isNotificationSessionAlreadyFrontmost: @escaping @Sendable (AgentSession) async -> Bool = { session in
             await ForegroundTerminalSessionProbe().matches(session: session)
         },
-        agentsDefaults: UserDefaults = .standard
+        agentsDefaults: UserDefaults? = nil,
+        defaults: UserDefaults = .standard,
+        nookModel: NookModel? = nil
     ) {
         self.terminalJumpAction = terminalJumpAction
         self.isNotificationSessionAlreadyFrontmost = isNotificationSessionAlreadyFrontmost
-        self.agentsDefaults = agentsDefaults
-        UserDefaults.standard.register(defaults: [
+        self.defaults = defaults
+        self.agentsDefaults = agentsDefaults ?? defaults
+        hooks = HookInstallationCoordinator(intentStore: AgentIntentStore(defaults: defaults))
+        agentHotkeys = AgentHotkeyController(defaults: defaults)
+        // A model built on a store of its own is a test or a preview. It
+        // does not go looking for the old NotchNook GIF in the real folder.
+        // The demo mode (D51) hands in a Nook whose services hold sample
+        // content.
+        nook = nookModel ?? NookModel(defaults: defaults, looksForImportedGIF: defaults === UserDefaults.standard)
+        defaults.register(defaults: [
             Self.showDockIconDefaultsKey: true,
             Self.hapticFeedbackEnabledDefaultsKey: false,
             Self.keepNotchOpenUntilDecisionDefaultsKey: false,
@@ -719,37 +741,39 @@ final class AppModel {
             Self.suppressFrontmostNotificationsDefaultsKey: true,
         ])
         // Read first: the watch relay below belongs to the agent half.
-        agentsEnabled = AgentsSwitch.load(from: agentsDefaults)
-        isSoundMuted = UserDefaults.standard.bool(forKey: Self.soundMutedDefaultsKey)
-        selectedSoundName = NotificationSoundService.selectedSoundName
-        showDockIcon = UserDefaults.standard.bool(forKey: Self.showDockIconDefaultsKey)
-        hapticFeedbackEnabled = UserDefaults.standard.bool(forKey: Self.hapticFeedbackEnabledDefaultsKey)
-        keepNotchOpenUntilDecision = UserDefaults.standard.bool(forKey: Self.keepNotchOpenUntilDecisionDefaultsKey)
-        swipeGesturesEnabled = UserDefaults.standard.bool(forKey: IslandSwipeSetting.defaultsKey)
-        allowsLinksFromOtherApps = UserDefaults.standard.bool(forKey: Self.allowsLinksFromOtherAppsDefaultsKey)
-        islandOpenTrigger = UserDefaults.standard.string(forKey: Self.islandOpenTriggerDefaultsKey)
+        agentsEnabled = AgentsSwitch.load(from: self.agentsDefaults)
+        isSoundMuted = defaults.bool(forKey: Self.soundMutedDefaultsKey)
+        selectedSoundName = NotificationSoundService.selectedSoundName(in: defaults)
+        showDockIcon = defaults.bool(forKey: Self.showDockIconDefaultsKey)
+        hapticFeedbackEnabled = defaults.bool(forKey: Self.hapticFeedbackEnabledDefaultsKey)
+        keepNotchOpenUntilDecision = defaults.bool(forKey: Self.keepNotchOpenUntilDecisionDefaultsKey)
+        swipeGesturesEnabled = defaults.bool(forKey: IslandSwipeSetting.defaultsKey)
+        allowsLinksFromOtherApps = defaults.bool(forKey: Self.allowsLinksFromOtherAppsDefaultsKey)
+        islandOpenTrigger = defaults.string(forKey: Self.islandOpenTriggerDefaultsKey)
             .flatMap(IslandOpenTrigger.init(rawValue:)) ?? .hover
-        suppressFrontmostNotifications = UserDefaults.standard.bool(forKey: Self.suppressFrontmostNotificationsDefaultsKey)
-        if UserDefaults.standard.object(forKey: Self.showCodexUsageDefaultsKey) != nil {
-            showCodexUsage = UserDefaults.standard.bool(forKey: Self.showCodexUsageDefaultsKey)
+        suppressFrontmostNotifications = defaults.bool(forKey: Self.suppressFrontmostNotificationsDefaultsKey)
+        if defaults.object(forKey: Self.showCodexUsageDefaultsKey) != nil {
+            showCodexUsage = defaults.bool(forKey: Self.showCodexUsageDefaultsKey)
         } else {
             showCodexUsage = FileManager.default.fileExists(
                 atPath: CodexRolloutDiscovery.defaultRootURL.path
             )
         }
-        completionReplyEnabled = UserDefaults.standard.bool(forKey: Self.completionReplyEnabledDefaultsKey)
+        completionReplyEnabled = defaults.bool(forKey: Self.completionReplyEnabledDefaultsKey)
         launchAtLoginEnabled = LaunchAtLoginService.shared.isEnabled
         appearanceSettingsProfile = IslandAppearanceDisplayProfile(
-            rawValue: UserDefaults.standard.string(forKey: Self.appearanceProfileSettingsDefaultsKey) ?? ""
+            rawValue: defaults.string(forKey: Self.appearanceProfileSettingsDefaultsKey) ?? ""
         ) ?? .topBar
-        notchAppearancePreferences = Self.loadAppearancePreferences(for: .notch)
-        topBarAppearancePreferences = Self.loadAppearancePreferences(for: .topBar)
-        watchNotificationEnabled = UserDefaults.standard.bool(forKey: Self.watchNotificationEnabledKey)
+        notchAppearancePreferences = Self.loadAppearancePreferences(for: .notch, from: defaults)
+        topBarAppearancePreferences = Self.loadAppearancePreferences(for: .topBar, from: defaults)
+        watchNotificationEnabled = defaults.bool(forKey: Self.watchNotificationEnabledKey)
         if watchNotificationEnabled {
             startWatchRelay()
         }
 
         overlay.appModel = self
+        overlay.overlayPanelController.putsPanelOnScreen = usesTheStandardStore
+        overlay.defaults = defaults
         overlay.restoreDisplayPreference()
         overlay.startObservingDisplayChanges()
         overlay.onStatusMessage = { [weak self] message in
@@ -1542,6 +1566,14 @@ final class AppModel {
             session.phase.requiresAttention
         }
     }
+    /// What refuses a swipe close right now, read for the scroll step.
+    var swipeRefusals: IslandSwipeRefusals {
+        IslandSwipeRefusals(
+            blocksDismiss: shouldBlockDismissWhileAwaitingDecision,
+            hasOpenPicker: nook.tray.isSharePickerOpen,
+            holdsOpenForTour: tourHoldsIslandOpen
+        )
+    }
     func notchPop() { overlay.notchPop() }
     func performBootAnimation() { overlay.performBootAnimation() }
     func ensureOverlayPanel() { overlay.ensureOverlayPanel() }
@@ -1574,9 +1606,26 @@ final class AppModel {
     }
 
     /// A sideways swipe on the closed island: hide what it shows, or bring
-    /// it back.
+    /// it back. While an agent waits nothing is hidden and a swipe
+    /// does nothing: setting the flag then would only arm a hide for when the
+    /// wait ends.
     func toggleClosedContentHidden() {
+        guard islandClosedMode != .waiting else { return }
         nook.closedContentHiddenBySwipe = !closedContentIsHidden
+    }
+
+    /// Counts a swipe the island acted on. A gesture it let pass is not one,
+    /// and neither is a sideways swipe while an agent waits, which
+    /// `toggleClosedContentHidden` answers with nothing.
+    func noteSwipe(_ action: IslandSwipeAction) {
+        switch action {
+        case .none:
+            return
+        case .toggleClosedContent where islandClosedMode == .waiting:
+            return
+        case .close, .toggleClosedContent, .closeAndToggleClosedContent:
+            swipeActionCount += 1
+        }
     }
 
     /// What the Nook puts in the closed island on the current display.
@@ -1682,8 +1731,8 @@ final class AppModel {
         nook.widgetPlacements(for: activeAppearanceProfile)
     }
 
-    /// The screen the island is on, for the ring light.
-    private var islandScreen: NSScreen? {
+    /// The screen the island is on, for the ring light and the demo mode.
+    var islandScreen: NSScreen? {
         guard let frame = overlay.overlayPanelController.windowFrame else { return NSScreen.main }
         let center = CGPoint(x: frame.midX, y: frame.midY)
         return NSScreen.screens.first { $0.frame.contains(center) } ?? NSScreen.main
@@ -1897,6 +1946,7 @@ final class AppModel {
             NSApp.sendAction(NSSelectorFromString("showSettingsWindow:"), to: nil, from: nil)
         }
         if let window = NSApp.windows.first(where: { $0.title == AppBrand.settingsWindowTitle }) {
+            window.level = DemoMode.raised(window.level)
             window.orderFrontRegardless()
             window.makeKey()
         }

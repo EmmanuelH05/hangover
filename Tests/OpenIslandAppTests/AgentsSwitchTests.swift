@@ -14,7 +14,7 @@ struct AgentsSwitchTests {
         if let agentsEnabled {
             defaults.set(agentsEnabled, forKey: AgentsSwitch.defaultsKey)
         }
-        return (AppModel(agentsDefaults: defaults), defaults)
+        return (AppModel(agentsDefaults: defaults, defaults: MemoryDefaults()), defaults)
     }
 
     private static func session(
@@ -60,7 +60,7 @@ struct AgentsSwitchTests {
 
         model.agentsEnabled = false
         #expect(defaults.object(forKey: "app.agentsEnabled") as? Bool == false)
-        #expect(AppModel(agentsDefaults: defaults).agentsEnabled == false)
+        #expect(AppModel(agentsDefaults: defaults, defaults: MemoryDefaults()).agentsEnabled == false)
 
         model.agentsEnabled = true
         #expect(defaults.object(forKey: "app.agentsEnabled") as? Bool == true)
@@ -489,7 +489,7 @@ struct AgentsSwitchTests {
         #expect(OnboardingGrant.shown(agentsEnabled: false) == [.camera, .accessibility, .calendar])
         #expect(OnboardingGrant.shown(agentsEnabled: true) == OnboardingGrant.allCases)
 
-        #expect(OnboardingRecapRow.shown(agentsEnabled: false) == [.opens, .closed, .widgets, .todos, .notes, .weather, .layout, .opened, .glow])
+        #expect(OnboardingRecapRow.shown(agentsEnabled: false) == [.opens, .closed, .widgets, .calendar, .todos, .notes, .weather, .layout, .opened, .glow])
         #expect(OnboardingRecapRow.shown(agentsEnabled: true) == OnboardingRecapRow.allCases)
     }
 

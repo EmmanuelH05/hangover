@@ -182,7 +182,7 @@ struct OnboardingTodosTests {
         #expect(OnboardingRecapRow.shown(agentsEnabled: true, hasTodoWidget: false)
             == OnboardingRecapRow.allCases.filter { $0 != .todos })
         #expect(OnboardingRecapRow.shown(agentsEnabled: false, hasTodoWidget: false, hasNotesWidget: false, hasWeatherWidget: false)
-            == [.opens, .closed, .widgets, .layout, .opened, .glow])
+            == [.opens, .closed, .widgets, .calendar, .layout, .opened, .glow])
     }
 
     @Test func theRecapNamesTheNotesPlaceOnlyWhileTheNotesWidgetIsOn() {

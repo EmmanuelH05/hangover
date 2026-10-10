@@ -57,6 +57,7 @@ final class FakeBoothCamera: NookPhotoBoothCamera, @unchecked Sendable {
 }
 
 @MainActor
+@Suite(.serialized, .oneStripAtATime)
 struct NookPhotoBoothModelTests {
     private static let start = Date(timeIntervalSince1970: 1_800_000_000)
 
@@ -317,7 +318,7 @@ struct NookPhotoBoothModelTests {
     @Test func turningTheMirrorOffThrowsTheSessionAway() {
         // The x, closing the island, leaving the page and removing the
         // tile all turn the mirror off, and that is the one hook.
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         nook.presentRingLight = { _ in }
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("NookPhotoBoothTests-\(UUID().uuidString)", isDirectory: true)

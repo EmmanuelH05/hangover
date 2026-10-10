@@ -90,7 +90,7 @@ struct IslandTourHoldClickTests {
 @MainActor
 struct IslandTourHoldOverlayTests {
     @Test func aHoverOpenedIslandDoesNotFollowThePointerWhileHeld() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.notchStatus = .opened
         model.notchOpenReason = .hover
         #expect(model.overlay.shouldAutoCollapseOnMouseLeave)
@@ -107,7 +107,7 @@ struct IslandTourHoldOverlayTests {
     }
 
     @Test func aCloseAskedForWhileHeldLeavesTheNookPageOpen() {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.notchStatus = .opened
         model.notchOpenReason = .click
         model.setTourHoldsIslandOpen(true)

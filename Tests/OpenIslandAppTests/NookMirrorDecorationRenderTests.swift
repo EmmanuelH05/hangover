@@ -270,7 +270,7 @@ import Testing
 
         // The picker as it sits under the mirror on the notch page. A bare
         // model: nothing is started, and nothing is changed.
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         let pickerSize = CGSize(width: 448, height: NookMirrorDecorationLayout.pickerHeight)
         for tab in NookMirrorDecorationPicker.Tab.allCases {
             let picker = NookMirrorDecorationPicker(nook: nook, startingTab: tab, isScrollable: false)

@@ -9,6 +9,7 @@ import Testing
 /// Makes sample strips from pictures drawn in code. Set
 /// `OPEN_ISLAND_RENDER_SNAPSHOTS=1` to also write each strip as a PDF and
 /// a PNG to `output/render/photobooth/` under the repo root.
+@Suite(.serialized, .oneStripAtATime)
 struct NookPhotoBoothRenderTests {
     private static let date = Date(timeIntervalSince1970: 1_791_600_420)
     private static let calendar: Calendar = {
@@ -84,7 +85,7 @@ struct NookPhotoBoothRenderTests {
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("NookPhotoBoothRenderTests-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: folder) }
-        let nook = NookModel()
+        let nook = NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
         nook.presentRingLight = { _ in }
         let booth = nook.photoBooth
         booth.camera = FakeBoothCamera()
@@ -96,12 +97,7 @@ struct NookPhotoBoothRenderTests {
         booth.layoutKind = .classic
         booth.themeID = "gingham"
         booth.caption = ""
-        defer {
-            booth.cancel()
-            // This booth saves to the shared settings. Leave them as found.
-            booth.themeID = NookPhotoStripTheme.defaultID
-            UserDefaults.standard.removeObject(forKey: NookPhotoBoothModel.themeKey)
-        }
+        defer { booth.cancel() }
 
         let idle = try Self.overlayPNG(nook, name: "ui-0-idle")
 

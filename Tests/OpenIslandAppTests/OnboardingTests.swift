@@ -222,7 +222,7 @@ struct OnboardingGateTests {
 @MainActor
 struct OnboardingAppModelTests {
     private static func makeModel() -> AppModel {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.nook.presentRingLight = { _ in }
         return model
     }
@@ -317,6 +317,7 @@ struct OnboardingAppModelTests {
 final class OnboardingCallCounter {
     var agentsSwitches: [Bool] = []
     var openTriggers: [IslandOpenTrigger] = []
+    var swipeSwitches: [Bool] = []
     var closedSides: [OnboardingClosedSide] = []
     var closedLefts: [OnboardingClosedLeft] = []
     var keptOwn = 0
@@ -342,6 +343,7 @@ final class OnboardingCallCounter {
         OnboardingActions(
             setAgentsEnabled: { self.agentsSwitches.append($0); self.order.append("agents") },
             setOpenTrigger: { self.openTriggers.append($0); self.order.append("openTrigger") },
+            setSwipeEnabled: { self.swipeSwitches.append($0); self.order.append("swipe") },
             setClosedSide: { self.closedSides.append($0); self.order.append("closedSide") },
             setClosedLeft: { self.closedLefts.append($0); self.order.append("closedLeft") },
             connect: { self.connected.append($0); self.order.append("connect") },

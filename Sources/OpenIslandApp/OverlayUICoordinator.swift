@@ -154,6 +154,9 @@ final class OverlayUICoordinator {
 
     // MARK: - Initialization
 
+    /// Where the chosen display is saved. The app model hands in its own store.
+    @ObservationIgnored var defaults: UserDefaults = .standard
+
     init() {
         overlayPanelController.onDeferredFrameChange = { [weak self] in
             self?.refreshPlacementDiagnostics()
@@ -161,7 +164,6 @@ final class OverlayUICoordinator {
     }
 
     func restoreDisplayPreference() {
-        let defaults = UserDefaults.standard
         let storedSelectionID = defaults.string(
             forKey: OverlayDisplayPreferencePolicy.preferenceDefaultsKey
         )
@@ -219,7 +221,7 @@ final class OverlayUICoordinator {
     func notchOpen(reason: NotchOpenReason, surface: IslandSurface = .sessionList()) {
         // A card has news to bring (D46). Opening by hover or click leaves
         // the swipe's hidden state alone.
-        if reason == .notification {
+        if IslandPointerRules.openingBringsBackHiddenContent(reason: reason) {
             appModel?.nook.closedContentHiddenBySwipe = false
         }
         transitionOverlay(
@@ -887,7 +889,6 @@ final class OverlayUICoordinator {
     // MARK: - Persistence
 
     private func persistOverlayDisplayPreference() {
-        let defaults = UserDefaults.standard
         if overlayDisplaySelectionID == OverlayDisplayOption.automaticID {
             overlayDisplaySelectionTitle = nil
             defaults.removeObject(forKey: OverlayDisplayPreferencePolicy.preferenceDefaultsKey)

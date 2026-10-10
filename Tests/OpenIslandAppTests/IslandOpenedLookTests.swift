@@ -462,7 +462,7 @@ struct IslandOpenedLookTests {
 @MainActor
 struct IslandOpenedLookAppTests {
     private static func makeModel() -> AppModel {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.nook.presentRingLight = { _ in }
         return model
     }

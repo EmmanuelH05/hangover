@@ -19,6 +19,9 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
 
     var isShowing: Bool { window?.isVisible == true }
 
+    /// The tour that is up, for the demo script to press its buttons (D51).
+    var currentTour: OnboardingTour? { tour }
+
     private override init() {
         super.init()
         // The hold follows app activation (`OnboardingIslandHold`). A click
@@ -46,7 +49,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
     private func refreshPresence() {
         guard let window, let tour else { return }
         let isVisible = window.isVisible && !window.isMiniaturized && !NSApp.isHidden
-        tour.setPresence(appIsActive: NSApp.isActive, windowIsVisible: isVisible)
+        tour.setPresence(appIsActive: DemoMode.countsAsActive(NSApp.isActive), windowIsVisible: isVisible)
     }
 
     /// Brings the tour up. While one is already on screen it is kept, turned
@@ -198,6 +201,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         window.standardWindowButton(.miniaturizeButton)?.isHidden = true
         window.standardWindowButton(.zoomButton)?.isHidden = true
         window.delegate = self
+        window.level = DemoMode.raised(window.level)
         return window
     }
 

@@ -18,7 +18,7 @@ struct AgentsSwitchRenderTests {
     private static func model(agentsEnabled: Bool) -> AppModel {
         let defaults = MemoryDefaults()
         defaults.set(agentsEnabled, forKey: AgentsSwitch.defaultsKey)
-        return AppModel(agentsDefaults: defaults)
+        return AppModel(agentsDefaults: defaults, defaults: MemoryDefaults())
     }
 
     @Test

@@ -177,7 +177,7 @@ struct AgentsGridRightSlotTests {
     /// .notch mid-test on notched MacBooks. Writing the preference to both
     /// profiles keeps reads deterministic on every machine.
     private func makeAgentsSlotModel() -> AppModel {
-        let model = AppModel()
+        let model = AppModel(defaults: MemoryDefaults())
         model.updateAppearancePreferences(for: .topBar) { $0.rightSlot = .agents }
         model.updateAppearancePreferences(for: .notch) { $0.rightSlot = .agents }
         return model

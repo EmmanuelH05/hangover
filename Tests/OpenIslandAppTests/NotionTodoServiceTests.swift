@@ -86,7 +86,7 @@ import Testing
         let harness = try Harness()
         let hub = NookTodoHub(defaults: harness.defaults, notion: harness.service)
 
-        hub.start(nook: NookModel())
+        hub.start(nook: NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false))
         await harness.settle()
 
         #expect(hub.selectedKind == .reminders)
@@ -99,7 +99,7 @@ import Testing
         let harness = try Harness()
         harness.serve(pages: Self.threePages)
         let hub = NookTodoHub(defaults: harness.defaults, notion: harness.service)
-        hub.start(nook: NookModel())
+        hub.start(nook: NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false))
 
         hub.selectedKind = .notion
         await harness.service.setupTask?.value

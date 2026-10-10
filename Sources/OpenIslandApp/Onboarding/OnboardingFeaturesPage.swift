@@ -26,6 +26,9 @@ struct OnboardingFeaturesPage: View {
                     // The buttons come first: in a window this narrow the list
                     // would push them below the fold.
                     tries(kind)
+                    if kind == .calendar {
+                        OnboardingCalendarLookPicker(context: context)
+                    }
                     lines(kind)
                     if walk.isAtEnd, walk.kinds.count < NookWidgetKind.allCases.count {
                         OnboardingNote(text: context.t("onboarding.features.others"))
@@ -170,6 +173,14 @@ struct OnboardingFeaturesPage: View {
                     .foregroundStyle(OnboardingStyle.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.leading, 27)
+            }
+            if button.offersCameraSettings {
+                // The mirror's own door to the camera list in System Settings.
+                Button(context.t("onboarding.features.camera.open")) {
+                    context.actions.openCameraSettings()
+                }
+                .buttonStyle(OnboardingSecondaryButtonStyle(height: 26))
+                .padding(.leading, 27)
             }
         }
     }

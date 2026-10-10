@@ -438,6 +438,28 @@ struct OnboardingRenderTests {
         #expect(try render(nil) { tourView(.opening, opened) } == render(nil) { tourView(.opening, open) })
     }
 
+    /// The swipe switch (D46) and the line under it: off, on, asked for with
+    /// the island open and closed again, and done each draw their own picture.
+    @Test func theSwipeSwitchAndItsLineShowOnTheOpeningPage() throws {
+        var on = Self.sampleState
+        on.swipeEnabled = true
+        var asked = on
+        asked.isIslandOpen = true
+        var closedAgain = on
+        closedAgain.hasOpenedIsland = true
+        var swiped = on
+        swiped.hasSwiped = true
+
+        let pictures = [
+            try render(nil) { tourView(.opening, Self.sampleState) },
+            try render(Self.name(.opening, "swipe-on")) { tourView(.opening, on) },
+            try render(Self.name(.opening, "swipe-asked")) { tourView(.opening, asked) },
+            try render(Self.name(.opening, "swipe-asked-closed")) { tourView(.opening, closedAgain) },
+            try render(Self.name(.opening, "swipe-done")) { tourView(.opening, swiped) },
+        ]
+        #expect(Set(pictures).count == pictures.count, "each state of the swipe should draw its own picture")
+    }
+
     // MARK: Tips
 
     @Test func theTipsFollowTheWayTheIslandOpensAndTheWidgetsThatAreOn() throws {

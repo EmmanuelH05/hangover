@@ -3,7 +3,9 @@ import SwiftUI
 
 @MainActor
 final class OpenIslandAppDelegate: NSObject, NSApplicationDelegate {
-    let model = AppModel()
+    /// Set only when the environment asks for the demo mode (D51).
+    private let demo = DemoLaunch.sessionIfRequested()
+    let model: AppModel
     private let harnessLaunchConfiguration = HarnessLaunchConfiguration()
     private let launchedAt = Date()
     private lazy var harnessRuntimeMonitor = HarnessRuntimeMonitor(launchedAt: launchedAt)
@@ -12,6 +14,11 @@ final class OpenIslandAppDelegate: NSObject, NSApplicationDelegate {
     /// the app among them.
     private var pendingLinks: [URL] = []
     private var isReadyForLinks = false
+
+    override init() {
+        model = demo?.model ?? AppModel()
+        super.init()
+    }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // `hangover://` links from other apps arrive as an Apple event.
@@ -73,16 +80,18 @@ final class OpenIslandAppDelegate: NSObject, NSApplicationDelegate {
             model.ignoresPointerExitDuringHarness = harnessLaunchConfiguration.scenario != nil
             model.disablesOverlayEventMonitoringDuringHarness =
                 harnessLaunchConfiguration.disablesOverlayEventMonitoring
+            // The demo mode starts no bridge, discovers no sessions and
+            // checks for no update (D51).
             model.startIfNeeded(
-                startBridge: harnessLaunchConfiguration.shouldStartBridge,
+                startBridge: demo == nil && harnessLaunchConfiguration.shouldStartBridge,
                 shouldPerformBootAnimation: harnessLaunchConfiguration.shouldPerformBootAnimation,
-                loadRuntimeState: harnessLaunchConfiguration.scenario == nil
+                loadRuntimeState: demo == nil && harnessLaunchConfiguration.scenario == nil
             )
             harnessRuntimeMonitor.recordMilestone("modelStarted")
 
             // Global shortcuts belong to a real launch, not a harness run.
             // The model holds them back while the agents are switched off.
-            if harnessLaunchConfiguration.scenario == nil {
+            if demo == nil, harnessLaunchConfiguration.scenario == nil {
                 model.activateAgentHotkeys(registrar: CarbonHotkeyRegistrar())
             }
 
@@ -95,6 +104,7 @@ final class OpenIslandAppDelegate: NSObject, NSApplicationDelegate {
 
             // Hide all windows on launch — settings opens on demand only.
             OpenIslandAppDelegate.hideAllAppWindows()
+            demo?.begin(launchedAt: launchedAt)
 
             harnessRuntimeMonitor.recordMilestone("bootstrapCompleted")
 

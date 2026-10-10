@@ -39,7 +39,19 @@ final class NookCalendarService {
     private static let refreshEveryTicks = 5
     private static let thresholdsMinutes = [10, 2]
 
-    @ObservationIgnored private let store: EKEventStore
+    /// Made on first use. The demo mode (D51) never makes one.
+    @ObservationIgnored private var madeStore: EKEventStore?
+    private var store: EKEventStore {
+        if let madeStore { return madeStore }
+        let made = EKEventStore()
+        madeStore = made
+        return made
+    }
+    /// The settings the next-up switch is kept in.
+    @ObservationIgnored private let defaults: UserDefaults
+    /// The demo mode's events (D51). When it is set the service reads and
+    /// writes these, and EventKit is never touched.
+    @ObservationIgnored private let sample: DemoCalendarSource?
     /// The calendar permission: its status and the one way to ask for it.
     @ObservationIgnored private let access: NookEventKitAccess
     /// True while a request is up, which keeps a second one from going out.
@@ -58,21 +70,29 @@ final class NookCalendarService {
 
     var isNextUpEnabled: Bool {
         get {
-            UserDefaults.standard.object(forKey: Self.nextUpEnabledKey) as? Bool ?? true
+            defaults.object(forKey: Self.nextUpEnabledKey) as? Bool ?? true
         }
         set {
-            UserDefaults.standard.set(newValue, forKey: Self.nextUpEnabledKey)
+            defaults.set(newValue, forKey: Self.nextUpEnabledKey)
         }
     }
 
     var hasAccess: Bool { authorization == .fullAccess }
 
-    /// `access` is EventKit itself unless a test hands in its own.
-    init(access: NookEventKitAccess? = nil) {
-        let store = EKEventStore()
-        self.store = store
-        self.access = access ?? .events(in: store)
-        asksRealEventKit = access == nil
+    /// `access` is EventKit itself unless a test hands in its own. The demo
+    /// mode hands in `sample` and no store is ever made (D51).
+    init(access: NookEventKitAccess? = nil, sample: DemoCalendarSource? = nil, defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        self.sample = sample
+        if sample != nil {
+            self.access = NookEventKitAccess(status: { .fullAccess }, request: {})
+            asksRealEventKit = false
+        } else {
+            let store = EKEventStore()
+            madeStore = store
+            self.access = access ?? .events(in: store)
+            asksRealEventKit = access == nil
+        }
         authorization = self.access.status()
     }
 
@@ -84,12 +104,15 @@ final class NookCalendarService {
         hasStarted = true
         guard tickTimer == nil else { return }
 
-        changeObserver = NotificationCenter.default.addObserver(
-            forName: .EKEventStoreChanged,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+        // The demo's sample has no store to change.
+        if sample == nil {
+            changeObserver = NotificationCenter.default.addObserver(
+                forName: .EKEventStoreChanged,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in self?.refresh() }
+            }
         }
 
         let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
@@ -145,6 +168,14 @@ final class NookCalendarService {
             defaultCalendarID = nil
             return
         }
+        if let sample {
+            calendars = sample.calendars
+            defaultCalendarID = sample.defaultCalendarID
+            let startOfToday = Calendar.current.startOfDay(for: Date())
+            guard let end = Calendar.current.date(byAdding: .day, value: Self.lookAheadDays, to: startOfToday) else { return }
+            events = sample.events(from: startOfToday, to: end)
+            return
+        }
         calendars = store.calendars(for: .event)
             .map {
                 NookCalendarInfo(
@@ -174,6 +205,11 @@ final class NookCalendarService {
         guard hasAccess, start < end else { return [] }
         let key = start...end
         if let cached = rangeCache[key] { return cached }
+        if let sample {
+            let result = sample.events(from: start, to: end)
+            rangeCache[key] = result
+            return result
+        }
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
         let result = store.events(matching: predicate)
             .filter { !Self.isDeclined($0) }
@@ -188,6 +224,11 @@ final class NookCalendarService {
     /// the draft names none or names one that cannot take events.
     func addEvent(_ draft: NookEventDraft) throws(NookCalendarError) {
         guard hasAccess else { throw .noAccess }
+        if let sample {
+            sample.add(draft)
+            refresh()
+            return
+        }
         let chosen = draft.calendarID
             .flatMap { store.calendar(withIdentifier: $0) }
             .flatMap { $0.allowsContentModifications ? $0 : nil }
@@ -247,7 +288,10 @@ final class NookCalendarService {
         nook?.refreshMeetingPrompt(now: Date())
     }
 
-    private func checkNextUp(now: Date) {
+    /// Shows the "in 10 min" and "in 2 min" notices for events that start
+    /// then. The minute tick calls it; the demo script calls it with a
+    /// moment of its own.
+    func checkNextUp(now: Date) {
         guard isNextUpEnabled, hasAccess, let nook else { return }
         for event in events where !event.isAllDay {
             let remaining = event.start.timeIntervalSince(now)

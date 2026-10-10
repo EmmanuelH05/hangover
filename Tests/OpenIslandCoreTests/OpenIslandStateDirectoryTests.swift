@@ -22,6 +22,19 @@ struct OpenIslandStateDirectoryTests {
         #expect(url != other)
     }
 
+    /// The demo mode (D51) shows sample content only, and what it saves goes
+    /// to a folder of its own too.
+    @Test func aDemoRunGetsAFolderOfItsOwn() {
+        let url = OpenIslandStateDirectory.resolve(
+            isTestRun: false, isDemoRun: true, home: home, temporary: temporary, processID: 42
+        )
+
+        #expect(url.path == "/tmp/somewhere/open-island-demo-42")
+        #expect(OpenIslandStateDirectory.isDemoRun(environment: ["OPEN_ISLAND_DEMO": "1"]))
+        #expect(!OpenIslandStateDirectory.isDemoRun(environment: [:]))
+        #expect(!OpenIslandStateDirectory.isDemoRun(environment: ["OPEN_ISLAND_DEMO": "0"]))
+    }
+
     @Test func aTestRunnerIsKnownByItsNameItsEnvironmentOrItsBundle() {
         #expect(OpenIslandStateDirectory.isTestRun(processName: "xctest", environment: [:], loadedBundlePaths: []))
         #expect(OpenIslandStateDirectory.isTestRun(

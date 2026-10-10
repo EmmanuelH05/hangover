@@ -47,6 +47,9 @@ struct OnboardingState: Equatable, Sendable {
     /// The swipe setting. Off, which is how it starts, the tips leave the
     /// swipe out (D46).
     var swipeEnabled = false
+    /// How many swipes the island has acted on since the app started. The
+    /// tour compares it with the count when it came up.
+    var swipeCount = 0
     var openTrigger: IslandOpenTrigger = .hover
     /// True while the real island is open, which is how the tour knows the
     /// user tried it.
@@ -117,6 +120,9 @@ struct OnboardingState: Equatable, Sendable {
     /// True once the real island was open while this tour was up. It stays
     /// true after the island closes.
     var hasOpenedIsland = false
+    /// True once the real island acted on a swipe while this tour was up.
+    /// Set by the tour, which is the one that knows the count it started at.
+    var hasSwiped = false
     /// True while the real island is in widget editing (D44).
     var isEditingWidgets = false
     /// What the features page's buttons read from the app (D47).
@@ -211,6 +217,9 @@ struct OnboardingActions {
     /// as the one in Settings.
     var setAgentsEnabled: (Bool) -> Void = { _ in }
     var setOpenTrigger: (IslandOpenTrigger) -> Void = { _ in }
+    /// The swipe switch on the opening page. It writes the same preference
+    /// as the one in Settings, under General (D46).
+    var setSwipeEnabled: (Bool) -> Void = { _ in }
     var setClosedSide: (OnboardingClosedSide) -> Void = { _ in }
     var setClosedLeft: (OnboardingClosedLeft) -> Void = { _ in }
     var setClosedMusic: (OnboardingClosedMusicPick) -> Void = { _ in }
@@ -285,6 +294,12 @@ struct OnboardingActions {
     var setRingLight: (Bool) -> Void = { _ in }
     /// Starts the photo booth, as the mirror's camera button does.
     var openPhotoBooth: () -> Void = {}
+    /// Throws away the photo booth's session or strip, as the mirror does
+    /// when it goes off. A strip already saved stays saved.
+    var cancelPhotoBooth: () -> Void = {}
+    /// Opens the camera list in System Settings, Privacy & Security: the
+    /// button the mirror shows when camera access is off.
+    var openCameraSettings: () -> Void = {}
     /// The music card's play and pause button.
     var playOrPause: () -> Void = {}
     /// The music card's next track button.
@@ -294,11 +309,15 @@ struct OnboardingActions {
     /// Stops the focus timer, as its reset button does.
     var stopTimer: () -> Void = {}
     /// Copies a sentence through the tray's own clipboard door, which the
-    /// clipboard list then shows if its tab is on.
-    var copySampleLine: (String) -> Void = { _ in }
+    /// clipboard list then shows if its tab is on. False when the pasteboard
+    /// refused the write.
+    var copySampleLine: (String) -> Bool = { _ in true }
     /// Lets the calendar ask macOS for access. The one call that can raise
     /// the Calendar prompt, from the button that names it.
     var showCalendar: () -> Void = {}
+    /// Writes the calendar look for the display the island is on: the write
+    /// the picker in Settings makes. Kept when the user moves on (D50).
+    var setCalendarStyle: (NookCalendarStyle) -> Void = { _ in }
     /// The features page's next and previous widget. The tour answers them
     /// with the walk it kept; the app never sees these.
     var nextFeature: () -> Void = {}
@@ -314,6 +333,9 @@ struct OnboardingPicks: Equatable, Sendable {
     /// True once a template was picked over a layout that was on none.
     var hasOwnLayout = false
     var glowStyle: IslandHaloStyle?
+    /// The calendar look picked on the features page (D50). A template
+    /// carries a look of its own; the pick is written again after one.
+    var calendarStyle: NookCalendarStyle?
     var closedSide: OnboardingClosedSide?
     var closedLeft: OnboardingClosedLeft?
     /// The last media style and switch values picked on the closed page.
@@ -357,6 +379,9 @@ final class OnboardingTour {
     @ObservationIgnored private let appActions: OnboardingActions
     /// Set the first time the real island is seen open, and never cleared.
     @ObservationIgnored private var hasSeenIslandOpen = false
+    /// The app's count of swipes when this tour came up. A count over it
+    /// means the island acted on a swipe since.
+    @ObservationIgnored private let swipeBaseline: Int
     /// True while this tour has asked the app to hold the island open.
     @ObservationIgnored private var holdsIsland = false
     /// Whether Hangover is the active app and the tour window can be seen.
@@ -384,8 +409,13 @@ final class OnboardingTour {
     @ObservationIgnored private var featuresActive = false
     /// What the features page has seen done since it came up.
     @ObservationIgnored private var featureProgress = OnboardingFeatureProgress()
-    /// What a "Try it" switched on, which the clean-up switches off.
+    /// What a "Try it" switched on, which the clean-up switches off, and the
+    /// baseline the page took when it came up (D49).
     @ObservationIgnored private var trials = OnboardingTrials()
+    /// True after the sample line could not be copied. Observed: nothing in
+    /// the app changes when the pasteboard refuses, and the page must draw
+    /// the note.
+    private var copyFailed = false
     /// Runs once, when the tour ends by its last button, by Skip or by its
     /// window closing.
     @ObservationIgnored private let onEnd: (OnboardingOutcome) -> Void
@@ -396,7 +426,9 @@ final class OnboardingTour {
         actions: OnboardingActions = OnboardingActions(),
         onEnd: @escaping (OnboardingOutcome) -> Void = { _ in }
     ) {
-        flow = OnboardingFlow(startingAt: page, pages: Self.pages(for: state()))
+        let first = state()
+        flow = OnboardingFlow(startingAt: page, pages: Self.pages(for: first))
+        swipeBaseline = first.swipeCount
         readState = state
         appActions = actions
         self.onEnd = onEnd
@@ -429,6 +461,7 @@ final class OnboardingTour {
         var state = readState()
         if state.isIslandOpen { hasSeenIslandOpen = true }
         state.hasOpenedIsland = state.hasOpenedIsland || hasSeenIslandOpen
+        state.hasSwiped = state.hasSwiped || state.swipeCount > swipeBaseline
         trackArrange(in: state)
         // A state handed in with a pick, as a snapshot does, is kept.
         if page == .arrange, let pick = arrangePick {
@@ -438,6 +471,7 @@ final class OnboardingTour {
         trackFeatures(in: state)
         state.featureKind = featureKind ?? state.featureKind
         state.featureProgress = state.featureProgress.merged(with: featureProgress)
+        if copyFailed { state.featureProgress.copyFailed = true }
         state.hasSavedNote = state.hasSavedNote || notesBaseline.map { state.notesSavedCount > $0 } ?? false
         state.arrangeStart = state.arrangeStart ?? arrangeStart
         state.pickedTemplate = picks.template ?? state.pickedTemplate
@@ -489,19 +523,53 @@ final class OnboardingTour {
             self?.picks.glowStyle = style
             appActions.setGlowStyle(style)
         }
-        // What a try-it switches on is noted, so that leaving puts it back.
-        // A thing that was already on is not noted, and is left alone.
-        actions.setMirror = { [weak self, appActions, readState] isOn in
-            if isOn, !readState().features.isMirrorOn { self?.trials.mirror = true }
+        actions.setCalendarStyle = { [weak self, appActions] style in
+            self?.picks.calendarStyle = style
+            appActions.setCalendarStyle(style)
+        }
+        // What a try-it switches on is noted, which lets leaving put it back
+        // (D49). The baseline the page took when it came up says what was the
+        // user's. The mirror needs no note: a mirror that was off goes off.
+        // A press that arrives after the page was let go switches nothing on:
+        // nothing would be left to put it back. Switching off always works.
+        actions.setMirror = { [weak self, appActions] isOn in
+            guard !isOn || self?.featuresActive == true else { return }
             appActions.setMirror(isOn)
         }
-        actions.setRingLight = { [weak self, appActions, readState] isOn in
-            if isOn, !readState().features.isRingLightOn { self?.trials.ringLight = true }
+        actions.setRingLight = { [weak self, appActions] isOn in
+            guard !isOn || self?.featuresActive == true else { return }
             appActions.setRingLight(isOn)
+            if self?.featuresActive == true { self?.trials.ringLight = isOn }
+        }
+        actions.openPhotoBooth = { [weak self, appActions, readState] in
+            guard self?.featuresActive == true else { return }
+            // A session already showing is the user's, and is left alone.
+            let wasShowing = readState().features.isBoothShowing
+            appActions.openPhotoBooth()
+            if self?.featuresActive == true, !wasShowing, readState().features.isBoothShowing {
+                self?.trials.booth = true
+            }
         }
         actions.startTimer = { [weak self, appActions, readState] length in
-            if !readState().features.isTimerActive { self?.trials.timer = true }
+            guard self?.featuresActive == true else { return }
+            let before = readState().features
             appActions.startTimer(length)
+            if self?.featuresActive == true, !before.isTimerActive, readState().features.isTourTimer {
+                self?.trials.timer = true
+            }
+        }
+        actions.stopTimer = { [weak self, appActions, readState] in
+            // Only the page's own countdown: a timer of the user's stays.
+            let before = readState().features
+            guard before.isTourTimer else { return }
+            appActions.stopTimer()
+            self?.trials.timer = false
+            self?.featureProgress.noteTimerStop(before: before, after: readState().features)
+        }
+        actions.copySampleLine = { [weak self, appActions] text in
+            let copied = appActions.copySampleLine(text)
+            self?.copyFailed = !copied
+            return copied
         }
         actions.nextFeature = { [weak self] in self?.showFeature(self?.currentWalk.next) }
         actions.previousFeature = { [weak self] in self?.showFeature(self?.currentWalk.previous) }
@@ -531,7 +599,9 @@ final class OnboardingTour {
         holdsIsland = holds
         if !holds {
             endArrange()
-            endFeatures()
+            // Losing focus lets go of what the buttons switched on, and the
+            // walk keeps its place while the page is still up (D49).
+            endFeatures(keepingPosition: page == .features && !flow.hasEnded)
         }
         appActions.holdIsland(holds)
     }
@@ -625,16 +695,21 @@ final class OnboardingTour {
             return
         }
         featureProgress.note(state.features)
+        trials = trials.observing(state.features)
     }
 
     /// The page came up with the island held: the first widget on the page
-    /// is shown and ringed. Safe to call any number of times.
+    /// is shown and ringed, and the baseline is taken. A page that comes
+    /// back after the hold went off and on keeps the widget it was on, if it
+    /// is still on the page. Safe to call any number of times.
     private func enterFeatures() {
         guard !featuresActive, !flow.hasEnded else { return }
         featuresActive = true
         featureKind = currentWalk.current
-        // What was already running is the user's, from the first look.
-        featureProgress.note(readState().features)
+        let reading = readState().features
+        // One baseline for the whole visit: what was on now is the user's.
+        trials = OnboardingTrials(baseline: OnboardingFeatureBaseline(reading))
+        featureProgress.note(reading)
         appActions.outlineWidget(featureKind)
     }
 
@@ -647,27 +722,34 @@ final class OnboardingTour {
         appActions.outlineWidget(kind)
     }
 
-    /// Lets go of everything the features page started: the camera, the ring
-    /// light and a timer the tour switched on, and the ring on the island.
-    /// Every way out of the page runs it: Next, Back, a dot, Skip,
-    /// finishing, the window closing (`releaseIsland`) and the hold going
-    /// off.
-    private func endFeatures() {
+    /// Lets go of everything the features page started: a photo booth
+    /// session, the ring light setting, the camera and a timer the tour
+    /// switched on, and the ring on the island. Every way out of the page
+    /// runs it: Next, Back, a dot, Skip, finishing, the window closing
+    /// (`releaseIsland`) and the hold going off. Only the hold going off
+    /// with the page still up keeps the widget the walk was on.
+    private func endFeatures(keepingPosition: Bool = false) {
         releaseTrials(leaving: nil)
-        guard featuresActive else { return }
+        if !keepingPosition { copyFailed = false }
+        guard featuresActive else {
+            if !keepingPosition { featureKind = nil }
+            return
+        }
         featuresActive = false
-        featureKind = nil
+        if !keepingPosition { featureKind = nil }
         appActions.outlineWidget(nil)
     }
 
-    /// Switches off what the tour switched on for the widget being left, or
-    /// for every widget with nil. The ring light goes before the mirror. A
-    /// thing the user had on before the tour touched it was never noted, and
-    /// stays.
+    /// Puts back what the tour switched on for the widget being left, or
+    /// for every widget with nil, in this order: the booth session, the ring
+    /// light setting, the mirror, the timer. A thing that was on when the
+    /// page came up is left as it is, and no camera is ever switched on.
     private func releaseTrials(leaving kind: NookWidgetKind?) {
-        for release in trials.releases(leaving: kind, reading: readState().features) {
+        let reading = readState().features
+        for release in trials.observing(reading).releases(leaving: kind, reading: reading) {
             switch release {
-            case .ringLightOff: appActions.setRingLight(false)
+            case .boothCancel: appActions.cancelPhotoBooth()
+            case .ringLight(let isOn): appActions.setRingLight(isOn)
             case .mirrorOff: appActions.setMirror(false)
             case .timerOff: appActions.stopTimer()
             }
@@ -679,11 +761,12 @@ final class OnboardingTour {
         releaseIsland()
     }
 
-    /// A template, and the layout from before it, carry a glow style and a
-    /// closed island (both sides) of their own. The ones picked on other pages of this
-    /// tour are the user's and come back.
+    /// A template, and the layout from before it, carry a glow style, a
+    /// calendar look and a closed island (both sides) of their own. The ones
+    /// picked on other pages of this tour are the user's and come back.
     private func putPicksBack() {
         if let style = picks.glowStyle { appActions.setGlowStyle(style) }
+        if let style = picks.calendarStyle { appActions.setCalendarStyle(style) }
         if let side = picks.closedSide { appActions.setClosedSide(side) }
         if let left = picks.closedLeft { appActions.setClosedLeft(left) }
         for pick in picks.musicPicks { appActions.setClosedMusic(pick) }

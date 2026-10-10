@@ -101,10 +101,12 @@ extension AppModel {
         return true
     }
 
+    /// The one switch for the mirror, shared by the link and the welcome tour.
     /// The mirror lives at the top of the Nook page and needs its tile
     /// there. Turning it on opens the island on that page, which is also
     /// what shows the user that the camera is on.
-    private func setMirror(_ isOn: Bool) -> Bool {
+    @discardableResult
+    func setMirror(_ isOn: Bool) -> Bool {
         guard isOn else {
             nook.isMirrorOn = false
             return true

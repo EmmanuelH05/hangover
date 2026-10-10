@@ -54,10 +54,18 @@ public protocol KeystrokeInjector {
 /// required on the first call; macOS presents its standard consent
 /// prompt.
 public struct DefaultKeystrokeInjector: KeystrokeInjector {
-    public init() {}
+    /// Runs AppleScript source and answers what went wrong, or nil. The app
+    /// runs the real thing. A test hands in a recorder and never reaches
+    /// System Events.
+    public typealias ScriptRunner = (String) -> String?
 
-    public func sendCmdShiftRightBracket() {
-        let source = #"""
+    private let runScript: ScriptRunner
+
+    public init(runScript: @escaping ScriptRunner = Self.runWithNSAppleScript) {
+        self.runScript = runScript
+    }
+
+    static let advanceTabScript = #"""
         tell application id "dev.warp.Warp-Stable" to activate
         delay 0.08
         tell application "System Events"
@@ -66,14 +74,20 @@ public struct DefaultKeystrokeInjector: KeystrokeInjector {
             end tell
         end tell
         """#
+
+    public func sendCmdShiftRightBracket() {
+        if let failure = runScript(Self.advanceTabScript) {
+            NSLog("[OpenIsland] Warp tab advance failed: %@", failure)
+        }
+    }
+
+    /// The real runner. Answers nil when the script ran.
+    public static func runWithNSAppleScript(_ source: String) -> String? {
         var error: NSDictionary?
         guard let script = NSAppleScript(source: source) else {
-            NSLog("[OpenIsland] Warp tab advance: NSAppleScript compilation returned nil")
-            return
+            return "NSAppleScript compilation returned nil"
         }
         script.executeAndReturnError(&error)
-        if let error {
-            NSLog("[OpenIsland] Warp tab advance failed: %@", String(describing: error))
-        }
+        return error.map { String(describing: $0) }
     }
 }

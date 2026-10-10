@@ -4,6 +4,7 @@ import Testing
 
 /// The booth's session as a plain value, moved by hand. No camera and no
 /// real clock.
+@Suite(.serialized, .oneStripAtATime)
 struct NookPhotoBoothSessionTests {
     private static let start = Date(timeIntervalSince1970: 1_800_000_000)
 
