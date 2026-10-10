@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hangover · Download</title>
+<meta name="description" content="Hangover makes the notch on your MacBook useful. Free, open source, and it updates itself.">
+<meta property="og:title" content="Hangover">
+<meta property="og:description" content="Hangover makes the notch on your MacBook useful. Free and open source.">
+<meta property="og:image" content="https://emmanuelh05.github.io/hangover/nook.png">
+<link rel="icon" href="icon.png">
+<style>
+  :root {
+    --ink: #0d0d0f;
+    --card: #17171a;
+    --line: #2a2a2f;
+    --paper: #f3efe4;
+    --text: #ecebe7;
+    --soft: #a3a29c;
+    --warn: #e7a762;
+    --ok: #6fb982;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--text);
+    font: 17px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 56px 20px 72px; }
+  a { color: var(--paper); }
+  h1 { font-size: 44px; line-height: 1.1; margin: 18px 0 10px; letter-spacing: -0.02em; }
+  h2 { font-size: 26px; margin: 64px 0 6px; letter-spacing: -0.01em; }
+  p { margin: 0 0 14px; }
+  .soft { color: var(--soft); }
+  .hero { text-align: center; }
+  .hero img.icon { width: 112px; height: 112px; border-radius: 26px; }
+  .hero p.lead { font-size: 20px; color: var(--soft); max-width: 560px; margin: 0 auto 26px; }
+  .button {
+    display: inline-block;
+    background: var(--paper);
+    color: var(--ink);
+    font-weight: 650;
+    font-size: 19px;
+    text-decoration: none;
+    padding: 15px 34px;
+    border-radius: 999px;
+  }
+  .button:hover { filter: brightness(0.93); }
+  .button:focus-visible { outline: 3px solid var(--warn); outline-offset: 3px; }
+  .facts { margin-top: 14px; font-size: 15px; color: var(--soft); }
+  .shot { width: 100%; border-radius: 18px; border: 1px solid var(--line); margin-top: 44px; display: block; }
+  ul.inside { padding: 0; margin: 16px 0 0; list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  ul.inside li { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; font-size: 16px; }
+  ul.inside b { display: block; }
+  ul.inside span { color: var(--soft); font-size: 15px; }
+  ol.steps { list-style: none; padding: 0; margin: 20px 0 0; counter-reset: step; }
+  ol.steps li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 1fr 250px;
+    gap: 22px;
+    align-items: center;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 20px 22px;
+    margin-bottom: 12px;
+  }
+  ol.steps h3 { margin: 0 0 4px; font-size: 19px; }
+  ol.steps h3::before {
+    content: counter(step);
+    display: inline-grid;
+    place-items: center;
+    width: 28px; height: 28px;
+    margin-right: 10px;
+    border-radius: 50%;
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 15px;
+    font-weight: 700;
+    vertical-align: 2px;
+  }
+  ol.steps p { margin: 0; color: var(--soft); font-size: 16px; }
+  ol.steps p b { color: var(--text); }
+  /* Drawings. They show where to click, not what macOS looks like to the pixel. */
+  .art {
+    height: 132px;
+    border-radius: 14px;
+    background: #101013;
+    border: 1px solid var(--line);
+    display: grid;
+    place-items: center;
+    padding: 12px;
+  }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .tile { border-radius: 12px; background: #24242a; border: 1px solid #34343b; padding: 10px 12px; font-size: 13px; color: var(--text); text-align: center; }
+  .arrow { color: var(--soft); font-size: 22px; }
+  .dialog { width: 190px; border-radius: 14px; background: #24242a; border: 1px solid #3a3a42; padding: 12px; }
+  .dialog .mark { width: 26px; height: 26px; border-radius: 7px; background: var(--warn); color: var(--ink); font-weight: 800; display: grid; place-items: center; margin: 0 auto 8px; }
+  .bar { height: 6px; border-radius: 3px; background: #45454d; margin: 5px auto; }
+  .btns { display: flex; gap: 8px; margin-top: 10px; }
+  .btn { flex: 1; height: 24px; border-radius: 7px; background: #3a3a42; font-size: 12px; display: grid; place-items: center; color: var(--soft); }
+  .btn.pick { background: var(--paper); color: var(--ink); font-weight: 700; box-shadow: 0 0 0 3px rgba(231, 167, 98, 0.55); }
+  .panel { width: 210px; border-radius: 14px; background: #24242a; border: 1px solid #3a3a42; padding: 12px; font-size: 12px; }
+  .panel .title { font-weight: 700; margin-bottom: 8px; }
+  .panel .label { color: var(--soft); margin-bottom: 4px; }
+  .panel .btn { width: 104px; flex: none; margin: 8px 0 0 auto; }
+  .done { display: flex; align-items: center; gap: 10px; background: #000; border: 1px solid #34343b; border-radius: 999px; padding: 9px 18px; font-size: 14px; }
+  .done i { width: 18px; height: 18px; border-radius: 50%; background: var(--ok); display: inline-block; }
+  .note { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px 22px; margin-top: 12px; }
+  footer { margin-top: 64px; padding-top: 22px; border-top: 1px solid var(--line); font-size: 15px; color: var(--soft); }
+  @media (max-width: 640px) {
+    h1 { font-size: 36px; }
+    ul.inside { grid-template-columns: 1fr; }
+    ol.steps li { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<section class="hero">
+  <img class="icon" src="icon.png" alt="The Hangover icon" width="112" height="112">
+  <h1>Hangover</h1>
+  <p class="lead">Makes the notch on your MacBook useful. Point at it and it opens with your music, your day and your files.</p>
+  <a class="button" href="https://github.com/EmmanuelH05/hangover/releases/latest/download/Hangover.zip">Download for Mac</a>
+  <p class="facts">Free · Mac with Apple silicon · macOS 14 or later · updates itself</p>
+  <img class="shot" src="nook.png" alt="Hangover open under the notch, with music, a focus timer and the file tray">
+</section>
+
+<section>
+  <h2>What's in it</h2>
+  <ul class="inside">
+    <li><b>Music</b><span>Play, pause and skip without leaving what you're doing.</span></li>
+    <li><b>Calendar</b><span>What's next today, with a heads-up before it starts.</span></li>
+    <li><b>To-dos</b><span>From Reminders, Notion or TickTick.</span></li>
+    <li><b>Quick notes</b><span>Type a line, press Return, it's saved.</span></li>
+    <li><b>File tray</b><span>Drop files on the notch and drag them back out later.</span></li>
+    <li><b>Timer</b><span>A focus timer you can see at a glance.</span></li>
+    <li><b>Mirror</b><span>A camera check before a call, and a photo booth.</span></li>
+    <li><b>Weather</b><span>Today and the week ahead.</span></li>
+  </ul>
+  <p class="soft" style="margin-top:14px">Use coding agents like Claude Code or Codex? Hangover can show what they're doing and let you answer them from the notch. It's optional.</p>
+</section>
+
+<section>
+  <h2>Opening it the first time</h2>
+  <p class="soft">macOS stops any app that didn't go through Apple's paid developer program, and Hangover is free. You'll see a warning once. Here is what to click.</p>
+  <ol class="steps">
+    <li>
+      <div>
+        <h3>Download and move it</h3>
+        <p>Open <b>Hangover.zip</b> from your Downloads, then drag <b>Hangover</b> into your <b>Applications</b> folder.</p>
+      </div>
+      <div class="art" aria-hidden="true">
+        <div class="row"><div class="tile">Hangover</div><div class="arrow">→</div><div class="tile">Applications</div></div>
+      </div>
+    </li>
+    <li>
+      <div>
+        <h3>Open it, then click Done</h3>
+        <p>Double-click Hangover. macOS shows a warning. Click <b>Done</b>. Don't move it to the Trash.</p>
+      </div>
+      <div class="art" aria-hidden="true">
+        <div class="dialog">
+          <div class="mark">!</div>
+          <div class="bar" style="width:80%"></div>
+          <div class="bar" style="width:62%"></div>
+          <div class="btns"><div class="btn"></div><div class="btn pick">Done</div></div>
+        </div>
+      </div>
+    </li>
+    <li>
+      <div>
+        <h3>Click Open Anyway</h3>
+        <p>Open <b>System Settings</b>, go to <b>Privacy &amp; Security</b>, scroll down to <b>Security</b> and click <b>Open Anyway</b>. Confirm with your password or Touch ID. The button stays for about an hour.</p>
+      </div>
+      <div class="art" aria-hidden="true">
+        <div class="panel">
+          <div class="title">Privacy &amp; Security</div>
+          <div class="label">Security</div>
+          <div class="bar" style="width:100%; margin-left:0"></div>
+          <div class="bar" style="width:70%; margin-left:0"></div>
+          <div class="btn pick">Open Anyway</div>
+        </div>
+      </div>
+    </li>
+    <li>
+      <div>
+        <h3>That's it</h3>
+        <p>From now on it opens like any other app, and it keeps itself up to date.</p>
+      </div>
+      <div class="art" aria-hidden="true">
+        <div class="done"><i></i>Hangover is running</div>
+      </div>
+    </li>
+  </ol>
+  <div class="note">
+    <p><b>Is that safe?</b> Only do this with a copy you downloaded from this page, and leave Gatekeeper on. All of Hangover's code is public, and you can read it or build it yourself. Apple explains these same steps in <a href="https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac">Open a Mac app from an unknown developer</a>.</p>
+    <p style="margin:0" class="soft">There's no account and no analytics, and Hangover has no server of its own.</p>
+  </div>
+</section>
+
+<footer>
+  <p><a href="https://github.com/EmmanuelH05/hangover">The code on GitHub</a> · Made by Emmanuel Hernandez</p>
+  <p>Hangover is a changed version of <a href="https://github.com/Octane0411/open-vibe-island">Open Island</a> by Octane0411 and its contributors. It's free software under the GNU General Public License, version 3.</p>
+</footer>
+
+</main>
+</body>
+</html>
