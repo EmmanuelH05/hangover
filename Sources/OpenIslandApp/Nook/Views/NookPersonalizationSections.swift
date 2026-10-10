@@ -35,21 +35,33 @@ extension AppearanceSettingsPane {
             nookSideSlotRow([.date, .battery, .countdown], group: "nook.leftSlot.second", current: { $0.leftSlot }) { slot in
                 updateNook { $0.leftSlot = slot }
             }
+            nookSideSlotRow(Self.newSideSlots, group: "nook.leftSlot.third", current: { $0.leftSlot }) { slot in
+                updateNook { $0.leftSlot = slot }
+            }
         } else {
-            nookSideSlotRow(Self.sideSlotsWithoutAgents, group: "nook.leftSlot.nookOnly", current: { $0.leftSlot }) { slot in
-                updateNook { preferences in
-                    // A saved choice that shows agents already reads as
-                    // None. Picking None must not throw it away.
-                    guard slot != .none || !preferences.leftSlot.needsAgents else { return }
-                    preferences.leftSlot = slot
+            ForEach(Array(Self.sideSlotRowsWithoutAgents.enumerated()), id: \.offset) { index, row in
+                nookSideSlotRow(row, group: "nook.leftSlot.nookOnly\(index)", current: { $0.leftSlot }) { slot in
+                    updateNook { preferences in
+                        // A saved choice that shows agents already reads as
+                        // None. Picking None must not throw it away.
+                        guard slot != .none || !preferences.leftSlot.needsAgents else { return }
+                        preferences.leftSlot = slot
+                    }
                 }
             }
         }
     }
 
     /// The cards one side offers while the agents are switched off (D41):
-    /// nothing, or one of the three items that are the Nook's.
-    static let sideSlotsWithoutAgents: [NookSideSlot] = [.none, .date, .battery, .countdown]
+    /// nothing, or one of the six items that are the Nook's.
+    static let sideSlotsWithoutAgents: [NookSideSlot] = sideSlotRowsWithoutAgents.flatMap { $0 }
+
+    /// Weather, the timer and the to-dos: the Nook's items that need no
+    /// agents and no calendar, on a row of their own on both sides.
+    static let newSideSlots: [NookSideSlot] = [.weather, .timer, .todos]
+
+    /// The same cards as `sideSlotsWithoutAgents`, as the rows Settings draws.
+    static let sideSlotRowsWithoutAgents: [[NookSideSlot]] = [[.none, .date, .battery, .countdown], newSideSlots]
 
     /// The right side while the agents are switched off, as one row. None
     /// takes a Nook item off the side and leaves the island's own saved
@@ -61,18 +73,20 @@ extension AppearanceSettingsPane {
             note: lang.t("settings.appearance.rightSlot.note")
         )
 
-        nookSideSlotRow(
-            Self.sideSlotsWithoutAgents,
-            group: "nook.rightSlot.nookOnly",
-            current: { $0.rightSlot ?? NookSideSlot.none }
-        ) { slot in
-            if slot == .none {
-                updateNook { preferences in
-                    if preferences.rightSlot?.needsAgents == false { preferences.rightSlot = nil }
-                }
-            } else {
-                withMotion(Motion.selection) {
-                    model.chooseRightSide(.extra(slot), for: editingProfile)
+        ForEach(Array(Self.sideSlotRowsWithoutAgents.enumerated()), id: \.offset) { index, row in
+            nookSideSlotRow(
+                row,
+                group: "nook.rightSlot.nookOnly\(index)",
+                current: { $0.rightSlot ?? NookSideSlot.none }
+            ) { slot in
+                if slot == .none {
+                    updateNook { preferences in
+                        if preferences.rightSlot?.needsAgents == false { preferences.rightSlot = nil }
+                    }
+                } else {
+                    withMotion(Motion.selection) {
+                        model.chooseRightSide(.extra(slot), for: editingProfile)
+                    }
                 }
             }
         }
@@ -83,6 +97,11 @@ extension AppearanceSettingsPane {
     @ViewBuilder
     var nookRightSlotExtras: some View {
         nookSideSlotRow([.agents, .date, .battery, .countdown], group: "nook.rightSlot.extras", current: { $0.rightSlot }) { slot in
+            withMotion(Motion.selection) {
+                model.chooseRightSide(.extra(slot), for: editingProfile)
+            }
+        }
+        nookSideSlotRow(Self.newSideSlots, group: "nook.rightSlot.third", current: { $0.rightSlot }) { slot in
             withMotion(Motion.selection) {
                 model.chooseRightSide(.extra(slot), for: editingProfile)
             }
@@ -156,45 +175,18 @@ extension AppearanceSettingsPane {
             }
         }
 
+        // The switches are `NookClosedMusicOption`'s, which the welcome tour
+        // offers too. Two say what an agent does to the music, two belong to
+        // external displays.
         VStack(spacing: 8) {
-            // Both rows say what an agent does to the music.
-            if showsAgents {
+            ForEach(NookClosedMusicOption.offered(agentsEnabled: showsAgents, profile: editingProfile)) { option in
                 nookToggleRow(
-                    titleKey: "settings.appearance.nook.reclaim.title",
-                    noteKey: "settings.appearance.nook.reclaim.note",
-                    \.agentsReclaimRightSide,
-                    enabledWhen: { $0.mediaStyle == .artAndVisual }
-                )
-                nookToggleRow(
-                    titleKey: "settings.appearance.nook.dot.title",
-                    noteKey: "settings.appearance.nook.dot.note",
-                    \.showsAgentDotOnArt,
-                    enabledWhen: { $0.mediaStyle != .off }
+                    titleKey: option.titleKey,
+                    noteKey: option.noteKey(agentsEnabled: showsAgents),
+                    option.keyPath,
+                    enabledWhen: { option.isEnabled(whenStyle: $0.mediaStyle) }
                 )
             }
-            if editingProfile == .topBar {
-                // Each note has a wording that leaves the agents out.
-                nookToggleRow(
-                    titleKey: "settings.appearance.nook.track.title",
-                    noteKey: showsAgents
-                        ? "settings.appearance.nook.track.note"
-                        : "settings.appearance.nook.track.note.nookOnly",
-                    \.centerLabelShowsTrack,
-                    enabledWhen: { $0.mediaStyle != .off }
-                )
-                nookToggleRow(
-                    titleKey: "settings.appearance.nook.nextEvent.title",
-                    noteKey: showsAgents
-                        ? "settings.appearance.nook.nextEvent.note"
-                        : "settings.appearance.nook.nextEvent.note.nookOnly",
-                    \.centerLabelShowsNextEvent
-                )
-            }
-            nookToggleRow(
-                titleKey: "settings.appearance.nook.notices.title",
-                noteKey: "settings.appearance.nook.notices.note",
-                \.showsNotices
-            )
         }
     }
 
@@ -498,6 +490,9 @@ extension AppearanceSettingsPane {
         case .date:      lang.t("settings.appearance.nook.leftSlot.date")
         case .battery:   lang.t("settings.appearance.nook.leftSlot.battery")
         case .countdown: lang.t("settings.appearance.nook.leftSlot.countdown")
+        case .weather:   lang.t("settings.appearance.nook.leftSlot.weather")
+        case .timer:     lang.t("settings.appearance.nook.leftSlot.timer")
+        case .todos:     lang.t("settings.appearance.nook.leftSlot.todos")
         case .none:      lang.t("settings.appearance.nook.leftSlot.none")
         }
     }

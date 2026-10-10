@@ -31,6 +31,15 @@ extension AppModel {
         templateUndo[profile] = nil
     }
 
+    /// Puts a setup from before a template back on this display, the way
+    /// `undoTemplate` does, whatever was changed since. The welcome tour
+    /// holds that setup itself: there a pick from another page is put back
+    /// after a template, which leaves the display on no template to undo.
+    func restoreSetup(_ earlier: PersonalizationSetup, for profile: IslandAppearanceDisplayProfile) {
+        adopt(personalizationSetup(for: profile).undoing(earlier), for: profile)
+        templateUndo[profile] = nil
+    }
+
     /// Widgets of this display's template that are switched off in the Nook
     /// tab and therefore missing from its page. Empty off a template.
     func templateWidgetsSwitchedOff(for profile: IslandAppearanceDisplayProfile) -> [NookWidgetKind] {

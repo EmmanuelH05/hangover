@@ -109,6 +109,9 @@ struct NookWidgetGrid<Tile: View>: View {
     var entersEditingOnLongPress: Bool
     /// Tile that shows the insertion highlight while a chip is dragged over it.
     var highlightedKind: NookWidgetKind?
+    /// Tile the welcome tour names: it gets a still ring, in or out of edit
+    /// mode. Nil draws no ring.
+    var outlinedKind: NookWidgetKind?
     /// Tile frames in `.nookWidgetEditing` space, sent whenever they change.
     var onFramesChange: (([NookWidgetKind: CGRect]) -> Void)?
     var onMove: (NookWidgetKind, Int) -> Void
@@ -145,6 +148,7 @@ struct NookWidgetGrid<Tile: View>: View {
         allowsContextMenu: Bool = true,
         entersEditingOnLongPress: Bool = true,
         highlightedKind: NookWidgetKind? = nil,
+        outlinedKind: NookWidgetKind? = nil,
         onFramesChange: (([NookWidgetKind: CGRect]) -> Void)? = nil,
         onMove: @escaping (NookWidgetKind, Int) -> Void,
         onResize: @escaping (NookWidgetKind, NookWidgetSize) -> Void,
@@ -159,6 +163,7 @@ struct NookWidgetGrid<Tile: View>: View {
         self.allowsContextMenu = allowsContextMenu
         self.entersEditingOnLongPress = entersEditingOnLongPress
         self.highlightedKind = highlightedKind
+        self.outlinedKind = outlinedKind
         self.onFramesChange = onFramesChange
         self.onMove = onMove
         self.onResize = onResize
@@ -241,6 +246,7 @@ struct NookWidgetGrid<Tile: View>: View {
                     }
                 }
                 .motionAnimation(Motion.editToggle, value: isEditing)
+                .overlay { if outlinedKind == kind { NookWidgetTourRing() } }
         }
         .simultaneousGesture(
             LongPressGesture(minimumDuration: Self.longPressDuration).onEnded { _ in onBeginEditing() },
@@ -335,5 +341,16 @@ struct NookWidgetGrid<Tile: View>: View {
         Divider()
         Button("Edit Widgets") { onBeginEditing() }
         Button("Remove from This Display") { onRemove(placement.kind) }
+    }
+}
+
+/// The ring the welcome tour draws round the widget it names. Plain and
+/// still, and it takes no clicks.
+private struct NookWidgetTourRing: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .strokeBorder(Color.cyan, lineWidth: 3)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }

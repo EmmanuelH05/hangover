@@ -325,6 +325,9 @@ enum PillSlotIdentity: Hashable {
     case date
     case battery
     case countdown
+    case weather
+    case timer
+    case todos
     case hidden
     case mediaWing
     case textWing
@@ -344,6 +347,9 @@ enum PillSlotIdentity: Hashable {
         case .date: self = .date
         case .battery: self = .battery
         case .countdown: self = .countdown
+        case .weather: self = .weather
+        case .timer: self = .timer
+        case .todos: self = .todos
         case .hidden: self = .hidden
         }
     }

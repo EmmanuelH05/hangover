@@ -52,15 +52,57 @@ struct OnboardingState: Equatable, Sendable {
     /// True when an agent the tour does not list is connected, from the
     /// Setup tab.
     var hasAgentOutsideTour = false
+    /// What the right of the closed island shows on the display in use.
+    /// Nil for a pick the tour does not offer, made in Settings.
+    var closedSide: OnboardingClosedSide? = .count
+    /// What the left of the closed island shows on the display in use.
+    var closedLeft: OnboardingClosedLeft = .bars
+    /// The media style and the switches of Settings' "While music plays"
+    /// section on the display in use.
+    var closedMusic = OnboardingClosedMusic()
     /// The Nook widgets that are switched on.
     var enabledWidgets: Set<NookWidgetKind> = Set(NookWidgetKind.defaultEnabled)
+    /// The widget page of the display in use, in order and with sizes. Nil
+    /// draws the page from the template and the widgets that are on, which
+    /// is what a snapshot hands in.
+    var nookPlacements: [NookWidgetPlacement]?
+    var calendarStyle: NookCalendarStyle = .strip
+    /// Where the to-do widget gets its tasks.
+    var todoSource: NookTodoSourceKind = .reminders
+    /// True while that source can show tasks: Reminders was allowed, or
+    /// the Notion or TickTick token is in and its list was found.
+    var isTodoSourceReady = false
+    /// Where the connecting of that source stands (D44). The secret is not
+    /// part of it.
+    var todoSetup = OnboardingTodoSetup()
+    /// Where quick notes go.
+    var notesDestination: NookNotesDestination = .file
+    /// The Markdown file notes go to, as the page prints it.
+    var notesFilePath = ""
+    /// How many notes the app has saved since it started. The tour compares
+    /// it with the count when the notes page came up.
+    var notesSavedCount = 0
+    /// True once a note was saved while the notes page was up. Set by the
+    /// tour, which is the one that knows when the page came up.
+    var hasSavedNote = false
+    /// Where the user is, for the weather card (D44).
+    var weather = OnboardingWeatherSetup()
     /// The layout template the display in use is on, if any.
     var appliedTemplate: PersonalizationTemplate.ID?
     /// The template picked in this tour. It stays the user's pick after a
     /// glow of their own is chosen, which Settings would call a setup of
     /// their own.
     var pickedTemplate: PersonalizationTemplate.ID?
+    /// True when a template was picked in this tour over a layout of the
+    /// user's own, which the tour can put back.
+    var canKeepOwnLayout = false
+    /// The page the user's own layout makes, held by the tour while a
+    /// template is on. Nil while the display is on its own layout, or when
+    /// the app hands in nothing.
+    var ownPlacements: [NookWidgetPlacement]?
     var glowStyle: IslandHaloStyle = .subtle
+    /// The glow's colors on the display in use.
+    var glowPalette: IslandHaloPalette = .standard
     /// The glow theme the display's colors equal, nil for colors of the
     /// user's own or one color for everything.
     var glowThemeID: String?
@@ -72,6 +114,14 @@ struct OnboardingState: Equatable, Sendable {
     /// True once the real island was open while this tour was up. It stays
     /// true after the island closes.
     var hasOpenedIsland = false
+    /// True while the real island is in widget editing (D44).
+    var isEditingWidgets = false
+    /// The widget the arrange page was asked to teach with, and what the
+    /// page looked like then. Nil until one is picked, and off that page.
+    var arrangePick: OnboardingArrangePick?
+    /// The widget page when the arrange page came up, which its reset
+    /// button puts back. Nil off that page.
+    var arrangeStart: [NookWidgetPlacement]?
     /// The approve shortcut as key caps, such as control, option, Y. Nil
     /// while that shortcut is switched off.
     var approveKeys: [String]?
@@ -86,6 +136,49 @@ struct OnboardingState: Equatable, Sendable {
     /// as a glow, made the display match none.
     var shownTemplate: PersonalizationTemplate.ID? { appliedTemplate ?? pickedTemplate }
 
+    /// The widget page the tour draws: the display's own, or the shown
+    /// template's widgets that are switched on, or the app's starting page.
+    var shownPlacements: [NookWidgetPlacement] {
+        if let nookPlacements { return nookPlacements }
+        if let id = shownTemplate, let template = PersonalizationTemplate.all.first(where: { $0.id == id }) {
+            return template.widgets.filter { enabledWidgets.contains($0.kind) }
+        }
+        return NookDisplayPreferences().placements(enabled: Array(enabledWidgets))
+    }
+
+    /// The page the "Keep mine" card draws: the display's own while it is on
+    /// no template, else the one the tour holds, else the app's starting page.
+    var ownLayoutPlacements: [NookWidgetPlacement] {
+        if shownTemplate == nil { return shownPlacements }
+        return ownPlacements ?? NookDisplayPreferences().placements(enabled: Array(enabledWidgets))
+    }
+
+    /// What the arrange page shows for the picked widget. Nil until one is
+    /// picked.
+    var arrangeProgress: OnboardingArrangeProgress? {
+        arrangePick.map {
+            .reading(
+                picked: $0.kind,
+                atPick: $0.atPick,
+                now: shownPlacements,
+                isEditing: isEditingWidgets,
+                editingEnded: $0.hasEndedEditing
+            )
+        }
+    }
+
+    /// The widget the widgets page spotlights. Selecting one only changes
+    /// what the page says; the widget stays as it was.
+    var spotlight: NookWidgetKind = OnboardingState.firstSpotlight
+
+    /// The widget selected when the page first comes up.
+    static let firstSpotlight: NookWidgetKind = NookWidgetKind.allCases.first ?? .media
+
+    /// True while a widget is on the page the tour draws.
+    func showsWidget(_ kind: NookWidgetKind) -> Bool {
+        shownPlacements.contains { $0.kind == kind }
+    }
+
     /// The agents that are connected, in the order the tour lists them.
     var connectedAgents: [OnboardingAgent] {
         OnboardingAgent.allCases.filter { status(of: $0).isConnected }
@@ -93,34 +186,124 @@ struct OnboardingState: Equatable, Sendable {
 }
 
 /// What a click in the tour can do to the app. Each one runs only from a
-/// button the user pressed. None of them asks macOS for a permission: the
-/// tour has no such action to give.
+/// button the user pressed. Only `allowReminders` asks macOS for a
+/// permission, from the button on the to-dos page that says macOS will ask
+/// (D44). Apple Notes asks by itself when the first note is saved, in the
+/// island, and not from any button here.
 @MainActor
 struct OnboardingActions {
     /// The agents switch on the first page. It writes the same preference
     /// as the one in Settings.
     var setAgentsEnabled: (Bool) -> Void = { _ in }
     var setOpenTrigger: (IslandOpenTrigger) -> Void = { _ in }
+    var setClosedSide: (OnboardingClosedSide) -> Void = { _ in }
+    var setClosedLeft: (OnboardingClosedLeft) -> Void = { _ in }
+    var setClosedMusic: (OnboardingClosedMusicPick) -> Void = { _ in }
     var connect: (OnboardingAgent) -> Void = { _ in }
     /// Opens Settings on the Setup tab, where every agent is listed.
     var showAllAgents: () -> Void = {}
     var setWidget: (_ kind: NookWidgetKind, _ isEnabled: Bool) -> Void = { _, _ in }
+    /// Picks the widget the widgets page spotlights. Changes nothing in the
+    /// app.
+    var spotlightWidget: (NookWidgetKind) -> Void = { _ in }
+    /// Picks where the to-do widget gets its tasks. The same preference as
+    /// the Source picker in Settings.
+    var setTodoSource: (NookTodoSourceKind) -> Void = { _ in }
+    /// Opens the page a source's token is made on, in the browser.
+    var openTodoSetupPage: (NookTodoSourceKind) -> Void = { _ in }
+    /// Opens Settings on the Nook tab at its to-do section, where a token
+    /// is pasted. The tour takes no token itself.
+    var showTodoSettings: () -> Void = {}
+    /// Connects the picked source with the secret the page's field held.
+    /// The tour passes it straight through and keeps nothing.
+    var connectTodo: (_ token: String) -> Void = { _ in }
+    /// Loads the databases or the lists again.
+    var checkTodoAgain: () -> Void = {}
+    /// Picks a database or a list by its ID.
+    var chooseTodo: (_ id: String) -> Void = { _ in }
+    /// Asks macOS for Reminders access. Runs only from the page's button.
+    var allowReminders: () -> Void = {}
+    /// Opens System Settings at the Reminders privacy list.
+    var openRemindersSettings: () -> Void = {}
+    /// Picks where quick notes go. The preference Settings writes.
+    var setNotesDestination: (NookNotesDestination) -> Void = { _ in }
+    /// Opens the system folder chooser and saves the pick as the notes
+    /// folder. The panel is the app's, not the page's.
+    var chooseNotesFolder: () -> Void = {}
+    /// Shows the notes file in Finder, or opens Notes.
+    var showNotes: () -> Void = {}
+    /// Looks a typed city up. The search Settings runs.
+    var searchWeather: (String) -> Void = { _ in }
+    /// Saves a found place as the city. The call Settings makes on a pick.
+    var chooseWeatherPlace: (NookWeatherPlace) -> Void = { _ in }
+    /// Writes the temperature unit, as the picker in Settings does.
+    var setWeatherUnit: (NookTemperatureUnit) -> Void = { _ in }
     var applyTemplate: (PersonalizationTemplate) -> Void = { _ in }
+    /// Puts back the layout the display had before a template was picked
+    /// in this tour.
+    var keepOwnLayout: () -> Void = {}
     var setGlowStyle: (IslandHaloStyle) -> Void = { _ in }
     var setGlowTheme: (IslandHaloTheme) -> Void = { _ in }
     var setOpenedWidth: (IslandOpenedWidth) -> Void = { _ in }
     var setOpenedCorners: (IslandOpenedCorners) -> Void = { _ in }
+    /// Holds the real island open on the Nook page, or lets it go (D44).
+    /// The tour calls it from its own moves and nowhere else: on while a
+    /// live page is up, off on every other page and when the tour ends.
+    var holdIsland: (Bool) -> Void = { _ in }
+    /// Puts the display's widget page back as the arrange page found it.
+    var restorePlacements: ([NookWidgetPlacement]) -> Void = { _ in }
+    /// Starts or ends widget editing on the real island: what a long press
+    /// on a widget and the Done button do. The tour starts it when a widget
+    /// is picked and ends it on every way out of the page.
+    var setEditingWidgets: (Bool) -> Void = { _ in }
+    /// Rings a widget's tile in the real island, or none with nil. The
+    /// tour sets it with a pick and clears it on every way out.
+    var outlineWidget: (NookWidgetKind?) -> Void = { _ in }
+    /// The arrange page's buttons. The tour answers them with the page it
+    /// kept; the app never sees these.
+    var pickArrangeWidget: (NookWidgetKind) -> Void = { _ in }
+    var tryAnotherWidget: () -> Void = {}
+    var resetArrangement: () -> Void = {}
 }
 
 /// What the user chose in one run of the tour, kept by the tour itself.
 /// It is what lets a choice on one page survive a choice on another: a
-/// template sets a glow style of its own, and a glow style picked here is
-/// put back after it.
+/// template sets a glow style and a closed island of its own, and the ones
+/// picked here are put back after it.
 struct OnboardingPicks: Equatable, Sendable {
     var template: PersonalizationTemplate.ID?
+    /// True once a template was picked over a layout that was on none.
+    var hasOwnLayout = false
     var glowStyle: IslandHaloStyle?
+    var closedSide: OnboardingClosedSide?
+    var closedLeft: OnboardingClosedLeft?
+    /// The last media style and switch values picked on the closed page.
+    var musicStyle: NookClosedMediaStyle?
+    var musicOptions: [NookClosedMusicOption: Bool] = [:]
+    /// The widget picked for the spotlight on the widgets page.
+    var spotlight: NookWidgetKind?
     /// Agents whose Connect button was pressed.
     var connectAttempts: Set<OnboardingAgent> = []
+}
+
+extension OnboardingPicks {
+    /// Notes a pick on the music group. A later pick of the same thing wins.
+    mutating func keep(_ pick: OnboardingClosedMusicPick) {
+        switch pick {
+        case .style(let style): musicStyle = style
+        case .option(let option, let isOn): musicOptions[option] = isOn
+        }
+    }
+
+    /// The picks to write again, the style first: a switch is only
+    /// meaningful against the style it was picked for.
+    var musicPicks: [OnboardingClosedMusicPick] {
+        let style = musicStyle.map { [OnboardingClosedMusicPick.style($0)] } ?? []
+        let options = NookClosedMusicOption.allCases.compactMap { option in
+            musicOptions[option].map { OnboardingClosedMusicPick.option(option, isOn: $0) }
+        }
+        return style + options
+    }
 }
 
 /// One run of the welcome tour: its flow, where it reads the app's state
@@ -137,6 +320,25 @@ final class OnboardingTour {
     @ObservationIgnored private let appActions: OnboardingActions
     /// Set the first time the real island is seen open, and never cleared.
     @ObservationIgnored private var hasSeenIslandOpen = false
+    /// True while this tour has asked the app to hold the island open.
+    @ObservationIgnored private var holdsIsland = false
+    /// Whether Hangover is the active app and the tour window can be seen.
+    /// The window controller keeps both current (`setPresence`).
+    @ObservationIgnored private var appIsActive = true
+    @ObservationIgnored private var windowIsVisible = true
+    /// The widget page when the arrange page came up. Reset when the page
+    /// goes.
+    @ObservationIgnored private var arrangeStart: [NookWidgetPlacement]?
+    /// The widget the arrange page teaches with. Observed: a pick changes
+    /// the page even when the island was already editing.
+    private var arrangePick: OnboardingArrangePick?
+    /// Whether the island has been seen editing since the pick, and whether
+    /// editing ended after that. Read off the island on each draw.
+    @ObservationIgnored private var hasSeenEditing = false
+    @ObservationIgnored private var hasEndedEditing = false
+    /// How many notes were saved when the notes page came up. Nil off that
+    /// page.
+    @ObservationIgnored private var notesBaseline: Int?
     /// Runs once, when the tour ends by its last button, by Skip or by its
     /// window closing.
     @ObservationIgnored private let onEnd: (OnboardingOutcome) -> Void
@@ -147,16 +349,25 @@ final class OnboardingTour {
         actions: OnboardingActions = OnboardingActions(),
         onEnd: @escaping (OnboardingOutcome) -> Void = { _ in }
     ) {
-        flow = OnboardingFlow(startingAt: page, pages: OnboardingPage.shown(agentsEnabled: state().agentsEnabled))
+        flow = OnboardingFlow(startingAt: page, pages: Self.pages(for: state()))
         readState = state
         appActions = actions
         self.onEnd = onEnd
     }
 
-    /// The pages this run walks, read from the agents switch as it is now.
-    /// The switch can change under the tour, from its own first page or
-    /// from Settings.
-    var pages: [OnboardingPage] { OnboardingPage.shown(agentsEnabled: readState().agentsEnabled) }
+    /// The pages this run walks, read from the app as it is now. The agents
+    /// switch and the to-do widget can change under the tour, from its own
+    /// pages or from Settings.
+    var pages: [OnboardingPage] { Self.pages(for: readState()) }
+
+    static func pages(for state: OnboardingState) -> [OnboardingPage] {
+        OnboardingPage.shown(
+            agentsEnabled: state.agentsEnabled,
+            hasTodoWidget: state.showsWidget(.todo),
+            hasNotesWidget: state.showsWidget(.notes),
+            hasWeatherWidget: state.showsWidget(.weather)
+        )
+    }
 
     /// The page that is up. One the switch has just taken out gives way to
     /// the page before it.
@@ -171,7 +382,17 @@ final class OnboardingTour {
         var state = readState()
         if state.isIslandOpen { hasSeenIslandOpen = true }
         state.hasOpenedIsland = state.hasOpenedIsland || hasSeenIslandOpen
+        trackArrange(in: state)
+        // A state handed in with a pick, as a snapshot does, is kept.
+        if page == .arrange, let pick = arrangePick {
+            state.arrangePick = OnboardingArrangePick(kind: pick.kind, atPick: pick.atPick, hasEndedEditing: hasEndedEditing)
+        }
+        trackNotes(in: state)
+        state.hasSavedNote = state.hasSavedNote || notesBaseline.map { state.notesSavedCount > $0 } ?? false
+        state.arrangeStart = state.arrangeStart ?? arrangeStart
         state.pickedTemplate = picks.template ?? state.pickedTemplate
+        state.canKeepOwnLayout = state.canKeepOwnLayout || picks.hasOwnLayout
+        state.spotlight = picks.spotlight ?? state.spotlight
         for agent in picks.connectAttempts {
             var status = state.status(of: agent)
             status.didFail = !status.isConnected && !status.isBusy
@@ -181,26 +402,159 @@ final class OnboardingTour {
     }
 
     /// What the pages' buttons call. Each one goes through to the app, and
-    /// three of them also keep a note of the pick.
+    /// some of them also keep a note of the pick.
     var actions: OnboardingActions {
         var actions = appActions
         actions.connect = { [weak self, appActions] agent in
             self?.picks.connectAttempts.insert(agent)
             appActions.connect(agent)
         }
-        actions.applyTemplate = { [weak self, appActions] template in
+        actions.applyTemplate = { [weak self, appActions, readState] template in
+            let wasOnNoTemplate = readState().appliedTemplate == nil
             appActions.applyTemplate(template)
             guard let self else { return }
+            if picks.template == nil, wasOnNoTemplate { picks.hasOwnLayout = true }
             picks.template = template.id
-            // A template carries a glow style. One picked on the glow page
-            // is the user's and comes back.
-            if let style = picks.glowStyle { appActions.setGlowStyle(style) }
+            putPicksBack()
+        }
+        actions.keepOwnLayout = { [weak self, appActions] in
+            appActions.keepOwnLayout()
+            guard let self else { return }
+            picks.template = nil
+            picks.hasOwnLayout = false
+            putPicksBack()
+        }
+        actions.setClosedSide = { [weak self, appActions] side in
+            self?.picks.closedSide = side
+            appActions.setClosedSide(side)
+        }
+        actions.setClosedLeft = { [weak self, appActions] left in
+            self?.picks.closedLeft = left
+            appActions.setClosedLeft(left)
+        }
+        actions.setClosedMusic = { [weak self, appActions] pick in
+            self?.picks.keep(pick)
+            appActions.setClosedMusic(pick)
+        }
+        actions.spotlightWidget = { [weak self, appActions] kind in
+            self?.picks.spotlight = kind
+            appActions.spotlightWidget(kind)
         }
         actions.setGlowStyle = { [weak self, appActions] style in
             self?.picks.glowStyle = style
             appActions.setGlowStyle(style)
         }
+        actions.pickArrangeWidget = { [weak self] in self?.pickArrangeWidget($0) }
+        actions.tryAnotherWidget = { [weak self] in self?.endArrange() }
+        actions.resetArrangement = { [weak self, appActions] in
+            guard let self, let start = arrangeStart else { return }
+            appActions.restorePlacements(start)
+            // Back to the pick, with the editing and the ring let go.
+            endArrange()
+        }
         return actions
+    }
+
+    /// Holds the real island open while a live page is up and Hangover is
+    /// the active app, and lets it go on every other page, while the user is
+    /// in another app and once the tour has ended (D44). Safe to call any
+    /// number of times: the app is told only when the answer changes.
+    func syncIsland() {
+        let holds = !flow.hasEnded && OnboardingIslandHold.holds(
+            isLivePage: page.isLive,
+            appIsActive: appIsActive,
+            windowIsVisible: windowIsVisible
+        )
+        guard holds != holdsIsland else { return }
+        holdsIsland = holds
+        if !holds { endArrange() }
+        appActions.holdIsland(holds)
+    }
+
+    /// Tells the tour whether Hangover is the active app and its window can
+    /// be seen, and lets the hold follow. Leaving the app lets the island go;
+    /// coming back with a live page up holds it again.
+    func setPresence(appIsActive: Bool, windowIsVisible: Bool) {
+        self.appIsActive = appIsActive
+        self.windowIsVisible = windowIsVisible
+        syncIsland()
+    }
+
+    /// Lets the island go whatever page is up. The window calls it on every
+    /// way it can go away, as a second guard behind the tour's own end.
+    func releaseIsland() {
+        endArrange()
+        guard holdsIsland else { return }
+        holdsIsland = false
+        appActions.holdIsland(false)
+    }
+
+    /// Keeps the arrange page's starting point and what the island did
+    /// since the pick: taken when the page is up, dropped when it is not.
+    /// It reads and notes; the editing and the ring are let go by
+    /// `endArrange`, which never runs from a draw.
+    private func trackArrange(in state: OnboardingState) {
+        guard page == .arrange, !flow.hasEnded else {
+            arrangeStart = nil
+            return
+        }
+        if arrangeStart == nil { arrangeStart = state.arrangeStart ?? state.shownPlacements }
+        guard arrangePick != nil else { return }
+        if state.isEditingWidgets {
+            hasSeenEditing = true
+        } else if hasSeenEditing {
+            hasEndedEditing = true
+        }
+    }
+
+    /// A widget picked on the arrange page: the island starts editing by
+    /// itself and the widget's tile is ringed so it can be found.
+    private func pickArrangeWidget(_ kind: NookWidgetKind) {
+        guard page == .arrange, !flow.hasEnded else { return }
+        let placements = readState().shownPlacements
+        guard placements.contains(where: { $0.kind == kind }) else { return }
+        arrangePick = OnboardingArrangePick(kind: kind, atPick: placements)
+        hasSeenEditing = false
+        hasEndedEditing = false
+        appActions.setEditingWidgets(true)
+        appActions.outlineWidget(kind)
+    }
+
+    /// Lets go of what a pick started: the ring, the editing and the pick
+    /// itself. Every way out of the arrange page runs it: Try another, Put
+    /// it back, a move to another page, the end of the tour, the window
+    /// closing and the hold going off.
+    private func endArrange() {
+        guard arrangePick != nil else { return }
+        arrangePick = nil
+        hasSeenEditing = false
+        hasEndedEditing = false
+        appActions.outlineWidget(nil)
+        appActions.setEditingWidgets(false)
+    }
+
+    /// Keeps the count of saved notes from when the notes page came up,
+    /// dropped when it is not up.
+    private func trackNotes(in state: OnboardingState) {
+        guard page == .notes, !flow.hasEnded else {
+            notesBaseline = nil
+            return
+        }
+        if notesBaseline == nil { notesBaseline = state.notesSavedCount }
+    }
+
+    isolated deinit {
+        releaseIsland()
+    }
+
+    /// A template, and the layout from before it, carry a glow style and a
+    /// closed island (both sides) of their own. The ones picked on other pages of this
+    /// tour are the user's and come back.
+    private func putPicksBack() {
+        if let style = picks.glowStyle { appActions.setGlowStyle(style) }
+        if let side = picks.closedSide { appActions.setClosedSide(side) }
+        if let left = picks.closedLeft { appActions.setClosedLeft(left) }
+        for pick in picks.musicPicks { appActions.setClosedMusic(pick) }
     }
 
     func next() { move { $0.next() } }
@@ -214,6 +568,11 @@ final class OnboardingTour {
         let pages = pages
         if flow.pages != pages { flow.pages = pages }
         change(&flow)
+        if page != .arrange || flow.hasEnded { endArrange() }
+        trackArrange(in: readState())
+        trackNotes(in: readState())
+        // The hold goes before the end is recorded and the window closed.
+        syncIsland()
         if !hadEnded, let outcome = flow.outcome {
             onEnd(outcome)
         }

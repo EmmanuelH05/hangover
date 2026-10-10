@@ -5,7 +5,7 @@ import SwiftUI
 struct NookNotionTodoSettings: View {
     var service: NookNotionTodoService
 
-    private static let integrationsURL = URL(string: "https://www.notion.so/my-integrations")
+    private static let integrationsURL = NookTodoSetupLink.notionIntegrations
 
     @State private var draftToken = ""
 

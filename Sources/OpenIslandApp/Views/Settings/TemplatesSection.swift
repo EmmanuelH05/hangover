@@ -442,8 +442,10 @@ struct TemplateThumbnail: View {
     // MARK: Nook page
 
     private var page: some View {
-        VStack(spacing: Self.tileGap) {
-            ForEach(NookWidgetLayout.rows(template.widgets)) { row in
+        let rows = NookWidgetLayout.rows(template.widgets)
+        let squeeze = Self.squeeze(rows)
+        return VStack(spacing: Self.tileGap) {
+            ForEach(rows) { row in
                 HStack(spacing: Self.tileGap) {
                     ForEach(row.placements) { placement in
                         tile(placement.kind)
@@ -453,7 +455,7 @@ struct TemplateThumbnail: View {
                         Color.clear
                     }
                 }
-                .frame(height: Self.tileHeight(row))
+                .frame(height: Self.tileHeight(row) * squeeze)
             }
         }
         .frame(width: Self.contentWidth)
@@ -461,6 +463,19 @@ struct TemplateThumbnail: View {
 
     private static func tileHeight(_ row: NookWidgetRow) -> CGFloat {
         row.placements[0].size == .large ? 17 : 11
+    }
+
+    /// Room the page has under the closed island.
+    private static let pageHeight: CGFloat = 62
+
+    /// How much every row is made shorter when the page has more rows than
+    /// the thumbnail has room for, as the page of "Everything" does. One for
+    /// a page that fits.
+    static func squeeze(_ rows: [NookWidgetRow]) -> CGFloat {
+        let gaps = tileGap * CGFloat(max(rows.count - 1, 0))
+        let tiles = rows.reduce(0) { $0 + tileHeight($1) }
+        guard tiles > 0 else { return 1 }
+        return min(1, (pageHeight - gaps) / tiles)
     }
 
     private func tile(_ kind: NookWidgetKind) -> some View {

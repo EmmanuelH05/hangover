@@ -22,6 +22,8 @@ struct NookTodoSettings: View {
                 Text(lang.t("nook.todo.source.notion")).tag(NookTodoSourceKind.notion)
                 Text(lang.t("nook.todo.source.ticktick")).tag(NookTodoSourceKind.tickTick)
             }
+            // Where the tab scrolls to when it is opened for the to-dos.
+            .id(NookSettingsAnchor.todo)
 
             if hub.selectedKind == .reminders {
                 Picker("List", selection: Binding(
@@ -65,4 +67,10 @@ struct NookTodoSettings: View {
         default: "Reminders access not requested yet."
         }
     }
+}
+
+/// A place on the Nook tab that Settings can be opened at.
+enum NookSettingsAnchor: Hashable, Sendable {
+    /// The to-do section, where a task source is picked and connected.
+    case todo
 }

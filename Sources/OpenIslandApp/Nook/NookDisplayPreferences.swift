@@ -26,6 +26,12 @@ enum NookSideSlot: String, CaseIterable, Identifiable, Sendable {
     case battery
     /// Time left until the next event.
     case countdown
+    /// The temperature now, from the Weather widget's city.
+    case weather
+    /// Time left on the focus timer while one runs.
+    case timer
+    /// How many tasks are still open in the to-do source in use.
+    case todos
     case none
 
     var id: String { rawValue }

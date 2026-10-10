@@ -117,6 +117,8 @@ enum SettingsSection: String, CaseIterable {
 struct SettingsView: View {
     var model: AppModel
     @State private var selectedTab: SettingsTab = .general
+    /// Set each time the Nook tab is asked to show its to-do section.
+    @State private var nookTodoRequest: UUID?
 
     private var lang: LanguageManager { model.lang }
 
@@ -131,6 +133,15 @@ struct SettingsView: View {
         .preferredColorScheme(.dark)
         .onReceive(NotificationCenter.default.publisher(for: .openIslandSelectSetupTab)) { _ in
             selectedTab = SettingsTab.setup.landing(agentsEnabled: model.agentsEnabled)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openIslandSelectNookTodo)) { _ in
+            selectedTab = .nook
+            nookTodoRequest = UUID()
+        }
+        // A request to show the to-do section is used once: coming back to
+        // the Nook tab later must not scroll it again.
+        .onChange(of: selectedTab) { _, tab in
+            if tab != .nook { nookTodoRequest = nil }
         }
         // A tab the agents switch hides gives way to General.
         .onChange(of: model.agentsEnabled) { _, isOn in
@@ -173,7 +184,7 @@ struct SettingsView: View {
             case .appearance:
                 AppearanceSettingsPane(model: model)
             case .nook:
-                NookSettingsPane(model: model) { selectedTab = .appearance }
+                NookSettingsPane(model: model, onOpenPersonalization: { selectedTab = .appearance }, todoRequest: nookTodoRequest)
             case .display:
                 DisplaySettingsPane(model: model)
             case .sound:

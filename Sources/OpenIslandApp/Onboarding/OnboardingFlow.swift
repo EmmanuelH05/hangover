@@ -1,17 +1,54 @@
 import Foundation
 import OpenIslandCore
 
-/// The pages of the welcome tour, in the order they are shown.
+/// The three parts of the tour. Every page says which one it belongs to,
+/// which tells a newcomer how far along they are.
+enum OnboardingChapter: String, CaseIterable, Sendable {
+    /// What the island is and how it opens.
+    case basics
+    /// The choices: what it shows and how it looks.
+    case yours
+    /// What it may ask for, a few tricks and the recap.
+    case know
+
+    var titleKey: String { "onboarding.chapter.\(rawValue)" }
+}
+
+/// The pages of the welcome tour, in the order they are shown. A page asks
+/// one thing only (D43).
 enum OnboardingPage: Int, CaseIterable, Identifiable, Sendable {
+    /// What Hangover is. Nothing to choose.
     case welcome
+    /// With coding agents or without: the agents switch, asked as a question.
+    case purpose
     case opening
+    /// What the right of the closed island shows.
+    case closed
     case agents
-    case nook
+    /// Which widgets are switched on.
+    case widgets
+    /// A starting layout for those widgets.
+    case layout
+    /// Moving and resizing the widgets, done for real on the real island.
+    case arrange
+    /// Where the to-do widget gets its tasks, and how to connect that
+    /// place. Shown only while the to-do widget is on the page.
+    case todos
+    /// Where quick notes go, and a note saved to try it. Shown only while
+    /// the notes widget is on the page.
+    case notes
+    /// Where the user is, for the weather card and the closed island's
+    /// temperature. Shown only while the weather widget is on the page.
+    case weather
     /// How the opened island looks: its width and its corners.
     case opened
     /// The glow: its strength and its colors.
     case look
     case permissions
+    /// The outside things the app works with, and where each is set up.
+    case integrations
+    /// Small things that are easy to miss.
+    case tips
     case done
 
     var id: Int { rawValue }
@@ -19,17 +56,55 @@ enum OnboardingPage: Int, CaseIterable, Identifiable, Sendable {
     var next: OnboardingPage? { OnboardingPage(rawValue: rawValue + 1) }
     var previous: OnboardingPage? { OnboardingPage(rawValue: rawValue - 1) }
 
+    var chapter: OnboardingChapter {
+        switch self {
+        case .welcome, .purpose, .opening: .basics
+        case .closed, .agents, .widgets, .layout, .arrange, .todos, .notes, .weather, .opened, .look: .yours
+        case .permissions, .integrations, .tips, .done: .know
+        }
+    }
+
+    /// True for a page that uses the opened island at the top of the screen
+    /// as its preview (D44). While one is up, the tour holds the island
+    /// open and its window steps aside, narrow, at the left of the screen.
+    var isLive: Bool {
+        switch self {
+        case .widgets, .layout, .arrange, .todos, .notes, .weather, .opened: true
+        default: false
+        }
+    }
+
     /// True for a page that is only about agents.
     var isAgentsOnly: Bool { self == .agents }
 
-    /// True for the page that carries the agents switch. It is the first
-    /// page, which no run of the tour leaves out.
-    var offersAgentsSwitch: Bool { self == .welcome }
+    /// True for the page that carries the agents switch. No run of the tour
+    /// leaves it out.
+    var offersAgentsSwitch: Bool { self == .purpose }
+
+    /// True for the page that is only about the to-do widget.
+    var needsTodoWidget: Bool { self == .todos }
+
+    /// True for the page that is only about the notes widget.
+    var needsNotesWidget: Bool { self == .notes }
+
+    /// True for the page that is only about the weather widget.
+    var needsWeatherWidget: Bool { self == .weather }
 
     /// The pages a tour walks, in order. With the agents switched off the
-    /// agents page is left out (D41).
-    static func shown(agentsEnabled: Bool) -> [OnboardingPage] {
-        agentsEnabled ? allCases : allCases.filter { !$0.isAgentsOnly }
+    /// agents page is left out (D41), and with the to-do, the notes or the
+    /// weather widget off its page is.
+    static func shown(
+        agentsEnabled: Bool,
+        hasTodoWidget: Bool = true,
+        hasNotesWidget: Bool = true,
+        hasWeatherWidget: Bool = true
+    ) -> [OnboardingPage] {
+        allCases.filter { page in
+            (agentsEnabled || !page.isAgentsOnly)
+                && (hasTodoWidget || !page.needsTodoWidget)
+                && (hasNotesWidget || !page.needsNotesWidget)
+                && (hasWeatherWidget || !page.needsWeatherWidget)
+        }
     }
 
     /// The page to show for `page`: itself, or the nearest page before it
@@ -41,16 +116,26 @@ enum OnboardingPage: Int, CaseIterable, Identifiable, Sendable {
 
     /// File name of this page's picture in the render snapshots.
     var snapshotName: String {
-        switch self {
-        case .welcome: "1-welcome"
-        case .opening: "2-opening"
-        case .agents: "3-agents"
-        case .nook: "4-nook"
-        case .opened: "5-opened"
-        case .look: "6-look"
-        case .permissions: "7-permissions"
-        case .done: "8-done"
+        let name = switch self {
+        case .welcome: "welcome"
+        case .purpose: "purpose"
+        case .opening: "opening"
+        case .closed: "closed"
+        case .agents: "agents"
+        case .widgets: "widgets"
+        case .todos: "todos"
+        case .notes: "notes"
+        case .weather: "weather"
+        case .layout: "layout"
+        case .arrange: "arrange"
+        case .opened: "opened"
+        case .look: "look"
+        case .permissions: "permissions"
+        case .integrations: "integrations"
+        case .tips: "tips"
+        case .done: "done"
         }
+        return String(format: "%02d-%@", rawValue + 1, name)
     }
 }
 

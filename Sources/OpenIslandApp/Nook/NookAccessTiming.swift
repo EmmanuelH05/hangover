@@ -95,9 +95,13 @@ enum NookAccessTiming {
         status: NotchStatus,
         reason: NotchOpenReason?,
         showsNookPage: Bool,
-        pageWidgets: [NookWidgetKind]
+        pageWidgets: [NookWidgetKind],
+        isHeldByTour: Bool = false
     ) -> Set<NookWidgetKind> {
-        guard status == .opened, showsNookPage else { return [] }
+        // The welcome tour keeps the island open to show its choices (D44).
+        // That is not the user looking at their calendar, and the tour asks
+        // macOS for nothing: the permissions wait for an island they open.
+        guard status == .opened, showsNookPage, !isHeldByTour else { return [] }
         switch reason {
         case .click, .hover:
             return Set(pageWidgets)

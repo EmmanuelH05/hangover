@@ -10,6 +10,7 @@ extension Notification.Name {
     /// the right place without `SettingsView`'s `@State` having to leak
     /// into `AppModel`.
     static let openIslandSelectSetupTab = Notification.Name("openIslandSelectSetupTab")
+    static let openIslandSelectNookTodo = Notification.Name("openIslandSelectNookTodo")
 }
 
 @MainActor
@@ -1512,6 +1513,10 @@ final class AppModel {
 
     /// A click inside a hover-opened island keeps it open.
     func pinHoverOpenedIsland() { overlay.pinHoverOpenedIsland() }
+
+    /// True while the welcome tour holds the island open (D44).
+    var tourHoldsIslandOpen: Bool { overlay.tourHoldsIslandOpen }
+    func setTourHoldsIslandOpen(_ holds: Bool) { overlay.setTourHoldsIslandOpen(holds) }
     func notchClose() { overlay.notchClose() }
 
     /// Whether click-outside (and similar accidental dismissals) should be
@@ -1617,6 +1622,21 @@ final class AppModel {
             guard let event = nook.upcomingEvents.first(where: { !$0.isAllDay && $0.start > now }),
                   let text = NookSideSlotContent.countdownText(to: event.start, now: now) else { return nil }
             return .countdown(text)
+        case .weather:
+            return NookSideSlotContent.resolvedWeather(
+                report: nook.weather.report,
+                hasPlace: nook.weather.place != nil,
+                unit: nook.weather.unit,
+                now: nook.calendar.lastTick
+            )
+        case .timer:
+            // The pill hides a side's item while the timer's own notice
+            // shows (`V6ClosedPill`), which keeps the time from appearing twice.
+            return NookSideSlotContent.timerText(remaining: nook.timer.remaining, isActive: nook.timer.isActive)
+                .map(NookSideSlotContent.timer)
+        case .todos:
+            let source = nook.todo.source(reminders: nook.reminders)
+            return NookSideSlotContent.resolvedTodos(items: source.items, connection: source.connection)
         }
     }
 
@@ -1730,7 +1750,8 @@ final class AppModel {
             status: notchStatus,
             reason: notchOpenReason,
             showsNookPage: showsNookPage,
-            pageWidgets: nook.widgetPlacements(for: activeAppearanceProfile).map(\.kind)
+            pageWidgets: nook.widgetPlacements(for: activeAppearanceProfile).map(\.kind),
+            isHeldByTour: tourHoldsIslandOpen
         )
     }
 

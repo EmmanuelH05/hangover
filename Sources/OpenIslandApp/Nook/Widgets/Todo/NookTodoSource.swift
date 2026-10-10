@@ -153,3 +153,22 @@ final class NookTodoHub {
         tickTick.setActive(selectedKind == .tickTick)
     }
 }
+
+/// The pages a task source's token is made on. The rows in Settings and
+/// the welcome tour link to the same ones.
+enum NookTodoSetupLink {
+    /// Where an internal integration is created in Notion.
+    static let notionIntegrations = URL(string: "https://www.notion.so/my-integrations")
+    /// The TickTick web app. The API token is made there, under Settings,
+    /// Account.
+    static let tickTickWebApp = URL(string: "https://ticktick.com/webapp/")
+
+    /// Nil for Reminders, which needs no token.
+    static func url(for kind: NookTodoSourceKind) -> URL? {
+        switch kind {
+        case .reminders: nil
+        case .notion: notionIntegrations
+        case .tickTick: tickTickWebApp
+        }
+    }
+}

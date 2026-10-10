@@ -6,7 +6,7 @@ struct NookTickTickTodoSettings: View {
     var service: NookTickTickTodoService
 
     /// The API token is made in the web app, under Settings, Account.
-    private static let webAppURL = URL(string: "https://ticktick.com/webapp/")
+    private static let webAppURL = NookTodoSetupLink.tickTickWebApp
 
     @State private var draftToken = ""
 

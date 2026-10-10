@@ -45,7 +45,13 @@ struct PreviewStageRenderTests {
             let nook = PreviewStageMetrics.nookPanelHeight(setup: setup, enabledWidgets: Self.enabled)
             let agents = try render(nil) { agentsPanel(setup) }.height
 
-            #expect(nook <= room + 1, "\(template.id): the Nook page is \(nook), the stage holds \(room)")
+            // Everything puts every widget on one page, which is taller than
+            // any stage. It takes the tallest stage and scrolls inside it.
+            if template.id == .everything {
+                #expect(area == PreviewStageMetrics.maxAreaHeight)
+            } else {
+                #expect(nook <= room + 1, "\(template.id): the Nook page is \(nook), the stage holds \(room)")
+            }
             #expect(agents <= room + 1, "\(template.id): the agents page is \(agents), the stage holds \(room)")
         }
     }

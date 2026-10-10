@@ -33,6 +33,10 @@ final class OverlayUICoordinator {
     }
     var isOverlayVisible: Bool { notchStatus != .closed }
 
+    /// True while the welcome tour holds the island open on the Nook page
+    /// (D44). Set only by `setTourHoldsIslandOpen`.
+    private(set) var tourHoldsIslandOpen = false
+
     /// Heights the opened island animates to. The panel controller resolves
     /// them and `publishOpenedLayout` writes it, only when it changed (D16).
     var openedLayout: IslandOpenedLayout = .placeholder
@@ -113,6 +117,11 @@ final class OverlayUICoordinator {
 
     @ObservationIgnored
     private var autoCollapseSurfaceHasBeenEntered = false
+
+    /// True when the hold opened the island, or held it against a close.
+    /// Releasing the hold closes an island it owns and no other.
+    @ObservationIgnored
+    private var tourOwnsOpenIsland = false
 
     @ObservationIgnored
     private var isPointerInsideIslandSurface = false
@@ -228,6 +237,19 @@ final class OverlayUICoordinator {
     }
 
     func notchClose() {
+        // The welcome tour holds the island open (D44). Whoever asks for a
+        // close, a card that is gone, the 10 second timer, the boot
+        // animation or a hotkey, gets the Nook page back instead, and the
+        // hold closes it when it is released.
+        if tourHoldsIslandOpen {
+            returnToNookForTour()
+            return
+        }
+        closeIsland()
+    }
+
+    private func closeIsland() {
+        tourOwnsOpenIsland = false
         // Snapshot what is on screen before the surface and reason reset, so
         // the view keeps drawing it while the island fades out instead of
         // swapping a notification card for the list. A second close during
@@ -395,6 +417,15 @@ final class OverlayUICoordinator {
         refreshOverlayPlacementIfVisible()
     }
 
+    /// The island's footprint for the tour's window. See
+    /// `OverlayPanelController.openedIslandFootprint`.
+    func openedIslandFootprint() -> OnboardingIslandFootprint? {
+        overlayPanelController.openedIslandFootprint(
+            model: appModel,
+            preferredScreenID: preferredOverlayScreenID
+        )
+    }
+
     // MARK: - Display configuration
 
     func refreshOverlayDisplayConfiguration() {
@@ -539,9 +570,59 @@ final class OverlayUICoordinator {
         )
     }
 
+    // MARK: - The tour's hold (D44)
+
+    /// Turns the welcome tour's hold on or off. On: the island is open on
+    /// the Nook page and stays open; the pointer leaving, a click outside,
+    /// a click on the notch and every other request to close leave it
+    /// open (`IslandPointerRules`, `notchClose`). It opens without
+    /// taking keyboard focus from the tour's window. Off: an island the
+    /// hold opened, or held against a close, is closed; one the user had
+    /// open before follows its own rules again.
+    func setTourHoldsIslandOpen(_ holds: Bool) {
+        guard holds != tourHoldsIslandOpen else { return }
+        tourHoldsIslandOpen = holds
+        if holds {
+            showNookForTour()
+        } else if tourOwnsOpenIsland {
+            let wasOpen = notchStatus != .closed
+            tourOwnsOpenIsland = false
+            if wasOpen { closeIsland() }
+        }
+    }
+
+    private func showNookForTour() {
+        if notchStatus == .opened {
+            // Already open for another reason: keep it and turn it to
+            // the Nook page. It stays the user's, and closes under its
+            // own rules once the hold is off.
+            appModel?.showNookPage()
+            return
+        }
+        tourOwnsOpenIsland = true
+        appModel?.notchOpen(reason: .click, page: .nook)
+    }
+
+    /// A close was asked for while the hold is on. A card or the boot
+    /// animation is replaced by the Nook page; the Nook page stays.
+    private func returnToNookForTour() {
+        guard notchStatus != .opened || notchOpenReason == .notification || notchOpenReason == .boot else { return }
+        tourOwnsOpenIsland = true
+        notificationAutoCollapseTask?.cancel()
+        notificationAutoCollapseTask = nil
+        appModel?.notchOpen(reason: .click, page: .nook)
+    }
+
     // MARK: - Pointer tracking
 
     var shouldAutoCollapseOnMouseLeave: Bool {
+        IslandPointerRules.pointerLeaveCloses(
+            otherRules: autoCollapsesWithoutTourHold,
+            holdsOpenForTour: tourHoldsIslandOpen
+        )
+    }
+
+    private var autoCollapsesWithoutTourHold: Bool {
         if ignoresPointerExitDuringHarness {
             return false
         }

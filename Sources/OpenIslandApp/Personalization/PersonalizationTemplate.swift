@@ -13,10 +13,12 @@ import Foundation
 /// Nook tab.
 struct PersonalizationTemplate: Identifiable, Equatable, Sendable {
     enum ID: String, CaseIterable, Sendable {
+        case everything
         case cockpit
         case nowPlaying
         case planner
         case focus
+        case study
         case minimal
     }
 
@@ -132,16 +134,17 @@ extension PersonalizationTemplate {
         case .date: .date
         case .battery: .battery
         case .countdown: .countdown
-        case .none: .none
+        // No template puts weather, the timer or the to-dos on a side.
+        case .weather, .timer, .todos, .none: .none
         }
     }
 }
 
-// MARK: - The five templates
+// MARK: - The seven templates
 
 extension PersonalizationTemplate {
     /// In the order the Personalization tab lists them.
-    static let all: [PersonalizationTemplate] = [cockpit, nowPlaying, planner, focus, minimal]
+    static let all: [PersonalizationTemplate] = [everything, cockpit, nowPlaying, planner, focus, study, minimal]
 
     /// True for the template that is all about agents: both sides of the
     /// closed island and the page it opens on.
@@ -152,6 +155,99 @@ extension PersonalizationTemplate {
     static func offered(agentsEnabled: Bool) -> [PersonalizationTemplate] {
         agentsEnabled ? all : all.filter { !$0.needsAgents }
     }
+
+    /// The templates the welcome tour's row shows: the ones on offer, less
+    /// Minimal. The row has room for seven cards with "Keep mine" (D43), and
+    /// Minimal stays in Settings.
+    static func offeredInTour(agentsEnabled: Bool) -> [PersonalizationTemplate] {
+        offered(agentsEnabled: agentsEnabled).filter { $0.id != .minimal }
+    }
+
+    /// Every widget on one page, the way a first look at the app should go.
+    /// Music and the calendar are large, the rest small. The mirror and the
+    /// weather are in no template (the camera and the server are the user's
+    /// to turn on), and a widget that is off in the Nook tab stays off. The
+    /// page is taller than the preview stage, which scrolls it.
+    static let everything = PersonalizationTemplate(
+        id: .everything,
+        symbol: "square.grid.2x2.fill",
+        appearance: IslandAppearancePreferences(
+            rightSlot: .count,
+            centerLabel: .agentAction,
+            usageDisplay: .compact,
+            sessionStateIndicator: .animatedDot,
+            sessionGroup: .none,
+            sessionSort: .attention,
+            completedStaleThreshold: .fiveMinutes
+        ),
+        nook: NookDisplayPreferences(
+            mediaStyle: .artAndVisual,
+            agentsReclaimRightSide: true,
+            showsAgentDotOnArt: true,
+            showsNotices: true,
+            centerLabelShowsTrack: false,
+            centerLabelShowsNextEvent: false,
+            leftSlot: .agents,
+            rightSlot: nil,
+            calendarStyle: .agenda,
+            openedPage: .nook,
+            showsCompactBar: true,
+            showsAgentsBar: true,
+            haloStyle: .subtle,
+            haloFollowsMusic: true
+        ),
+        widgets: [
+            NookWidgetPlacement(kind: .media, size: .large),
+            NookWidgetPlacement(kind: .calendar, size: .large),
+            NookWidgetPlacement(kind: .todo, size: .small),
+            NookWidgetPlacement(kind: .notes, size: .small),
+            NookWidgetPlacement(kind: .tray, size: .small),
+            NookWidgetPlacement(kind: .timer, size: .small),
+        ],
+        previewsMusic: false,
+        previewGlow: .running
+    )
+
+    /// A day of classes. The calendar as a timeline, and the tasks, the
+    /// timer and the notes right below. The date and the
+    /// battery sit in the closed island, with the next event between them.
+    static let study = PersonalizationTemplate(
+        id: .study,
+        symbol: "graduationcap.fill",
+        appearance: IslandAppearancePreferences(
+            rightSlot: .count,
+            centerLabel: .agentAction,
+            usageDisplay: .hidden,
+            sessionStateIndicator: .animatedDot,
+            sessionGroup: .none,
+            sessionSort: .attention,
+            completedStaleThreshold: .twoMinutes
+        ),
+        nook: NookDisplayPreferences(
+            mediaStyle: .artOnly,
+            agentsReclaimRightSide: true,
+            showsAgentDotOnArt: true,
+            showsNotices: true,
+            centerLabelShowsTrack: false,
+            centerLabelShowsNextEvent: true,
+            leftSlot: .date,
+            rightSlot: .battery,
+            calendarStyle: .timeline,
+            openedPage: .nook,
+            showsCompactBar: true,
+            showsAgentsBar: true,
+            haloStyle: .subtle,
+            haloFollowsMusic: false
+        ),
+        widgets: [
+            NookWidgetPlacement(kind: .calendar, size: .medium),
+            NookWidgetPlacement(kind: .todo, size: .medium),
+            NookWidgetPlacement(kind: .timer, size: .small),
+            NookWidgetPlacement(kind: .notes, size: .small),
+        ],
+        previewsMusic: false,
+        previewGlow: .running
+    )
 
     /// Several agents at once. The agents own both sides of the closed
     /// island, the glow is loud, and the island opens on the agent list.

@@ -4,11 +4,28 @@ struct NookSettingsPane: View {
     var model: AppModel
     /// Switches the settings window to the Personalization tab.
     var onOpenPersonalization: () -> Void = {}
+    /// Changes each time the tab is asked to show its to-do section.
+    var todoRequest: UUID?
     private var nook: NookModel { model.nook }
 
+    /// The form lays its rows out a moment after the tab is shown.
+    private static let scrollDelay: Duration = .milliseconds(250)
+
     var body: some View {
+        ScrollViewReader { proxy in
+            form
+                .task(id: todoRequest) {
+                    guard todoRequest != nil else { return }
+                    try? await Task.sleep(for: Self.scrollDelay)
+                    guard !Task.isCancelled else { return }
+                    withAnimation { proxy.scrollTo(NookSettingsAnchor.todo, anchor: .top) }
+                }
+        }
+    }
+
+    private var form: some View {
         @Bindable var nook = nook
-        Form {
+        return Form {
             Section("Widgets") {
                 ForEach(NookWidgetKind.allCases) { kind in
                     Toggle(isOn: Binding(

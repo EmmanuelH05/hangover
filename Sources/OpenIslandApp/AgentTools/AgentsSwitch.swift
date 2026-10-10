@@ -45,12 +45,13 @@ enum AgentsSwitch {
         "settings.appearance.nook.halo.note.nookOnly",
         "settings.appearance.nook.track.note.nookOnly",
         "settings.appearance.nook.nextEvent.note.nookOnly",
-        "onboarding.welcome.body.nookOnly",
-        "onboarding.welcome.agents.title",
-        "onboarding.welcome.agents.note.on",
-        "onboarding.welcome.agents.note.off",
-        "onboarding.nook.body.nookOnly",
-        "onboarding.look.body.nookOnly",
+        "onboarding.purpose.title",
+        "onboarding.purpose.body",
+        "onboarding.purpose.note",
+        "onboarding.purpose.day.title",
+        "onboarding.purpose.day.text",
+        "onboarding.purpose.agents.title",
+        "onboarding.purpose.agents.text",
     ] + TemplateText.pointsAboutAgents.sorted().map { $0 + TemplateText.nookOnlySuffix }
 }
 
@@ -77,7 +78,7 @@ extension NookSideSlot: AgentsDependent {
     var needsAgents: Bool {
         switch self {
         case .agents, .count, .grid: true
-        case .date, .battery, .countdown, .none: false
+        case .date, .battery, .countdown, .weather, .timer, .todos, .none: false
         }
     }
 

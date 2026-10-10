@@ -178,9 +178,10 @@ public final class CodexSessionStore: @unchecked Sendable {
     public let fileURL: URL
     private let fileManager: FileManager
 
+    /// The real folder in the app, a folder of its own in a test run. Every
+    /// session registry takes its default from here.
     public static var defaultDirectoryURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/open-island", isDirectory: true)
+        OpenIslandStateDirectory.url
     }
 
     public static var defaultFileURL: URL {

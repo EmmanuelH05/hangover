@@ -30,9 +30,61 @@ import Testing
 
     // MARK: The set
 
-    @Test func thereAreFiveTemplatesInTheListedOrder() {
+    @Test func thereAreSevenTemplatesInTheListedOrder() {
         #expect(Template.all.map(\.id) == Template.ID.allCases)
-        #expect(Template.all.count == 5)
+        #expect(Template.all.count == 7)
+        #expect(Template.all.first?.id == .everything)
+    }
+
+    @Test func everythingPutsMusicAndTheCalendarLargeAndTheRestSmaller() {
+        let widgets = Template.everything.widgets
+        let sizes = Dictionary(uniqueKeysWithValues: widgets.map { ($0.kind, $0.size) })
+
+        #expect(sizes[.media] == .large)
+        #expect(sizes[.calendar] == .large)
+        // Every widget but the mirror and the weather, which are in no template.
+        #expect(Set(widgets.map(\.kind)) == Set(NookWidgetKind.allCases).subtracting([.mirror, .weather]))
+        #expect(widgets.dropFirst(2).allSatisfy { $0.size != .large })
+        #expect(Set(widgets.map(\.size)).count >= 2)
+    }
+
+    @Test func studyIsTheCalendarTasksTimerAndNotes() {
+        #expect(Template.study.widgets == [
+            NookWidgetPlacement(kind: .calendar, size: .medium),
+            NookWidgetPlacement(kind: .todo, size: .medium),
+            NookWidgetPlacement(kind: .timer, size: .small),
+            NookWidgetPlacement(kind: .notes, size: .small),
+        ])
+    }
+
+    @Test func aWidgetThatIsSwitchedOffStaysOffOnTheNewTemplates() {
+        let enabled: [NookWidgetKind] = [.media, .calendar, .todo, .notes, .timer]
+
+        // The tray is off: both keep its place and name it.
+        #expect(Template.everything.widgetsSwitchedOff(enabled: enabled) == [.tray])
+        #expect(Template.study.widgetsSwitchedOff(enabled: enabled).isEmpty)
+        let applied = Template.everything.applying(to: NookDisplayPreferences())
+        #expect(applied.placements(enabled: enabled).map(\.kind) == [.media, .calendar, .todo, .notes, .timer])
+        #expect(Template.everything.matches(appearance: Template.everything.appearance, nook: applied))
+    }
+
+    @Test func theTourRowLeavesMinimalOutAndSettingsKeepsIt() {
+        for agents in [true, false] {
+            let tour = Template.offeredInTour(agentsEnabled: agents)
+            #expect(!tour.contains { $0.id == .minimal })
+            #expect(Template.offered(agentsEnabled: agents).contains { $0.id == .minimal })
+            #expect(tour.first?.id == .everything)
+            // The own-layout card comes first, and the row holds seven.
+            #expect(tour.count + 1 <= 7)
+        }
+        #expect(Template.offeredInTour(agentsEnabled: true).map(\.id) == [.everything, .cockpit, .nowPlaying, .planner, .focus, .study])
+        #expect(!Template.offeredInTour(agentsEnabled: false).contains { $0.id == .cockpit })
+    }
+
+    @Test func noTwoTemplatesPlaceTheSameWidgetsAtTheSameSizes() {
+        let pages = Template.all.map(\.widgets)
+
+        #expect(Set(pages).count == pages.count)
     }
 
     @Test func noTemplatePlacesTheMirror() {

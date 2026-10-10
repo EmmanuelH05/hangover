@@ -63,6 +63,8 @@ struct IslandClickContext: Equatable, Sendable {
     /// A picker the island put up is still open, such as the tray's share
     /// picker. A click outside the island belongs to that picker.
     var hasOpenPicker = false
+    /// The welcome tour holds the island open (D44). No click closes it.
+    var holdsOpenForTour = false
 }
 
 /// Pure rules for what the pointer does to the island. The panel controller
@@ -84,6 +86,13 @@ enum IslandPointerRules {
         trigger == .hover && !isSuppressed
     }
 
+    /// Whether the pointer leaving the open island closes it, given what
+    /// the other rules say. The tour's hold (D44) keeps it open whatever
+    /// they say; with the hold off the answer is theirs, unchanged.
+    static func pointerLeaveCloses(otherRules wouldClose: Bool, holdsOpenForTour: Bool) -> Bool {
+        wouldClose && !holdsOpenForTour
+    }
+
     static func clickAction(_ context: IslandClickContext) -> IslandClickAction {
         switch context.status {
         case .closed:
@@ -91,6 +100,9 @@ enum IslandPointerRules {
         case .popping:
             return .none
         case .opened:
+            // The tour's hold outranks every other rule below: a click on
+            // the island, on the notch or anywhere else leaves it open.
+            if context.holdsOpenForTour { return .none }
             guard context.isInExpandedArea else {
                 // The click is the picker's. The island neither closes nor
                 // passes it on. A click on the notch still closes it.

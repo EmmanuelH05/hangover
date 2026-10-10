@@ -145,6 +145,11 @@ final class NookModel {
         didSet { if isEditingLayout != oldValue { onDisplayPreferencesChanged?() } }
     }
 
+    /// The widget the welcome tour is teaching with: its tile gets a ring in
+    /// the grid so a beginner can find it. Set and cleared by the tour and by
+    /// nothing else (D44), and never saved.
+    var tourOutlinedWidget: NookWidgetKind?
+
     /// True once the Mirror widget's tile turns the camera on. The mirror
     /// then sits at the top of the Nook page and holds the island open
     /// until it is turned off: by its tile, by its close button, by closing

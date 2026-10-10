@@ -116,10 +116,11 @@ None of these blocks the steps above. Each should be fixed or accepted.
 16. **The Chinese strings have not been read by a native reader.** That
     includes the ones written for this release: `settings.about.credit`,
     `settings.about.sourceCode`, `settings.about.license`,
-    `settings.about.upstream` and `onboarding.permissions.calendar.note`.
+    `settings.about.upstream` and `onboarding.permissions.calendar.note`,
+    and every `onboarding.` string of the rebuilt welcome tour (D43).
 
     ```bash
-    grep -n "settings.about\.\|onboarding.permissions.calendar.note" Sources/OpenIslandApp/Resources/zh-Han*.lproj/Localizable.strings
+    grep -n "settings.about\.\|^\"onboarding\." Sources/OpenIslandApp/Resources/zh-Han*.lproj/Localizable.strings
     ```
 
 17. **The phone and watch companion was never built.** The sources in
@@ -261,7 +262,7 @@ To publish an update:
 1. Build it with the new version number.
 
    ```bash
-   OPEN_ISLAND_VERSION=1.0.4 zsh scripts/package-app.sh
+   OPEN_ISLAND_VERSION=1.0.5 zsh scripts/package-app.sh
    ```
 
 2. Sign the zip. This prints the signature and the length.

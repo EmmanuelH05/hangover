@@ -199,6 +199,7 @@ struct NookPanelView: View {
             isEditing: isEditing,
             cellHeight: { Self.cardHeight($0, calendarStyle: style, calendarExtraRows: extraRows) },
             highlightedKind: insertionTarget,
+            outlinedKind: nook.tourOutlinedWidget,
             onFramesChange: { tileFrames = $0 },
             onMove: { kind, index in reflow { nook.moveWidget(kind, to: index, for: profile) } },
             onResize: { kind, size in reflow { nook.setWidgetSize(kind, size, for: profile) } },

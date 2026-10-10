@@ -175,6 +175,12 @@ enum NookSideSlotContent: Equatable {
     case date(Int)
     case battery(percent: Int, isCharging: Bool)
     case countdown(String)
+    /// The temperature, such as "72°", over a small weather symbol.
+    case weather(text: String, symbol: String)
+    /// Time left on the focus timer, in the short form.
+    case timer(String)
+    /// How many tasks are still open.
+    case todos(Int)
     case hidden
 
     /// "42m", "3h" or "2d" until a moment; nil once it has passed.
@@ -186,6 +192,50 @@ enum NookSideSlotContent: Equatable {
         let hours = minutes / 60
         if hours < 24 { return "\(hours)h" }
         return "\(hours / 24)d"
+    }
+
+    /// A report older than this says nothing: the Weather widget only asks
+    /// for a new one while its tile is on screen, and the pill asks for none.
+    static let weatherMaxAge: TimeInterval = 6 * 3600
+
+    /// The temperature now from the saved report, nil with no city, no
+    /// report, or a report too old to trust.
+    static func resolvedWeather(
+        report: NookWeatherReport?,
+        hasPlace: Bool,
+        unit: NookTemperatureUnit,
+        now: Date
+    ) -> NookSideSlotContent? {
+        guard hasPlace, let report, now.timeIntervalSince(report.fetchedAt) < weatherMaxAge else { return nil }
+        let moment = report.conditions(at: now)
+        return .weather(
+            text: unit.text(celsius: moment.temperature),
+            symbol: moment.condition.symbol(isDay: moment.isDay)
+        )
+    }
+
+    /// "45s", "24m" or "2h" for time left on the timer, rounded up like the
+    /// countdown. Nil with no timer running.
+    static func timerText(remaining: TimeInterval, isActive: Bool) -> String? {
+        guard isActive, remaining > 0 else { return nil }
+        if remaining <= 60 { return "\(Int(remaining.rounded(.up)))s" }
+        let minutes = Int((remaining / 60).rounded(.up))
+        return minutes < 60 ? "\(minutes)m" : "\(minutes / 60)h"
+    }
+
+    /// The open-task count, nil while the source is not connected or has
+    /// nothing open.
+    static func resolvedTodos(items: [NookTodoItem], connection: NookTodoConnection) -> NookSideSlotContent? {
+        guard connection == .ready else { return nil }
+        let open = items.filter { !$0.isCompleted }.count
+        return open > 0 ? .todos(open) : nil
+    }
+
+    static let todosCap = 99
+
+    /// The count as drawn: "7", or "99+" past the cap.
+    static func todosText(_ count: Int) -> String {
+        count > todosCap ? "\(todosCap)+" : "\(count)"
     }
 }
 
@@ -244,8 +294,31 @@ struct NookSideSlotView: View {
                 .minimumScaleFactor(0.7)
                 .contentTransition(.numericText())
                 .frame(width: size, height: size)
+        case let .weather(text, symbol):
+            stackedGlyph(symbol: symbol, text: text, tint: V6Palette.paper)
+        case let .timer(text):
+            stackedGlyph(symbol: "timer", text: text, tint: .orange)
+        case let .todos(count):
+            stackedGlyph(symbol: "checkmark.circle", text: NookSideSlotContent.todosText(count), tint: V6Palette.paper)
         case .hidden:
             Color.clear.frame(width: size, height: size)
         }
+    }
+
+    /// A small symbol over a short text, in the square the other items use.
+    private func stackedGlyph(symbol: String, text: String, tint: Color) -> some View {
+        VStack(spacing: 0) {
+            Image(systemName: symbol)
+                .font(.system(size: size * 0.36, weight: .semibold))
+                .foregroundStyle(tint)
+            Text(text)
+                .font(.system(size: size * 0.4, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(V6Palette.paper)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .contentTransition(.numericText())
+        }
+        .frame(width: size, height: size)
     }
 }

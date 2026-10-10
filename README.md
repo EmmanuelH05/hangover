@@ -4,6 +4,8 @@
 
 Hangover makes the notch on your MacBook useful. It's free and the code is all here.
 
+**[Download Hangover](https://emmanuelh05.github.io/hangover/)** from its own page, which shows the first-open steps in pictures.
+
 After NotchNook stopped working for me, I started looking for alternatives. I ended up building my own on top of [Open Island](https://github.com/Octane0411/open-vibe-island), an open source notch app for AI coding agents.
 
 ![The Nook page open under the notch, with music, a focus timer and the file tray](docs/readme/nook.png)

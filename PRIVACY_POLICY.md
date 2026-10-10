@@ -1,6 +1,6 @@
 # Hangover Privacy Policy
 
-**Last updated: 2026-10-09. Applies to Hangover 1.0.4.**
+**Last updated: 2026-10-09. Applies to Hangover 1.0.5.**
 
 Hangover is a Mac app that lives in the notch. It shows your coding agents,
 your music and a page of small widgets. This page says what the app keeps,

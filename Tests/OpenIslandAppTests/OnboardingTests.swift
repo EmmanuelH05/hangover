@@ -33,7 +33,7 @@ struct OnboardingFlowTests {
         flow.next()
         flow.next()
         flow.back()
-        #expect(flow.page == .opening)
+        #expect(flow.page == .purpose)
         #expect(flow.outcome == nil)
     }
 
@@ -83,6 +83,64 @@ struct OnboardingFlowTests {
     @Test func everyPageHasItsOwnSnapshotName() {
         let names = OnboardingPage.allCases.map(\.snapshotName)
         #expect(Set(names).count == OnboardingPage.allCases.count)
+        // The names sort in the order of the tour.
+        #expect(names.sorted() == names)
+        #expect(OnboardingPage.welcome.snapshotName == "01-welcome")
+        #expect(OnboardingPage.todos.snapshotName == "09-todos")
+        #expect(OnboardingPage.notes.snapshotName == "10-notes")
+        #expect(OnboardingPage.weather.snapshotName == "11-weather")
+        #expect(OnboardingPage.done.snapshotName == "17-done")
+    }
+
+    // MARK: The pages and their chapters (D43)
+
+    @Test func theTourAsksOneThingAPageInThisOrder() {
+        #expect(OnboardingPage.allCases == [
+            .welcome, .purpose, .opening, .closed, .agents, .widgets, .layout, .arrange,
+            .todos, .notes, .weather, .opened, .look, .permissions, .integrations, .tips, .done,
+        ])
+        #expect(OnboardingPage.shown(agentsEnabled: true).count == 17)
+        #expect(OnboardingPage.shown(agentsEnabled: false).count == 16)
+    }
+
+    /// The to-dos page is about the to-do widget and nothing else. With
+    /// that widget off, no run of the tour has it.
+    @Test func theToDosPageIsLeftOutWhileTheToDoWidgetIsOff() {
+        let with = OnboardingPage.shown(agentsEnabled: true, hasTodoWidget: true)
+        let without = OnboardingPage.shown(agentsEnabled: true, hasTodoWidget: false)
+
+        #expect(with == OnboardingPage.allCases)
+        #expect(without == OnboardingPage.allCases.filter { $0 != .todos })
+        #expect(OnboardingPage.allCases.filter(\.needsTodoWidget) == [.todos])
+        #expect(OnboardingPage.shown(agentsEnabled: false, hasTodoWidget: false) == [
+            .welcome, .purpose, .opening, .closed, .widgets, .layout, .arrange, .notes, .weather, .opened, .look, .permissions, .integrations, .tips, .done,
+        ])
+        // Asked for while it is left out, the page before it is shown.
+        #expect(OnboardingPage.landing(.todos, in: without) == .arrange)
+        #expect(OnboardingFlow(startingAt: .todos, pages: without).page == .arrange)
+    }
+
+    @Test func theChaptersComeOneAfterAnotherAndNoneIsEmpty() {
+        let chapters = OnboardingPage.allCases.map(\.chapter)
+        let order = OnboardingChapter.allCases
+        let positions = chapters.compactMap { order.firstIndex(of: $0) }
+
+        #expect(positions == positions.sorted(), "a chapter comes back after another began")
+        #expect(Set(chapters) == Set(order))
+        #expect(OnboardingPage.welcome.chapter == .basics)
+        #expect(OnboardingPage.closed.chapter == .yours)
+        #expect(OnboardingPage.tips.chapter == .know)
+        // With the agents off the chapters still come in order.
+        let without = OnboardingPage.shown(agentsEnabled: false).compactMap { order.firstIndex(of: $0.chapter) }
+        #expect(without == without.sorted())
+    }
+
+    @Test func theProgressLineFillsAsTheTourGoes() {
+        #expect(OnboardingView.progressFraction(step: 1, count: 12) == CGFloat(1) / CGFloat(12))
+        #expect(OnboardingView.progressFraction(step: 6, count: 12) == CGFloat(0.5))
+        #expect(OnboardingView.progressFraction(step: 12, count: 12) == CGFloat(1))
+        #expect(OnboardingView.progressFraction(step: 20, count: 12) == CGFloat(1))
+        #expect(OnboardingView.progressFraction(step: 1, count: 0) == CGFloat(0))
     }
 }
 
@@ -213,6 +271,18 @@ struct OnboardingAppModelTests {
         #expect(state.glowStyle == display.haloStyle)
         #expect(state.openTrigger == model.islandOpenTrigger)
         #expect(state.enabledWidgets == Set(model.nook.enabledWidgets))
+        #expect(state.nookPlacements == model.nook.widgetPlacements(for: profile))
+        #expect(state.shownPlacements == model.nook.widgetPlacements(for: profile))
+        #expect(state.calendarStyle == display.calendarStyle)
+        #expect(state.todoSource == model.nook.todo.selectedKind)
+        #expect(state.isTodoSourceReady == (model.nook.todo.source(reminders: model.nook.reminders).connection == .ready))
+        #expect(state.glowPalette == display.haloColors.palette)
+        #expect(state.closedSide == OnboardingClosedSide.reading(
+            own: model.appearancePreferences(for: profile).rightSlot,
+            nook: display.rightSlot,
+            agentsEnabled: model.agentsEnabled
+        ))
+        #expect(state.canKeepOwnLayout == false)
         #expect(state.appliedTemplate == model.appliedTemplateID(for: profile))
         let theme = display.haloColors.usesSingleColor ? nil : IslandHaloTheme.matching(display.haloColors.palette)?.id
         #expect(state.glowThemeID == theme)
@@ -244,11 +314,18 @@ struct OnboardingAppModelTests {
 
 /// Counts every call a tour makes into the app.
 @MainActor
-private final class OnboardingCallCounter {
+final class OnboardingCallCounter {
+    var agentsSwitches: [Bool] = []
     var openTriggers: [IslandOpenTrigger] = []
+    var closedSides: [OnboardingClosedSide] = []
+    var closedLefts: [OnboardingClosedLeft] = []
+    var keptOwn = 0
     var connected: [OnboardingAgent] = []
     var allAgents = 0
     var widgets: [NookWidgetKind] = []
+    var todoSources: [NookTodoSourceKind] = []
+    var setupPages: [NookTodoSourceKind] = []
+    var todoSettings = 0
     var templates: [PersonalizationTemplate.ID] = []
     var glowStyles: [IslandHaloStyle] = []
     var glowThemes: [String] = []
@@ -263,11 +340,18 @@ private final class OnboardingCallCounter {
 
     var actions: OnboardingActions {
         OnboardingActions(
+            setAgentsEnabled: { self.agentsSwitches.append($0); self.order.append("agents") },
             setOpenTrigger: { self.openTriggers.append($0); self.order.append("openTrigger") },
+            setClosedSide: { self.closedSides.append($0); self.order.append("closedSide") },
+            setClosedLeft: { self.closedLefts.append($0); self.order.append("closedLeft") },
             connect: { self.connected.append($0); self.order.append("connect") },
             showAllAgents: { self.allAgents += 1; self.order.append("allAgents") },
             setWidget: { kind, _ in self.widgets.append(kind); self.order.append("widget") },
+            setTodoSource: { self.todoSources.append($0); self.order.append("todoSource") },
+            openTodoSetupPage: { self.setupPages.append($0); self.order.append("setupPage") },
+            showTodoSettings: { self.todoSettings += 1; self.order.append("todoSettings") },
             applyTemplate: { self.templates.append($0.id); self.order.append("template") },
+            keepOwnLayout: { self.keptOwn += 1; self.order.append("keepOwn") },
             setGlowStyle: { self.glowStyles.append($0); self.order.append("glowStyle") },
             setGlowTheme: { self.glowThemes.append($0.id); self.order.append("glowTheme") },
             setOpenedWidth: { self.widths.append($0); self.order.append("width") },
@@ -283,7 +367,7 @@ struct OnboardingTourTests {
         let counter = OnboardingCallCounter()
         let tour = OnboardingTour.recording(in: store, state: { OnboardingState() }) { counter.closes += 1 }
 
-        for _ in 1..<OnboardingPage.allCases.count { tour.next() }
+        for _ in 1..<tour.pages.count { tour.next() }
         #expect(tour.page == .done)
         #expect(store.firstLaunchCompleted == false)
         #expect(counter.closes == 0)
@@ -330,11 +414,13 @@ struct OnboardingTourTests {
     /// They run from a button and from nothing else.
     @Test func walkingTheTourAndDrawingEveryPageCallsNoAction() throws {
         let counter = OnboardingCallCounter()
+        // The weather widget is on the page, so every page is walked.
         let tour = OnboardingTour(
-            state: { OnboardingState() },
+            state: { OnboardingState(enabledWidgets: Set(NookWidgetKind.defaultEnabled + [.weather])) },
             actions: counter.actions,
             onEnd: { counter.ends.append($0) }
         )
+        #expect(tour.pages == OnboardingPage.allCases)
 
         try draw(tour)
         for _ in 1..<OnboardingPage.allCases.count {
@@ -371,6 +457,7 @@ struct OnboardingTourTests {
         let counter = OnboardingCallCounter()
         let tour = OnboardingTour(state: { OnboardingState() }, actions: counter.actions)
 
+        tour.actions.setAgentsEnabled(false)
         tour.actions.connect(.claudeCode)
         tour.actions.setOpenTrigger(.click)
         tour.actions.setWidget(.mirror, true)
@@ -379,7 +466,14 @@ struct OnboardingTourTests {
         tour.actions.setOpenedWidth(.widest)
         tour.actions.setOpenedCorners(.square)
         tour.actions.showAllAgents()
+        tour.actions.setTodoSource(.notion)
+        tour.actions.openTodoSetupPage(.notion)
+        tour.actions.showTodoSettings()
 
+        #expect(counter.agentsSwitches == [false])
+        #expect(counter.todoSources == [.notion])
+        #expect(counter.setupPages == [.notion])
+        #expect(counter.todoSettings == 1)
         #expect(counter.connected == [.claudeCode])
         #expect(counter.openTriggers == [.click])
         #expect(counter.widgets == [.mirror])
@@ -388,7 +482,88 @@ struct OnboardingTourTests {
         #expect(counter.widths == [.widest])
         #expect(counter.corners == [.square])
         #expect(counter.allAgents == 1)
-        #expect(counter.order.count == 8)
+        #expect(counter.order.count == 12)
+    }
+
+    // MARK: The closed island
+
+    @Test func theClosedIslandsPickReachesTheAppOnce() {
+        let counter = OnboardingCallCounter()
+        let tour = OnboardingTour(state: { OnboardingState() }, actions: counter.actions)
+
+        tour.actions.setClosedSide(.date)
+
+        #expect(counter.closedSides == [.date])
+        #expect(counter.order == ["closedSide"])
+        #expect(tour.picks.closedSide == .date)
+    }
+
+    /// A template sets a closed island of its own. The pick made on the
+    /// closed island's page is the user's and comes back, like the glow.
+    @Test func aTemplatePickedAfterAClosedIslandLeavesItAsItWasPicked() {
+        let counter = OnboardingCallCounter()
+        let tour = OnboardingTour(state: { OnboardingState() }, actions: counter.actions)
+
+        tour.actions.setGlowStyle(.vivid)
+        tour.actions.setClosedSide(.battery)
+        tour.actions.applyTemplate(.planner)
+
+        #expect(counter.order == ["glowStyle", "closedSide", "template", "glowStyle", "closedSide"])
+        #expect(counter.closedSides == [.battery, .battery])
+    }
+
+    /// The left side is picked on the same page and kept the same way.
+    @Test func theLeftSidesPickReachesTheAppOnceAndComesBackAfterATemplate() {
+        let counter = OnboardingCallCounter()
+        let tour = OnboardingTour(state: { OnboardingState() }, actions: counter.actions)
+
+        tour.actions.setClosedLeft(.countdown)
+        #expect(counter.closedLefts == [.countdown])
+        #expect(tour.picks.closedLeft == .countdown)
+
+        tour.actions.applyTemplate(.planner)
+        #expect(counter.order == ["closedLeft", "template", "closedLeft"])
+        #expect(counter.closedLefts == [.countdown, .countdown])
+    }
+
+    // MARK: The user's own layout
+
+    /// A template picked over a layout that was on none leaves a way back,
+    /// and taking it puts the layout and the other pages' picks back.
+    @Test func keepingTheUsersOwnLayoutPutsItBack() {
+        let counter = OnboardingCallCounter()
+        var applied: PersonalizationTemplate.ID?
+        let tour = OnboardingTour(state: { OnboardingState(appliedTemplate: applied) }, actions: counter.actions)
+        #expect(tour.state.canKeepOwnLayout == false)
+        #expect(OnboardingLayoutPage.offersOwnCard(tour.state), "on a layout of their own the card is the picked one")
+
+        tour.actions.setClosedSide(.date)
+        tour.actions.applyTemplate(.planner)
+        applied = .planner
+        #expect(tour.state.canKeepOwnLayout == true)
+        #expect(tour.state.shownTemplate == .planner)
+        #expect(OnboardingLayoutPage.offersOwnCard(tour.state))
+
+        tour.actions.keepOwnLayout()
+        applied = nil
+        #expect(counter.keptOwn == 1)
+        #expect(counter.order == ["closedSide", "template", "closedSide", "keepOwn", "closedSide"])
+        #expect(tour.state.pickedTemplate == nil)
+        #expect(tour.state.shownTemplate == nil)
+        #expect(tour.state.canKeepOwnLayout == false)
+    }
+
+    /// A display that was already on a template has no layout of the
+    /// user's own to go back to: the template's card is the way back.
+    @Test func aTemplatePickedOverAnotherTemplateOffersNoOwnLayout() {
+        var applied: PersonalizationTemplate.ID? = .focus
+        let tour = OnboardingTour(state: { OnboardingState(appliedTemplate: applied) })
+
+        tour.actions.applyTemplate(.planner)
+        applied = .planner
+
+        #expect(tour.state.canKeepOwnLayout == false)
+        #expect(!OnboardingLayoutPage.offersOwnCard(tour.state))
     }
 
     // MARK: Choices on one page and choices on another

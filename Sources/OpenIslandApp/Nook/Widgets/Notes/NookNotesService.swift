@@ -20,6 +20,9 @@ final class NookNotesService {
     /// file in the app's own folder. Not Documents or Desktop, which macOS
     /// asks about, and not a new folder in the user's home.
     static let defaultPath = "~/Library/Application Support/OpenIsland/Notes/Quick Notes.md"
+    /// The file a notes folder holds, which the welcome tour's folder choice
+    /// names. The same name as the default file.
+    static let folderFileName = "Quick Notes.md"
     private static let maxEntries = 20
 
     @ObservationIgnored private(set) weak var nook: NookModel?
@@ -30,6 +33,9 @@ final class NookNotesService {
     private(set) var appleNotesEntries: [NookNoteEntry] = []
     private(set) var fileURL: URL
     private(set) var destination: NookNotesDestination
+    /// How many notes were saved since the app started, to the file or to
+    /// Apple Notes. The welcome tour watches it to see a note go in.
+    private(set) var savedCount = 0
 
     /// What the card lists: the file's lines, or what went to Apple Notes.
     var entries: [NookNoteEntry] { destination == .appleNotes ? appleNotesEntries : fileEntries }
@@ -87,6 +93,13 @@ final class NookNotesService {
         watch()
     }
 
+    /// Keeps the notes file in a folder the user chose, under the default
+    /// file's name. The same stored path Settings' "Choose file…" writes, so
+    /// a file chosen there and a folder chosen here are one setting.
+    func setFolder(_ folder: URL) {
+        setFileURL(folder.appendingPathComponent(Self.folderFileName))
+    }
+
     func append(_ text: String) {
         let flat = text
             .components(separatedBy: .newlines)
@@ -114,6 +127,7 @@ final class NookNotesService {
             await previous?.value
             do {
                 try await writer.append(lineHTML: line, toNoteTitled: NookAppleNotesLine.noteTitle)
+                self?.savedCount += 1
             } catch {
                 self?.appleNotesRefused(entry, error: error as? NookAppleNotesError ?? .failed)
             }
@@ -162,6 +176,7 @@ final class NookNotesService {
             nook?.showTransient(symbol: "exclamationmark.triangle", text: "Note not saved", tint: .orange, duration: .seconds(4))
             return false
         }
+        savedCount += 1
         reload()
         watch()
         return true

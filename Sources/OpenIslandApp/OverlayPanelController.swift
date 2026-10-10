@@ -129,8 +129,10 @@ final class OverlayPanelController {
         panel?.frame
     }
 
-    nonisolated static func shouldActivatePanel(for reason: NotchOpenReason?) -> Bool {
-        reason == .click
+    /// A click opens the island with the keyboard. The tour's hold (D44)
+    /// never does: Return, Escape and the arrows stay with the tour's window.
+    nonisolated static func shouldActivatePanel(for reason: NotchOpenReason?, holdsOpenForTour: Bool = false) -> Bool {
+        reason == .click && !holdsOpenForTour
     }
 
     func availableDisplayOptions() -> [OverlayDisplayOption] {
@@ -155,7 +157,10 @@ final class OverlayPanelController {
         let panel = self.panel ?? makePanel(model: model)
         self.panel = panel
         let diagnostics = positionPanel(preferredScreenID: preferredScreenID)
-        presentPanel(panel, activates: Self.shouldActivatePanel(for: model.notchOpenReason))
+        presentPanel(panel, activates: Self.shouldActivatePanel(
+            for: model.notchOpenReason,
+            holdsOpenForTour: model.tourHoldsIslandOpen
+        ))
         panel.ignoresMouseEvents = false
         panel.acceptsMouseMovedEvents = true
         startEventMonitoring()
@@ -176,8 +181,25 @@ final class OverlayPanelController {
         panel.acceptsMouseMovedEvents = interactive
 
         if interactive {
-            presentPanel(panel, activates: Self.shouldActivatePanel(for: model?.notchOpenReason))
+            presentPanel(panel, activates: Self.shouldActivatePanel(
+                for: model?.notchOpenReason,
+                holdsOpenForTour: model?.tourHoldsIslandOpen ?? false
+            ))
         }
+    }
+
+    /// Where the opened island sits and the screen it is on, for the
+    /// welcome tour to step aside (D44). Works while the island is closed:
+    /// it is the frame the island opens into. The screen is its visible
+    /// frame, the island the part of the window the shape covers.
+    func openedIslandFootprint(model: AppModel?, preferredScreenID: String?) -> OnboardingIslandFootprint? {
+        guard let placement = resolvePlacement(model: model ?? self.model, preferredScreenID: preferredScreenID) else {
+            return nil
+        }
+        return OnboardingIslandFootprint(
+            screen: placement.screen.visibleFrame,
+            island: placement.frame.insetBy(dx: panelShadowInsets.horizontal, dy: 0)
+        )
     }
 
     func placementDiagnostics(preferredScreenID: String?) -> OverlayPlacementDiagnostics? {
@@ -636,7 +658,8 @@ final class OverlayPanelController {
             // Keep the island open while a permission/question is pending
             // when the user opted into “keep open until decision” (#547).
             blocksDismiss: isOpened && model.shouldBlockDismissWhileAwaitingDecision,
-            hasOpenPicker: isOpened && model.nook.tray.isSharePickerOpen
+            hasOpenPicker: isOpened && model.nook.tray.isSharePickerOpen,
+            holdsOpenForTour: isOpened && model.tourHoldsIslandOpen
         )
 
         switch IslandPointerRules.clickAction(context) {

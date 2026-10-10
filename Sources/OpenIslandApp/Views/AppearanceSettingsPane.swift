@@ -387,6 +387,9 @@ struct AppearanceSettingsPane: View {
         case .date: .date(Calendar.current.component(.day, from: Date()))
         case .battery: .battery(percent: 82, isCharging: false)
         case .countdown: .countdown("42m")
+        case .weather: .weather(text: "72°", symbol: "cloud.sun.fill")
+        case .timer: .timer("24m")
+        case .todos: .todos(3)
         case .none: .hidden
         }
     }

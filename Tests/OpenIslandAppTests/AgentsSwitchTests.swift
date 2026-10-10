@@ -333,7 +333,7 @@ struct AgentsSwitchTests {
     @Test
     func theAgentsTemplateIsNotOfferedWhileOff() {
         let off = PersonalizationTemplate.offered(agentsEnabled: false).map(\.id)
-        #expect(off == [.nowPlaying, .planner, .focus, .minimal])
+        #expect(off == [.everything, .nowPlaying, .planner, .focus, .study, .minimal])
         #expect(PersonalizationTemplate.offered(agentsEnabled: true) == PersonalizationTemplate.all)
     }
 
@@ -395,7 +395,7 @@ struct AgentsSwitchTests {
     @Test
     func theTourLeavesItsAgentsPageOutWhileOff() {
         let off = OnboardingPage.shown(agentsEnabled: false)
-        #expect(off == [.welcome, .opening, .nook, .opened, .look, .permissions, .done])
+        #expect(off == [.welcome, .purpose, .opening, .closed, .widgets, .layout, .arrange, .todos, .notes, .weather, .opened, .look, .permissions, .integrations, .tips, .done])
         #expect(OnboardingPage.shown(agentsEnabled: true) == OnboardingPage.allCases)
     }
 
@@ -407,14 +407,15 @@ struct AgentsSwitchTests {
             flow.next()
             seen.append(flow.page)
         }
-        #expect(seen == [.welcome, .opening, .nook, .opened, .look, .permissions, .done])
+        #expect(seen == [.welcome, .purpose, .opening, .closed, .widgets, .layout, .arrange, .todos, .notes, .weather, .opened, .look, .permissions, .integrations, .tips, .done])
 
         flow.go(to: .agents)
         #expect(flow.page == .done)
 
-        flow.go(to: .nook)
+        flow.go(to: .widgets)
         flow.back()
-        #expect(flow.page == .opening)
+        #expect(flow.page == .closed)
+        flow.back()
         flow.back()
         flow.back()
         #expect(flow.page == .welcome)
@@ -424,7 +425,7 @@ struct AgentsSwitchTests {
     @Test
     func aTourAskedToStartOnTheAgentsPageStartsOnThePageBeforeItWhileOff() {
         let flow = OnboardingFlow(startingAt: .agents, pages: OnboardingPage.shown(agentsEnabled: false))
-        #expect(flow.page == .opening)
+        #expect(flow.page == .closed)
         #expect(OnboardingFlow(startingAt: .agents).page == .agents)
     }
 
@@ -441,20 +442,23 @@ struct AgentsSwitchTests {
             },
             actions: actions
         )
-        #expect(tour.pages == OnboardingPage.allCases)
+        // Weather starts switched off, so its page is not walked.
+        #expect(tour.pages == OnboardingPage.shown(agentsEnabled: true, hasWeatherWidget: false))
 
-        // The switch is on the first page, which is never left out.
-        #expect(OnboardingPage.welcome.offersAgentsSwitch)
+        // The switch is the purpose page, which no run leaves out.
+        #expect(OnboardingPage.shown(agentsEnabled: false).contains(.purpose))
+        #expect(OnboardingPage.purpose.offersAgentsSwitch)
+        #expect(OnboardingPage.allCases.filter(\.offersAgentsSwitch) == [.purpose])
         tour.actions.setAgentsEnabled(false)
         #expect(agentsEnabled == false)
         #expect(tour.state.agentsEnabled == false)
-        #expect(tour.pages == OnboardingPage.shown(agentsEnabled: false))
+        #expect(tour.pages == OnboardingPage.shown(agentsEnabled: false, hasWeatherWidget: false))
 
+        tour.go(to: .closed)
         tour.next()
-        tour.next()
-        #expect(tour.page == .nook)
+        #expect(tour.page == .widgets)
         tour.back()
-        #expect(tour.page == .opening)
+        #expect(tour.page == .closed)
 
         tour.actions.setAgentsEnabled(true)
         tour.next()
@@ -473,11 +477,11 @@ struct AgentsSwitchTests {
 
         // Switched off in Settings while the tour is up.
         agentsEnabled = false
-        #expect(tour.page == .opening)
+        #expect(tour.page == .closed)
         #expect(tour.isFirstPage == false)
 
         tour.next()
-        #expect(tour.page == .nook)
+        #expect(tour.page == .widgets)
     }
 
     @Test
@@ -485,7 +489,7 @@ struct AgentsSwitchTests {
         #expect(OnboardingGrant.shown(agentsEnabled: false) == [.camera, .accessibility, .calendar])
         #expect(OnboardingGrant.shown(agentsEnabled: true) == OnboardingGrant.allCases)
 
-        #expect(OnboardingRecapRow.shown(agentsEnabled: false) == [.opens, .glow, .layout, .opened])
+        #expect(OnboardingRecapRow.shown(agentsEnabled: false) == [.opens, .closed, .widgets, .todos, .notes, .weather, .layout, .opened, .glow])
         #expect(OnboardingRecapRow.shown(agentsEnabled: true) == OnboardingRecapRow.allCases)
     }
 
@@ -497,6 +501,33 @@ struct AgentsSwitchTests {
         model.agentsEnabled = false
         #expect(model.onboardingState.agentsEnabled == false)
         #expect(defaults.object(forKey: AgentsSwitch.defaultsKey) as? Bool == false)
+    }
+
+    /// The purpose page's two cards call this action. It writes the same
+    /// preference as the switch in Settings, and the tour follows it.
+    @Test
+    func theToursPurposePageWritesTheSwitch() {
+        let (model, defaults) = Self.model()
+        let tour = model.makeWelcomeTour(startingAt: .purpose)
+        #expect(tour.page == .purpose)
+        // Weather starts switched off, so its page is not walked.
+        #expect(tour.pages == OnboardingPage.shown(agentsEnabled: true, hasWeatherWidget: false))
+
+        tour.actions.setAgentsEnabled(false)
+
+        #expect(model.agentsEnabled == false)
+        #expect(defaults.object(forKey: AgentsSwitch.defaultsKey) as? Bool == false)
+        #expect(tour.state.agentsEnabled == false)
+        #expect(tour.page == .purpose, "the page with the switch stays up")
+        #expect(tour.pages == OnboardingPage.shown(agentsEnabled: false, hasWeatherWidget: false))
+        #expect(tour.state.closedSide.map { !$0.needsAgents } ?? true)
+    }
+
+    @Test
+    func thePermissionsPageNamesATerminalJumpOnlyWithTheAgentsOn() {
+        #expect(OnboardingGrant.accessibility.noteKey(agentsEnabled: true) == "onboarding.permissions.accessibility.note.agents")
+        #expect(OnboardingGrant.accessibility.noteKey(agentsEnabled: false) == "onboarding.permissions.accessibility.note")
+        #expect(OnboardingGrant.camera.noteKey(agentsEnabled: true) == OnboardingGrant.camera.noteKey(agentsEnabled: false))
     }
 
     // MARK: - Strings
