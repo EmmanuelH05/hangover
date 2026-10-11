@@ -30,7 +30,7 @@
 "settings.general.openTrigger" = "打开岛的方式";
 "settings.general.openTrigger.hover" = "悬停时";
 "settings.general.openTrigger.click" = "点击时";
-"settings.general.openTrigger.note.hover" = "指针停在岛上即可打开，移开后自动收起。在岛内点击可让它保持打开。";
+"settings.general.openTrigger.note.hover" = "指针停在岛上即可打开，移开后自动收起。";
 "settings.general.openTrigger.note.click" = "只有点击才会打开岛。它会保持打开，直到你点击岛外或再次点击刘海。";
 "settings.general.openTrigger.files" = "无论哪种方式，把文件拖到岛上都会将其打开，松手即可放入文件托盘。";
 "settings.general.linksFromOtherApps" = "允许来自其他 App 的链接";
@@ -1099,7 +1099,7 @@
 "onboarding.tips.body" = "一些容易错过的小细节。";
 "onboarding.tips.note" = "随时可以再看一遍：设置的「关于」里可以打开这次导览。";
 "onboarding.tips.keepOpen.hover.title" = "让它一直开着";
-"onboarding.tips.keepOpen.hover.text" = "岛打开后，在里面任意处点一下。指针离开后它也会保持打开。";
+"onboarding.tips.keepOpen.hover.text" = "选了「悬停时」，指针一离开岛就会收起。想让它一直开着，直到你点击别处，请在设置的「通用」里选「点击时」。";
 "onboarding.tips.keepOpen.click.title" = "从刘海把它合上";
 "onboarding.tips.keepOpen.click.text" = "再点一次刘海就能合上岛。点一下岛外面也可以。";
 "onboarding.tips.swipeAway.title" = "把它扫走";

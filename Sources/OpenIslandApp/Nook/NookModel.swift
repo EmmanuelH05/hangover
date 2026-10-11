@@ -261,6 +261,45 @@ final class NookModel {
 
     var activeDisplay: NookDisplayPreferences { displayPreferences(for: activeProfile()) }
 
+    /// The lines typed in a widget and not saved (`NookDraft`). Read when
+    /// the pointer leaves the island, which is why nothing observes it.
+    @ObservationIgnored private var unsavedDrafts: Set<NookDraft> = []
+
+    var holdsUnsavedDraft: Bool { !unsavedDrafts.isEmpty }
+
+    /// A widget says whether its field holds a line that is not saved.
+    func setDraft(_ draft: NookDraft, isUnsaved: Bool) {
+        if isUnsaved { unsavedDrafts.insert(draft) } else { unsavedDrafts.remove(draft) }
+    }
+
+    func forgetDrafts() {
+        unsavedDrafts.removeAll()
+    }
+
+    /// How many system windows the app has put up that open under the
+    /// island: a permission prompt for the calendar, Reminders, the camera
+    /// or Notes, and the tour's folder chooser. Counted, because two can be
+    /// up at once.
+    @ObservationIgnored private var systemPromptCount = 0
+    /// Told true when the first request goes up and false when the last is
+    /// answered. The app model moves the island out of the prompt's way.
+    @ObservationIgnored var onSystemPromptChange: (Bool) -> Void = { _ in }
+
+    var isSystemPromptUp: Bool { systemPromptCount > 0 }
+
+    /// Called just before macOS is asked for a permission.
+    func systemPromptBegan() {
+        systemPromptCount += 1
+        if systemPromptCount == 1 { onSystemPromptChange(true) }
+    }
+
+    /// Called when macOS has the answer. One that was never begun is ignored.
+    func systemPromptEnded() {
+        guard systemPromptCount > 0 else { return }
+        systemPromptCount -= 1
+        if systemPromptCount == 0 { onSystemPromptChange(false) }
+    }
+
     /// Hooks the app model installs so the Nook can use the island's own
     /// pop animation and mute switch without owning the app model.
     @ObservationIgnored var onTransient: (() -> Void)?

@@ -57,8 +57,8 @@ struct IslandTourHoldClickTests {
         #expect(IslandPointerRules.clickAction(Self.context(inExpanded: false, holds: false)) == .dismiss)
         #expect(IslandPointerRules.clickAction(Self.context(inExpanded: false, blocksDismiss: true, holds: false)) == .holdForDecision)
         #expect(IslandPointerRules.clickAction(Self.context(inExpanded: false, picker: true, holds: false)) == .none)
-        // Inside a hover-opened island: pin. On the notch of a click-opened one: close.
-        #expect(IslandPointerRules.clickAction(Self.context(reason: .hover, inExpanded: true, holds: false)) == .pin)
+        // Inside a hover-opened island: nothing. On the notch of a click-opened one: close.
+        #expect(IslandPointerRules.clickAction(Self.context(reason: .hover, inExpanded: true, holds: false)) == .none)
         #expect(IslandPointerRules.clickAction(Self.context(inExpanded: true, onNotch: true, holds: false)) == .closeFromNotch)
         #expect(IslandPointerRules.clickAction(Self.context(inExpanded: true, holds: false)) == .none)
         #expect(IslandPointerRules.clickAction(Self.context(reason: .notification, inExpanded: true, holds: false)) == .none)

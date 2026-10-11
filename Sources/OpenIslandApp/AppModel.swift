@@ -1272,6 +1272,7 @@ final class AppModel {
             return self.notchStatus != .opened && self.nookDisplay.showsNotices
         }
         NookMirrorController.shared.onAspectRatioChange = { [weak self] in self?.refreshOverlayPlacementIfVisible() }
+        letSystemPromptsShowOverTheIsland()
         nook.presentRingLight = { [weak self] isLit in
             NookRingLight.shared.setLit(isLit, on: self?.islandScreen)
         }
@@ -1547,9 +1548,6 @@ final class AppModel {
         overlay.notchOpen(reason: reason, surface: surface)
     }
 
-    /// A click inside a hover-opened island keeps it open.
-    func pinHoverOpenedIsland() { overlay.pinHoverOpenedIsland() }
-
     /// True while the welcome tour holds the island open (D44).
     var tourHoldsIslandOpen: Bool { overlay.tourHoldsIslandOpen }
     func setTourHoldsIslandOpen(_ holds: Bool) { overlay.setTourHoldsIslandOpen(holds) }
@@ -1612,6 +1610,20 @@ final class AppModel {
     func toggleClosedContentHidden() {
         guard islandClosedMode != .waiting else { return }
         nook.closedContentHiddenBySwipe = !closedContentIsHidden
+    }
+
+    /// A macOS permission prompt comes up under the open island, where it
+    /// can be neither seen nor clicked, and the welcome tour holds the island
+    /// open. While the app has a request up, the island steps below the
+    /// prompt (`IslandPanelLevel`). The camera's request is counted with the
+    /// calendar's and Reminders'.
+    func letSystemPromptsShowOverTheIsland() {
+        nook.onSystemPromptChange = { [weak self] isUp in
+            self?.overlay.overlayPanelController.setSystemPromptUp(isUp)
+        }
+        NookMirrorController.shared.onSystemPromptChange = { [weak self] isUp in
+            if isUp { self?.nook.systemPromptBegan() } else { self?.nook.systemPromptEnded() }
+        }
     }
 
     /// Counts a swipe the island acted on. A gesture it let pass is not one,

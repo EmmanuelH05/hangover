@@ -61,8 +61,9 @@ struct OnboardingTipTests {
         }
     }
 
-    /// Keeping the island open is a click inside it with hover, and a
-    /// second click on the notch closes it with click.
+    /// With hover the tip says the island closes when the pointer leaves
+    /// and how to make it stay. With click it names the second click on the
+    /// notch.
     @Test func keepingItOpenIsToldInTheWordsOfTheWayItOpens() {
         #expect(OnboardingTip.keepOpen.keyName(openTrigger: .hover) == "keepOpen.hover")
         #expect(OnboardingTip.keepOpen.keyName(openTrigger: .click) == "keepOpen.click")
@@ -80,7 +81,7 @@ struct OnboardingTipTests {
     /// Each tip names a gesture the code has. These are the lines that
     /// carry them, and a tip whose gesture is renamed fails here first.
     @Test(arguments: [
-        ("Sources/OpenIslandApp/Island/IslandOpenTrigger.swift", "return .pin"),
+        ("Sources/OpenIslandApp/OverlayUICoordinator.swift", "if notchOpenReason == .hover && !islandSurface.isNotificationCard {"),
         ("Sources/OpenIslandApp/Island/IslandOpenTrigger.swift", ".closeFromNotch"),
         ("Sources/OpenIslandApp/Island/IslandOpenTrigger.swift", "static func swipeAction("),
         ("Sources/OpenIslandApp/Island/IslandOpenTrigger.swift", "? .toggleClosedContent : .none"),

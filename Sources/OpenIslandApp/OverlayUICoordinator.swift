@@ -279,6 +279,8 @@ final class OverlayUICoordinator {
                 self?.isPointerInsideIslandSurface = false
                 self?.appModel?.measuredNotificationContentHeight = 0
                 self?.appModel?.nook.isEditingLayout = false
+                // A closed island holds no line: the next one starts clean.
+                self?.appModel?.nook.forgetDrafts()
                 // Closing the island turns the mirror, the camera and the
                 // ring light off. The next open never starts the camera.
                 self?.appModel?.nook.isMirrorOn = false
@@ -392,15 +394,6 @@ final class OverlayUICoordinator {
     // Legacy compatibility
     func showOverlay() { notchOpen(reason: .click, surface: .sessionList()) }
     func hideOverlay() { notchClose() }
-
-    /// A click inside a hover-opened island keeps it open: it stops
-    /// following the pointer and closes on a click outside, like an island
-    /// that was opened by a click. Nothing is presented again, because the
-    /// click itself already made the panel key.
-    func pinHoverOpenedIsland() {
-        guard notchStatus == .opened, notchOpenReason == .hover else { return }
-        notchOpenReason = .click
-    }
 
     /// A link from another app turned the page of an island that was only
     /// passing through: hover-opened, or up for the boot animation. It now
@@ -658,6 +651,12 @@ final class OverlayUICoordinator {
 
         // Nor must a reply to an agent that is being typed.
         if appModel?.isTypingAgentReply == true {
+            return false
+        }
+
+        // Nor a line typed in a widget and not saved: a note, a to-do, a
+        // timer length (`NookDraft`).
+        if appModel?.nook.holdsUnsavedDraft == true {
             return false
         }
 

@@ -47,6 +47,13 @@ final class NookNotesService {
     @ObservationIgnored private var started = false
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let appleNotes: any NookAppleNotesWriting
+    static let notesAnswerDefaultsKey = "nook.notes.appleNotes.answered"
+    /// True once a send to Notes came back allowed or refused, which is when
+    /// macOS has asked its one question. Kept between launches.
+    private(set) var hasNotesAnswer: Bool {
+        get { defaults.bool(forKey: Self.notesAnswerDefaultsKey) }
+        set { defaults.set(newValue, forKey: Self.notesAnswerDefaultsKey) }
+    }
     @ObservationIgnored private let now: () -> Date
     /// The newest send to Apple Notes. Each send waits for the one before
     /// it: the script reads the note and then writes it, and two running at
@@ -125,11 +132,23 @@ final class NookNotesService {
         let previous = lastSend
         lastSend = Task { [weak self] in
             await previous?.value
+            // macOS asks once whether the app may control Notes, at the first
+            // send, and the prompt opens under the island. Until that answer
+            // is in, a send counts as a prompt (D52). Later sends do not: the
+            // island would dip for every note.
+            let mayAsk = self?.hasNotesAnswer == false
+            if mayAsk { self?.nook?.systemPromptBegan() }
+            defer { if mayAsk { self?.nook?.systemPromptEnded() } }
             do {
                 try await writer.append(lineHTML: line, toNoteTitled: NookAppleNotesLine.noteTitle)
                 self?.savedCount += 1
+                self?.hasNotesAnswer = true
             } catch {
-                self?.appleNotesRefused(entry, error: error as? NookAppleNotesError ?? .failed)
+                let reason = error as? NookAppleNotesError ?? .failed
+                // A refusal is an answer too. Any other failure may have come
+                // before macOS asked.
+                if reason == .notPermitted { self?.hasNotesAnswer = true }
+                self?.appleNotesRefused(entry, error: reason)
             }
         }
     }

@@ -140,7 +140,10 @@ final class NookRemindersService {
         }
         authorization = status
         isAskingForAccess = true
+        // The prompt comes up under an open island unless it steps aside.
+        nook?.systemPromptBegan()
         await access.request()
+        nook?.systemPromptEnded()
         isAskingForAccess = false
         refresh()
         return true

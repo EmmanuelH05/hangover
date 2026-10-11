@@ -5,9 +5,10 @@ import SwiftUI
 /// A tip shows only when the part of the app it is about is in use: its
 /// widget is on the page, or the agents are switched on.
 enum OnboardingTip: String, CaseIterable, Identifiable, Sendable {
-    /// `IslandClickAction.pin`: a click inside a hover-opened island keeps
-    /// it open. With the click trigger, a second click on the notch closes
-    /// it (`closeFromNotch`).
+    /// `OverlayUICoordinator.shouldAutoCollapseOnMouseLeave`: a hover-opened
+    /// island closes when the pointer leaves, and the click trigger is the
+    /// way to make it stay. With the click trigger, a second click on the
+    /// notch closes it (`closeFromNotch`).
     case keepOpen
     /// `IslandPointerRules.swipeAction`: a two-finger swipe up closes the
     /// open island, and one sideways on the closed island hides what it

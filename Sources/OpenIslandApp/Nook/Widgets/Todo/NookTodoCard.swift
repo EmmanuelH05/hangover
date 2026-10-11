@@ -225,6 +225,8 @@ struct NookTodoCard: View {
             .padding(.vertical, 4)
             .background(RoundedRectangle(cornerRadius: 6).fill(.white.opacity(0.08)))
             .disabled(!source.canAdd)
+            .onChange(of: draft) { _, text in nook.setDraft(.todo, isUnsaved: NookDraft.isUnsaved(text)) }
+            .onDisappear { nook.setDraft(.todo, isUnsaved: false) }
     }
 
     @ViewBuilder

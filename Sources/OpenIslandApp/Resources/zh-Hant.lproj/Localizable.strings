@@ -30,7 +30,7 @@
 "settings.general.openTrigger" = "開啟島的方式";
 "settings.general.openTrigger.hover" = "懸停時";
 "settings.general.openTrigger.click" = "點按時";
-"settings.general.openTrigger.note.hover" = "指標停在島上即可開啟，移開後自動收起。在島內點按可讓它保持開啟。";
+"settings.general.openTrigger.note.hover" = "指標停在島上即可開啟，移開後自動收起。";
 "settings.general.openTrigger.note.click" = "只有點按才會開啟島。它會保持開啟，直到你點按島外或再次點按瀏海。";
 "settings.general.openTrigger.files" = "無論哪種方式，把檔案拖到島上都會將其開啟，放開即可放入檔案托盤。";
 "settings.general.linksFromOtherApps" = "允許來自其他 App 的連結";
@@ -1098,7 +1098,7 @@
 "onboarding.tips.body" = "一些容易錯過的小細節。";
 "onboarding.tips.note" = "隨時可以再看一遍：設定的「關於」裡可以打開這次導覽。";
 "onboarding.tips.keepOpen.hover.title" = "讓它一直開著";
-"onboarding.tips.keepOpen.hover.text" = "島打開後，在裡面任意處點一下。指標離開後它也會保持打開。";
+"onboarding.tips.keepOpen.hover.text" = "選了「懸停時」，指標一離開島就會收起。想讓它一直開著，直到你點按別處，請在設定的「一般」裡選「點按時」。";
 "onboarding.tips.keepOpen.click.title" = "從瀏海把它收合";
 "onboarding.tips.keepOpen.click.text" = "再點一次瀏海就能收合島。點一下島外面也可以。";
 "onboarding.tips.swipeAway.title" = "把它掃走";

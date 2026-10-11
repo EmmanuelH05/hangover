@@ -361,7 +361,11 @@ extension AppModel {
         panel.allowsMultipleSelection = false
         panel.directoryURL = nook.notes.fileURL.deletingLastPathComponent()
         panel.prompt = lang.t("onboarding.notes.file.panelPrompt")
-        guard panel.runModal() == .OK, let folder = panel.url else { return }
+        // The chooser opens under the island the tour holds open (D52).
+        nook.systemPromptBegan()
+        let answer = panel.runModal()
+        nook.systemPromptEnded()
+        guard answer == .OK, let folder = panel.url else { return }
         nook.notes.setFolder(folder)
     }
 

@@ -54,12 +54,14 @@ import Testing
         }
     }
 
-    @Test func aClickInsideAHoverOpenedIslandPinsItWhereverItLands() {
+    /// The click is the control's under it. The island goes on following
+    /// the pointer and closes when it leaves.
+    @Test func aClickInsideAHoverOpenedIslandChangesNothingWhereverItLands() {
         let body = Self.context(status: .opened, reason: .hover, inExpandedArea: true)
         let notch = Self.context(status: .opened, reason: .hover, inExpandedArea: true, onNotch: true)
 
-        #expect(IslandPointerRules.clickAction(body) == .pin)
-        #expect(IslandPointerRules.clickAction(notch) == .pin)
+        #expect(IslandPointerRules.clickAction(body) == .none)
+        #expect(IslandPointerRules.clickAction(notch) == .none)
     }
 
     @Test func aSecondClickOnTheNotchClosesAHeldIslandButAClickOnItsContentDoesNot() {
@@ -306,34 +308,21 @@ struct IslandOpenTriggerTests {
         }
     }
 
-    // MARK: Pinning
+    // MARK: A click inside a hover-opened island
 
-    @Test func pinningAHoverOpenedIslandStopsItFollowingThePointer() {
+    @Test func aHoverOpenedIslandClosesWhenThePointerLeavesAndAClickOpenedOneDoesNot() {
         let model = AppModel(defaults: MemoryDefaults())
         model.notchStatus = .opened
         model.notchOpenReason = .hover
         #expect(model.overlay.shouldAutoCollapseOnMouseLeave)
 
-        model.pinHoverOpenedIsland()
-
-        #expect(model.notchOpenReason == .click)
+        model.notchOpenReason = .click
         #expect(!model.overlay.shouldAutoCollapseOnMouseLeave)
     }
 
-    @Test func pinningLeavesCardsAndAClosedIslandAlone() {
-        let model = AppModel(defaults: MemoryDefaults())
-        model.notchStatus = .opened
-        model.notchOpenReason = .notification
-        model.pinHoverOpenedIsland()
-        #expect(model.notchOpenReason == .notification)
-
-        model.notchStatus = .closed
-        model.notchOpenReason = nil
-        model.pinHoverOpenedIsland()
-        #expect(model.notchOpenReason == nil)
-    }
-
-    @Test func aClickInsideAHoverOpenedIslandPinsIt() throws {
+    /// A press on a widget's button used to hold the island open until a
+    /// click outside it. It still follows the pointer after the press.
+    @Test func aClickInsideAHoverOpenedIslandLeavesItFollowingThePointer() throws {
         guard !NSScreen.screens.isEmpty else { return }
         let (model, controller) = modelWithPanel()
         model.notchOpen(reason: .hover)
@@ -341,8 +330,51 @@ struct IslandOpenTriggerTests {
         controller.handleMouseDown(try content(model, controller), isLocalEvent: true)
 
         #expect(model.notchStatus == .opened)
-        #expect(model.notchOpenReason == .click)
+        #expect(model.notchOpenReason == .hover)
+        #expect(model.overlay.shouldAutoCollapseOnMouseLeave)
         model.notchClose()
+    }
+
+    // MARK: A line that is not saved
+
+    @Test func onlyTextWithSomethingInItIsAnUnsavedLine() {
+        #expect(NookDraft.isUnsaved("milk"))
+        #expect(!NookDraft.isUnsaved(""))
+        #expect(!NookDraft.isUnsaved("  \n"))
+        #expect(!NookDraft.isUnsaved(nil))
+    }
+
+    /// The pin used to keep a half-typed note on screen. The widget's own
+    /// report does now, for as long as the line is not saved.
+    @Test func aHoverOpenedIslandStaysWhileAWidgetHoldsAnUnsavedLine() {
+        let model = AppModel(defaults: MemoryDefaults())
+        model.notchStatus = .opened
+        model.notchOpenReason = .hover
+        #expect(model.overlay.shouldAutoCollapseOnMouseLeave)
+
+        model.nook.setDraft(.note, isUnsaved: true)
+        model.nook.setDraft(.timerEntry, isUnsaved: true)
+        #expect(!model.overlay.shouldAutoCollapseOnMouseLeave)
+
+        model.nook.setDraft(.note, isUnsaved: false)
+        #expect(!model.overlay.shouldAutoCollapseOnMouseLeave, "the timer's line is still held")
+
+        model.nook.setDraft(.timerEntry, isUnsaved: false)
+        #expect(model.overlay.shouldAutoCollapseOnMouseLeave)
+    }
+
+    /// A line can never hold the island open for good: closing it by a
+    /// click outside forgets every line.
+    @Test func closingTheIslandForgetsEveryLine() throws {
+        guard !NSScreen.screens.isEmpty else { return }
+        let (model, _) = modelWithPanel()
+        model.notchOpen(reason: .hover)
+        model.nook.setDraft(.todo, isUnsaved: true)
+        #expect(model.nook.holdsUnsavedDraft)
+
+        model.notchClose()
+
+        #expect(model.nook.holdsUnsavedDraft == false)
     }
 
     // MARK: Hover and click modes

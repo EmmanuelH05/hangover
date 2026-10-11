@@ -30,7 +30,7 @@
 "settings.general.openTrigger" = "Open the island";
 "settings.general.openTrigger.hover" = "On hover";
 "settings.general.openTrigger.click" = "On click";
-"settings.general.openTrigger.note.hover" = "Resting the pointer on the island opens it, and it closes when the pointer leaves. Click inside it to keep it open.";
+"settings.general.openTrigger.note.hover" = "Resting the pointer on the island opens it, and it closes when the pointer leaves.";
 "settings.general.openTrigger.note.click" = "Only a click opens the island. It stays open until you click outside it or click the notch again.";
 "settings.general.openTrigger.files" = "Dragging files onto the island opens it either way, and dropping them puts them in the file tray.";
 "settings.general.linksFromOtherApps" = "Allow links from other apps";
@@ -1099,7 +1099,7 @@
 "onboarding.tips.body" = "Small things that are easy to miss.";
 "onboarding.tips.note" = "You can read these again any time: Settings, under About, shows this tour.";
 "onboarding.tips.keepOpen.hover.title" = "Keep it open";
-"onboarding.tips.keepOpen.hover.text" = "Once the island is open, click anywhere inside it. It then stays open after the pointer leaves.";
+"onboarding.tips.keepOpen.hover.text" = "With On hover, the island closes when the pointer leaves it. To make it stay until you click outside it, pick On click in Settings, under General.";
 "onboarding.tips.keepOpen.click.title" = "Close it from the notch";
 "onboarding.tips.keepOpen.click.text" = "Click the notch a second time to close the island. A click outside it works too.";
 "onboarding.tips.swipeAway.title" = "Swipe it away";

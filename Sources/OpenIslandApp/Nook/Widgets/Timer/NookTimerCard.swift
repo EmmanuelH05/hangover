@@ -38,6 +38,10 @@ struct NookTimerCard: View {
         .onDisappear {
             keyMonitor.remove()
             entry.cancel()
+            nook.setDraft(.timerEntry, isUnsaved: false)
+        }
+        .onChange(of: entry.text) { _, text in
+            nook.setDraft(.timerEntry, isUnsaved: NookDraft.isUnsaved(text))
         }
         .onChange(of: timer.isActive) { _, isActive in
             if isActive { entry.cancel() }

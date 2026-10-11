@@ -54,6 +54,8 @@ struct NookNotesCard: View {
                     service.append(draft)
                     draft = ""
                 }
+                .onChange(of: draft) { _, text in nook.setDraft(.note, isUnsaved: NookDraft.isUnsaved(text)) }
+                .onDisappear { nook.setDraft(.note, isUnsaved: false) }
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(service.entries.prefix(visibleEntryCount)) { entry in
                     NookNoteRow(entry: entry, canDelete: service.canDelete) { service.delete(entry.id) }

@@ -29,6 +29,10 @@ final class NookMirrorController {
     }
     /// Lets the app model resize the island when the camera's shape is known.
     @ObservationIgnored var onAspectRatioChange: (() -> Void)?
+    /// Told true just before macOS is asked for the camera and false when
+    /// it has the answer. The prompt comes up under an open island unless it
+    /// steps aside.
+    @ObservationIgnored var onSystemPromptChange: ((Bool) -> Void)?
 
     @ObservationIgnored private let box = SessionBox()
     @ObservationIgnored private let sessionQueue = DispatchQueue(label: "nook.mirror.session")
@@ -135,9 +139,11 @@ final class NookMirrorController {
     private func requestAccess() {
         guard !isRequestingAccess else { return }
         isRequestingAccess = true
+        onSystemPromptChange?(true)
         AVCaptureDevice.requestAccess(for: .video) { @Sendable _ in
             Task { @MainActor in
                 self.isRequestingAccess = false
+                self.onSystemPromptChange?(false)
                 self.authorization = AVCaptureDevice.authorizationStatus(for: .video)
                 if !self.isSessionRequested { self.startIfWanted() }
             }

@@ -600,11 +600,11 @@ private enum TrayTestFiles {
         #expect(action == .closeFromNotch)
     }
 
-    @Test func aClickInsideStillPinsAHoverOpenedIsland() {
+    @Test func aClickInsideAHoverOpenedIslandChangesNothingUnderAPickerEither() {
         let action = IslandPointerRules.clickAction(
             Self.context(reason: .hover, inExpandedArea: true, hasOpenPicker: true)
         )
-        #expect(action == .pin)
+        #expect(action == .none)
     }
 }
 

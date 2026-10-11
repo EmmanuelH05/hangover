@@ -28,9 +28,6 @@ enum IslandClickAction: Equatable, Sendable {
     case dismiss
     /// A click outside while a decision is pending. The island stays.
     case holdForDecision
-    /// A click inside a hover-opened island keeps it open after the pointer
-    /// leaves.
-    case pin
     /// A second click on the notch of an island that is held open closes it.
     case closeFromNotch
     case none
@@ -146,7 +143,10 @@ enum IslandPointerRules {
             }
             switch context.reason {
             case .hover:
-                return .pin
+                // The click is the control's under it. The island goes on
+                // following the pointer and closes when it leaves: a press
+                // on a widget's button must not hold it open (D20).
+                return .none
             case .click:
                 return context.isOnNotch && !context.blocksDismiss ? .closeFromNotch : .none
             case .notification, .boot, nil:

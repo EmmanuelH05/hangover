@@ -73,6 +73,10 @@ final class OverlayPanelController {
     /// The closed pill's rectangle, worked out with the placement, which means a
     /// scroll event never asks the screen (`computeNotchRect`).
     private var pillBounds = IslandPillBounds()
+    /// True while macOS shows a permission prompt the app asked for.
+    private var isSystemPromptUp = false
+    /// True while the island is open and takes the mouse.
+    private var isPanelOpen = false
     /// How long the panel keeps taking events after a swipe closed the
     /// island. The rest of the finger travel is swallowed here and does not
     /// reach the window under it. A hard limit, not a promise to wait for
@@ -183,6 +187,8 @@ final class OverlayPanelController {
         ))
         panel.ignoresMouseEvents = false
         panel.acceptsMouseMovedEvents = true
+        isPanelOpen = true
+        applyPanelLevel()
         startEventMonitoring()
         return diagnostics
     }
@@ -190,13 +196,33 @@ final class OverlayPanelController {
     func hide() {
         panel?.ignoresMouseEvents = true
         panel?.acceptsMouseMovedEvents = false
+        isPanelOpen = false
+        applyPanelLevel()
+    }
+
+    /// Told when the app puts a macOS permission prompt up and when it is
+    /// answered. An open island steps below the prompt (`IslandPanelLevel`).
+    func setSystemPromptUp(_ isUp: Bool) {
+        isSystemPromptUp = isUp
+        applyPanelLevel()
+    }
+
+    /// The level the panel is on now. Nil before the panel is made.
+    var panelLevel: NSWindow.Level? { panel?.level }
+
+    private func applyPanelLevel() {
+        guard let panel else { return }
+        let level = IslandPanelLevel.level(isOpen: isPanelOpen, isSystemPromptUp: isSystemPromptUp)
+        if panel.level != level { panel.level = level }
     }
 
     func setInteractive(_ interactive: Bool) {
+        isPanelOpen = interactive
         guard let panel else {
             return
         }
 
+        applyPanelLevel()
         panel.ignoresMouseEvents = !interactive
         panel.acceptsMouseMovedEvents = interactive
 
@@ -241,7 +267,7 @@ final class OverlayPanelController {
 
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = false
-        panel.level = .statusBar
+        panel.level = IslandPanelLevel.standard
         panel.sharingType = .readOnly
         panel.backgroundColor = .clear
         panel.isOpaque = false
@@ -738,9 +764,6 @@ final class OverlayPanelController {
             if isLocalEvent, let panel, NSPointInRect(screenLocation, panel.frame) {
                 repostMouseDown(at: screenLocation)
             }
-        case .pin:
-            // Observe only: the click still reaches the control under it.
-            model.pinHoverOpenedIsland()
         case .closeFromNotch:
             // The pointer is still on the notch. Without this, hover mode
             // would open the island again under it.
