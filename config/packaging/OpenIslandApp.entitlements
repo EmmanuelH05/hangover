@@ -15,10 +15,14 @@
     need no entitlement here. Apple lists no key for Reminders. They are
     read through EventKit, like the calendar.
 
-    Not needed: audio input (the mirror records no sound), location (the
-    weather city is typed), the Photos library (photo strips are plain
-    files), and every runtime exception. The app loads only its own
-    frameworks and Apple's.
+    Audio input is for the lights that follow the music: they read the
+    sound the Mac plays through a Core Audio tap, which the hardened runtime
+    counts as audio input. The microphone is never opened and the mirror
+    records no sound. Its usage text is NSAudioCaptureUsageDescription.
+
+    Not needed: location (the weather city is typed), the Photos library
+    (photo strips are plain files), and every runtime exception. The app
+    loads only its own frameworks and Apple's.
 -->
 <plist version="1.0">
 <dict>
@@ -30,6 +34,9 @@
     <true/>
     <!-- The mirror and its photo booth. -->
     <key>com.apple.security.device.camera</key>
+    <true/>
+
+    <key>com.apple.security.device.audio-input</key>
     <true/>
 </dict>
 </plist>

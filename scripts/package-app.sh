@@ -10,7 +10,7 @@ fi
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 app_name="${OPEN_ISLAND_APP_NAME:-Hangover}"
 bundle_identifier="${OPEN_ISLAND_BUNDLE_ID:-com.emmanuelhernandez.hangover}"
-version="${OPEN_ISLAND_VERSION:-1.0.10}"
+version="${OPEN_ISLAND_VERSION:-1.0.11}"
 build_number="${OPEN_ISLAND_BUILD_NUMBER:-$(git -C "$repo_root" rev-list --count HEAD 2>/dev/null || echo 1)}"
 package_root="${OPEN_ISLAND_PACKAGE_ROOT:-$repo_root/output/package}"
 bundle_dir="${OPEN_ISLAND_BUNDLE_DIR:-$package_root/$app_name.app}"
@@ -307,7 +307,6 @@ if [[ -n "$signing_identity" ]]; then
         codesign --force --options runtime --timestamp --sign "$signing_identity" "$sparkle_fw"
     fi
 
-    # Not run yet: no Developer ID build of the adapter has been made.
     codesign --force --options runtime --timestamp --sign "$signing_identity" "$adapter_fw"
 
     codesign --force --options runtime --timestamp --sign "$signing_identity" \
@@ -362,8 +361,17 @@ ditto -c -k --norsrc --noextattr --noqtn --keepParent "$bundle_dir" "$zip_path"
 
 # --- Notarize app bundle (before DMG so the stapled bundle goes into the DMG) ---
 if [[ -n "$signing_identity" && -n "$notary_profile" ]]; then
-    xcrun notarytool submit "$zip_path" --keychain-profile "$notary_profile" --wait
-    xcrun stapler staple -v "$bundle_dir"
+    # notarytool ends without an error when Apple says no: read its answer.
+    notary_output="$(xcrun notarytool submit "$zip_path" --keychain-profile "$notary_profile" --wait 2>&1)" || true
+    print -r -- "$notary_output"
+    if ! print -r -- "$notary_output" | grep -q "status: Accepted"; then
+        echo "Apple did not accept the build. Its reasons: xcrun notarytool log <id> --keychain-profile $notary_profile" >&2
+        exit 1
+    fi
+    if ! xcrun stapler staple -v "$bundle_dir"; then
+        echo "The ticket could not be stapled to the bundle." >&2
+        exit 1
+    fi
     rm -f "$zip_path"
     ditto -c -k --norsrc --noextattr --noqtn --keepParent "$bundle_dir" "$zip_path"
 fi

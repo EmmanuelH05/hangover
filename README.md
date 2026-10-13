@@ -56,16 +56,13 @@ It comes in English, Simplified Chinese and Traditional Chinese. A native speake
 
 You need macOS 14 or later and a Mac with Apple silicon.
 
-One thing to know first. I'm not in the Apple Developer Program, which means Apple hasn't notarized Hangover and macOS will block it the first time you open it. To open it anyway:
-
 1. Download [Hangover.zip](https://github.com/EmmanuelH05/hangover/releases/latest/download/Hangover.zip) and unzip it. That link is always the newest version.
-2. Move Hangover to your Applications folder and double-click it. macOS shows a warning. Click **Done**.
-3. Open **System Settings**, go to **Privacy & Security**, scroll down to **Security** and click **Open Anyway**. That button stays for about an hour.
-4. macOS asks one more time. Confirm it.
+2. Move Hangover to your Applications folder and double-click it.
+3. macOS asks if you want to open an app downloaded from the internet. Click **Open**.
 
-After that it opens like any other app. Only do this with a copy you downloaded from this repo, and leave Gatekeeper on. Apple explains these steps in [Open a Mac app from an unknown developer](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac).
+From 1.0.11 on, Hangover is signed with my Apple Developer ID and notarized by Apple.
 
-Hangover keeps itself up to date. It checks the first time you open it and once a day after that, downloads a new version by itself and installs it the next time the app starts. You can turn that off in Settings, About. Releases from 1.0.10 on are signed with one fixed certificate, which is what lets macOS keep your permissions across updates. The update to 1.0.10 itself asks for them one last time.
+Hangover keeps itself up to date. It checks the first time you open it and once a day after that, downloads a new version by itself and installs it the next time the app starts. You can turn that off in Settings, About. macOS ties what you allowed to the app's signature. The update to 1.0.11 asks for your permissions one last time, because its signature changed to Apple's. After that they stay.
 
 ## Build it yourself
 
