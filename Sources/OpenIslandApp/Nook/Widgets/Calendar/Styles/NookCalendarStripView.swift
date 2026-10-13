@@ -8,7 +8,17 @@ struct NookCalendarStripView: View {
 
     static let height: CGFloat = 176
 
-    private static let maxRows = 2
+    /// Rows of events and to-dos the look has room for under the week. Its
+    /// 176 points leave about 64 for them once the header and the week are
+    /// in, and a row is 15 with 3 between: three rows are 51. It was 2, which
+    /// left a third of the card empty under a "+N more" line.
+    static let maxRows = 3
+
+    /// How many rows the short list shows: all of them while they fit, and
+    /// one fewer when they do not, which gives the last row to "+N more".
+    static func shownWhenShort(total: Int) -> Int {
+        total <= maxRows ? total : maxRows - 1
+    }
     private static let maxMarks = 3
 
     @State private var weekStart: Date = Self.weekStart(of: Date())
@@ -141,8 +151,7 @@ struct NookCalendarStripView: View {
         let tasks = nook.tasksDue(on: picked)
         let total = events.count + tasks.count
         // When everything does not fit, one row gives way to the "+N more" line.
-        let fits = total <= Self.maxRows
-        let shownWhenShort = fits ? total : Self.maxRows - 1
+        let shownWhenShort = Self.shownWhenShort(total: total)
         let hidden = NookCalendarExpansion.hiddenRows(total: total, shownWhenCollapsed: shownWhenShort)
         // "+N more" grows the card by N rows, which the grid and the window
         // then make room for.
