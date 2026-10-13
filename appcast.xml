@@ -13,6 +13,14 @@
             a different app, and none of its entries belong here.
         -->
         <item>
+            <title>Version 1.0.11</title>
+            <pubDate>Tue, 13 Oct 2026 03:56:11 +0000</pubDate>
+            <sparkle:version>1364</sparkle:version>
+            <sparkle:shortVersionString>1.0.11</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/EmmanuelH05/hangover/releases/download/v1.0.11/Hangover.zip" sparkle:edSignature="jvJ5UWwHOUKSkwcFZ+bdYDORBbWdmUEmT1RsgHCUFvNU6sEzitJW/IGoANapNeA4IKuFhLazu8uRRoiCO6cCCA==" length="14616024" type="application/octet-stream"/>
+        </item>
+        <item>
             <title>Version 1.0.10</title>
             <pubDate>Tue, 13 Oct 2026 01:03:40 +0000</pubDate>
             <sparkle:version>1361</sparkle:version>
