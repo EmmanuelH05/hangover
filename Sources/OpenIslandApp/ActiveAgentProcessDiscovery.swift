@@ -14,6 +14,8 @@ struct ActiveAgentProcessDiscovery {
         var sessionID: String?
         var workingDirectory: String?
         var terminalTTY: String?
+        /// The process itself, which the monitor watches for its exit (D55).
+        var pid: Int32?
         var terminalApp: String?
         var transcriptPath: String?
         var tmuxTarget: String?
@@ -24,6 +26,7 @@ struct ActiveAgentProcessDiscovery {
             sessionID: String?,
             workingDirectory: String?,
             terminalTTY: String?,
+            pid: Int32? = nil,
             terminalApp: String? = nil,
             transcriptPath: String? = nil,
             tmuxTarget: String? = nil,
@@ -33,6 +36,7 @@ struct ActiveAgentProcessDiscovery {
             self.sessionID = sessionID
             self.workingDirectory = workingDirectory
             self.terminalTTY = terminalTTY
+            self.pid = pid
             self.terminalApp = terminalApp
             self.transcriptPath = transcriptPath
             self.tmuxTarget = tmuxTarget
@@ -163,6 +167,7 @@ struct ActiveAgentProcessDiscovery {
                     sessionID: nil,
                     workingDirectory: cwd,
                     terminalTTY: process.terminalTTY,
+                    pid: Int32(process.pid),
                     terminalApp: terminalApp(for: process, processesByPID: processesByPID)
                 )
 
@@ -194,6 +199,7 @@ struct ActiveAgentProcessDiscovery {
                     sessionID: nil,
                     workingDirectory: lsofOutput.flatMap(workingDirectory(from:)),
                     terminalTTY: process.terminalTTY,
+                    pid: Int32(process.pid),
                     terminalApp: terminalApp(for: process, processesByPID: processesByPID)
                 ))
                 continue
@@ -211,6 +217,7 @@ struct ActiveAgentProcessDiscovery {
                     sessionID: nil,
                     workingDirectory: lsofOutput.flatMap(workingDirectory(from:)),
                     terminalTTY: process.terminalTTY,
+                    pid: Int32(process.pid),
                     terminalApp: terminalApp(for: process, processesByPID: processesByPID)
                 ))
                 continue
@@ -228,6 +235,7 @@ struct ActiveAgentProcessDiscovery {
                     sessionID: nil,
                     workingDirectory: lsofOutput.flatMap(workingDirectory(from:)),
                     terminalTTY: process.terminalTTY,
+                    pid: Int32(process.pid),
                     terminalApp: terminalApp(for: process, processesByPID: processesByPID)
                 ))
                 continue
@@ -245,6 +253,7 @@ struct ActiveAgentProcessDiscovery {
                     sessionID: nil,
                     workingDirectory: lsofOutput.flatMap(workingDirectory(from:)),
                     terminalTTY: process.terminalTTY,
+                    pid: Int32(process.pid),
                     terminalApp: terminalApp(for: process, processesByPID: processesByPID)
                 ))
                 continue
@@ -299,6 +308,7 @@ struct ActiveAgentProcessDiscovery {
             sessionID: sessionID,
             workingDirectory: workingDirectory(from: lsofOutput),
             terminalTTY: process.terminalTTY,
+            pid: Int32(process.pid),
             terminalApp: terminalApp(for: process, processesByPID: processesByPID)
         )
 
@@ -335,6 +345,7 @@ struct ActiveAgentProcessDiscovery {
             sessionID: sessionID,
             workingDirectory: workingDirectory,
             terminalTTY: process.terminalTTY,
+            pid: Int32(process.pid),
             terminalApp: terminalApp(for: process, processesByPID: processesByPID)
         )
 
@@ -400,6 +411,7 @@ struct ActiveAgentProcessDiscovery {
             sessionID: sessionID,
             workingDirectory: workingDirectory,
             terminalTTY: process.terminalTTY,
+            pid: Int32(process.pid),
             terminalApp: terminalApp(for: process, processesByPID: processesByPID),
             transcriptPath: transcriptPath
         )

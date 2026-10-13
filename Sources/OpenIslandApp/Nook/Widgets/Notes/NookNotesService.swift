@@ -136,9 +136,12 @@ final class NookNotesService {
             // send, and the prompt opens under the island. Until that answer
             // is in, a send counts as a prompt (D52). Later sends do not: the
             // island would dip for every note.
-            let mayAsk = self?.hasNotesAnswer == false
-            if mayAsk { self?.nook?.systemPromptBegan() }
-            defer { if mayAsk { self?.nook?.systemPromptEnded() } }
+            // The model is held for the length of the send: the end must
+            // reach the model the begin reached, whatever becomes of the
+            // service in between.
+            let asked = self?.hasNotesAnswer == false ? self?.nook : nil
+            asked?.systemPromptBegan()
+            defer { asked?.systemPromptEnded() }
             do {
                 try await writer.append(lineHTML: line, toNoteTitled: NookAppleNotesLine.noteTitle)
                 self?.savedCount += 1

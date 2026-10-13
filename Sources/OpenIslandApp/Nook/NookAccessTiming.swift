@@ -79,7 +79,7 @@ enum NookAccessTiming {
             return [.calendar]
         case .todo:
             return todoSource == .reminders ? [.reminders] : []
-        case .media, .notes, .tray, .timer, .mirror, .weather:
+        case .media, .notes, .tray, .timer, .mirror, .weather, .design, .linkAudio:
             return []
         }
     }

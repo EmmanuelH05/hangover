@@ -27,14 +27,11 @@ struct NookSettingsPane: View {
         @Bindable var nook = nook
         return Form {
             Section("Widgets") {
-                ForEach(NookWidgetKind.allCases) { kind in
+                ForEach(NookWidgetKind.offered) { kind in
                     Toggle(isOn: Binding(
                         get: { nook.isWidgetEnabled(kind) },
                         set: { isOn in
-                            nook.setWidget(kind, enabled: isOn)
-                            // Turning the calendar or the to-do widget on
-                            // is when macOS is asked for its permission.
-                            if isOn { nook.widgetTurnedOn(kind) }
+                            nook.setWidgetFromSettings(kind, enabled: isOn)
                         }
                     )) {
                         Label(kind.title, systemImage: kind.systemImage)
@@ -100,6 +97,8 @@ struct NookSettingsPane: View {
             NookMirrorSettings(nook: nook)
             NookPhotoBoothSettings(nook: nook)
             NookWeatherSettings(nook: nook)
+            NookDesignSettings(nook: nook)
+            if nook.offersLinkAudio { NookLinkAudioSettings(nook: nook) }
             NookPowerSettings(nook: nook)
             NookVolumeSettings(nook: nook)
         }

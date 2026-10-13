@@ -571,15 +571,24 @@ public final class CodexRolloutDiscovery: @unchecked Sendable {
         var buffer = Data()
         var bytesRead = 0
 
-        while let chunk = try? fileHandle.read(upToCount: Self.streamingChunkSize),
-              !chunk.isEmpty {
-            buffer.append(chunk)
-            bytesRead += chunk.count
-            diagnostics.bytesRead += chunk.count
-            for line in extractCompleteLines(from: &buffer) {
-                CodexRolloutReducer.apply(line: line, to: &snapshot)
-                if sessionMeta == nil {
-                    sessionMeta = parseSessionMeta(fromLine: line)
+        // The same pool as the Claude discovery (D54): the chunks and the
+        // JSON trees are autoreleased, and this runs in the launch's one job.
+        var reachedEnd = false
+        while !reachedEnd {
+            autoreleasepool {
+                guard let chunk = try? fileHandle.read(upToCount: Self.streamingChunkSize),
+                      !chunk.isEmpty else {
+                    reachedEnd = true
+                    return
+                }
+                buffer.append(chunk)
+                bytesRead += chunk.count
+                diagnostics.bytesRead += chunk.count
+                for line in extractCompleteLines(from: &buffer) {
+                    CodexRolloutReducer.apply(line: line, to: &snapshot)
+                    if sessionMeta == nil {
+                        sessionMeta = parseSessionMeta(fromLine: line)
+                    }
                 }
             }
         }

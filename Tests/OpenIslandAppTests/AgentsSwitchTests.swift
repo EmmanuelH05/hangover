@@ -395,8 +395,9 @@ struct AgentsSwitchTests {
     @Test
     func theTourLeavesItsAgentsPageOutWhileOff() {
         let off = OnboardingPage.shown(agentsEnabled: false)
-        #expect(off == [.welcome, .purpose, .opening, .closed, .widgets, .features, .layout, .arrange, .todos, .notes, .weather, .opened, .look, .permissions, .integrations, .tips, .done])
-        #expect(OnboardingPage.shown(agentsEnabled: true) == OnboardingPage.allCases)
+        #expect(off == [.welcome, .length, .purpose, .opening, .closed, .widgets, .features, .layout, .arrange, .todos, .notes, .weather, .opened, .look, .permissions, .integrations, .tips, .done])
+        #expect(OnboardingPage.shown(agentsEnabled: true) == OnboardingPage.mainTour)
+        #expect(OnboardingPage.shown(length: .long, agentsEnabled: true) == OnboardingPage.allCases)
     }
 
     @Test
@@ -407,7 +408,7 @@ struct AgentsSwitchTests {
             flow.next()
             seen.append(flow.page)
         }
-        #expect(seen == [.welcome, .purpose, .opening, .closed, .widgets, .features, .layout, .arrange, .todos, .notes, .weather, .opened, .look, .permissions, .integrations, .tips, .done])
+        #expect(seen == [.welcome, .length, .purpose, .opening, .closed, .widgets, .features, .layout, .arrange, .todos, .notes, .weather, .opened, .look, .permissions, .integrations, .tips, .done])
 
         flow.go(to: .agents)
         #expect(flow.page == .done)
@@ -415,6 +416,7 @@ struct AgentsSwitchTests {
         flow.go(to: .widgets)
         flow.back()
         #expect(flow.page == .closed)
+        flow.back()
         flow.back()
         flow.back()
         flow.back()
@@ -442,6 +444,7 @@ struct AgentsSwitchTests {
             },
             actions: actions
         )
+        tour.answerQuestion()
         // Weather starts switched off, so its page is not walked.
         #expect(tour.pages == OnboardingPage.shown(agentsEnabled: true, hasWeatherWidget: false))
 
@@ -487,10 +490,10 @@ struct AgentsSwitchTests {
     @Test
     func theTourSaysNothingAboutAgentsWhileOff() {
         #expect(OnboardingGrant.shown(agentsEnabled: false) == [.camera, .accessibility, .calendar])
-        #expect(OnboardingGrant.shown(agentsEnabled: true) == OnboardingGrant.allCases)
+        #expect(OnboardingGrant.shown(agentsEnabled: true) == OnboardingGrant.allCases.filter { $0 != .audio })
 
         #expect(OnboardingRecapRow.shown(agentsEnabled: false) == [.opens, .closed, .widgets, .calendar, .todos, .notes, .weather, .layout, .opened, .glow])
-        #expect(OnboardingRecapRow.shown(agentsEnabled: true) == OnboardingRecapRow.allCases)
+        #expect(OnboardingRecapRow.shown(agentsEnabled: true) == OnboardingRecapRow.standard)
     }
 
     @Test

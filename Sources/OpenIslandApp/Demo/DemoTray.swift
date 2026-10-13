@@ -67,7 +67,9 @@ final class DemoPasteboard: NookPasteboardAccess {
     }
 }
 
-/// A token store that holds nothing and touches no Keychain (D51).
+/// A token store that holds nothing and touches no token file or Keychain
+/// (D51). The demo's services get no way to bring an older token over
+/// either, which is the default of their `tokenMove`.
 struct DemoTokenStore: NookTodoTokenStoring {
     func read() throws -> String? { nil }
     func save(_ token: String) throws {}

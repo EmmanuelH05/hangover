@@ -32,6 +32,7 @@ struct NookCalendarAddButton: View {
 /// nothing is read out of the title unless the user takes the suggestion.
 struct NookEventEditor: View {
     var nook: NookModel
+    @Environment(\.hangoverAccent) private var accent
 
     @State private var visibleMonth = Date()
     @State private var errorMessage: String?
@@ -138,7 +139,7 @@ struct NookEventEditor: View {
                 HStack(spacing: 4) {
                     Image(systemName: form.isAllDay ? "checkmark.square.fill" : "square")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(form.isAllDay ? Color.orange : Color.white.opacity(0.5))
+                        .foregroundStyle(form.isAllDay ? accent.highlight(.orange) : Color.white.opacity(0.5))
                     Text("All day")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.white.opacity(0.8))
@@ -260,10 +261,10 @@ struct NookEventEditor: View {
             Button("Save") { save() }
                 .buttonStyle(.plain)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(form.canSave ? Color.black : Color.white.opacity(0.35))
+                .foregroundStyle(form.canSave ? accent.textOnHighlight(.black) : Color.white.opacity(0.35))
                 .padding(.horizontal, 14)
                 .frame(height: Self.rowHeight)
-                .background(Capsule().fill(form.canSave ? Color.white.opacity(0.9) : Color.white.opacity(0.08)))
+                .background(Capsule().fill(form.canSave ? accent.highlight(.white).opacity(0.9) : Color.white.opacity(0.08)))
                 .contentShape(Capsule())
                 .disabled(!form.canSave)
         }
@@ -292,11 +293,13 @@ struct NookEventEditor: View {
                 TextField("", text: text, prompt: Text(prompt), axis: .vertical)
                     .lineLimit(2, reservesSpace: true)
                     .textFieldStyle(.plain)
+                    .tint(accent.controlTint)
                     .font(.system(size: size, weight: weight))
                     .foregroundStyle(.white.opacity(0.85))
             } else {
                 TextField("", text: text, prompt: Text(prompt))
                     .textFieldStyle(.plain)
+                    .tint(accent.controlTint)
                     .font(.system(size: size, weight: weight))
                     .foregroundStyle(.white.opacity(0.85))
             }
@@ -397,11 +400,13 @@ private extension View {
     }
 }
 
-/// A small month for picking a day: today in orange, the picked day filled.
+/// A small month for picking a day. The picked day is filled white. Today is
+/// the Nook's orange, or sits on a circle of the accent when one is set.
 struct NookMiniMonth: View {
     @Binding var visibleMonth: Date
     let picked: Date
     let onPick: (Date) -> Void
+    @Environment(\.hangoverAccent) private var accent
 
     private static let cellHeight: CGFloat = 19
     private static let headerHeight: CGFloat = 20
@@ -453,15 +458,18 @@ struct NookMiniMonth: View {
         let isPicked = calendar.isDate(date, inSameDayAs: picked)
         let isToday = calendar.isDate(date, inSameDayAs: now)
         let inMonth = calendar.isDate(date, equalTo: visibleMonth, toGranularity: .month)
+        // With an accent set, today is a fill and the picked day stays white.
+        let todayFill = isToday ? accent.pickedFill : nil
+        let ownText = isPicked ? Color.black : (isToday ? Color.orange : Color.white.opacity(0.85))
         return Button {
             onPick(date)
             if !inMonth { visibleMonth = date }
         } label: {
             Text("\(calendar.component(.day, from: date))")
                 .font(.system(size: 10.5, weight: isPicked || isToday ? .semibold : .regular))
-                .foregroundStyle(isPicked ? Color.black : (isToday ? Color.orange : Color.white.opacity(0.85)))
+                .foregroundStyle(todayFill == nil ? ownText : accent.pickedText(ownText))
                 .frame(width: Self.cellHeight - 2, height: Self.cellHeight - 2)
-                .background(Circle().fill(isPicked ? Color.white.opacity(0.9) : Color.clear))
+                .background(Circle().fill(todayFill ?? (isPicked ? Color.white.opacity(0.9) : Color.clear)))
                 .frame(maxWidth: .infinity, minHeight: Self.cellHeight, maxHeight: Self.cellHeight)
                 .opacity(inMonth || isPicked ? 1 : 0.3)
                 .contentShape(Rectangle())

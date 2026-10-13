@@ -4,7 +4,10 @@ import OpenIslandCore
 
 // MARK: - Settings tabs
 
-enum SettingsTab: String, CaseIterable, Identifiable {
+enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
+    /// Where `openIslandSelectSettingsTab` carries the tab.
+    static let userInfoKey = "tab"
+
     case general
     case setup
     case display
@@ -131,8 +134,18 @@ struct SettingsView: View {
         }
         .frame(minWidth: 680, idealWidth: 780, minHeight: 480, idealHeight: 560)
         .preferredColorScheme(.dark)
+        // The accent color (D62). The tint is set for a fixed color only. It
+        // reaches switches, checkboxes, sliders, segmented pickers, progress
+        // bars, default style buttons and prominent buttons. It does not
+        // reach menus, menu pickers, steppers or links.
+        .tint(model.settingsRootTint)
+        .environment(\.hangoverAccent, model.accentTint)
         .onReceive(NotificationCenter.default.publisher(for: .openIslandSelectSetupTab)) { _ in
             selectedTab = SettingsTab.setup.landing(agentsEnabled: model.agentsEnabled)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openIslandSelectSettingsTab)) { note in
+            guard let raw = note.userInfo?[SettingsTab.userInfoKey] as? String, let tab = SettingsTab(rawValue: raw) else { return }
+            selectedTab = tab.landing(agentsEnabled: model.agentsEnabled)
         }
         .onReceive(NotificationCenter.default.publisher(for: .openIslandSelectNookTodo)) { _ in
             selectedTab = .nook
@@ -1021,7 +1034,7 @@ struct SetupSettingsPane: View {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(model.accentTint.highlight(Color.accentColor))
                     .frame(width: 28)
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -1093,8 +1106,8 @@ struct SetupSettingsPane: View {
                     }
 
                     if hasRepairableIssues {
-                        Button(lang.t("setup.diagnostics.repair")) {
-                            model.repairHooks()
+                        Button { model.repairHooks() } label: {
+                            Text(lang.t("setup.diagnostics.repair")).foregroundStyle(ifSet: model.settingsProminentLabel)
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -1477,35 +1490,5 @@ struct RemoteConnectionSection: View {
             }
             .padding(.vertical, multiline ? 2 : 0)
         }
-    }
-}
-
-// MARK: - Update Banner
-
-struct UpdateBanner: View {
-    let version: String
-    let lang: LanguageManager
-    var onUpdate: () -> Void
-
-    var body: some View {
-        Button(action: onUpdate) {
-            HStack(spacing: 6) {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                Text(lang.t("settings.update.available", version))
-                    .font(.system(size: 12, weight: .medium))
-                Image(systemName: "arrow.down.to.line")
-                    .font(.system(size: 10, weight: .bold))
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(
-                Capsule()
-                    .fill(Color.blue)
-            )
-        }
-        .buttonStyle(.plain)
-        .shadow(color: .blue.opacity(0.3), radius: 4, y: 2)
     }
 }

@@ -115,9 +115,9 @@ struct OnboardingGlowPage: View {
             title: context.t("onboarding.look.title"),
             text: context.t("onboarding.look.body"),
             footnote: context.t("onboarding.look.note"),
-            gap: 14
+            gap: 10
         ) {
-            VStack(spacing: 12) {
+            VStack(spacing: 8) {
                 HStack(spacing: 14) {
                     ForEach(IslandHaloStyle.allCases) { style in strengthCard(style) }
                 }
@@ -131,6 +131,9 @@ struct OnboardingGlowPage: View {
                         context.actions.setGlowTheme(theme)
                     }
                 }
+
+                // The lights that follow the beat (D56), where the glow is.
+                OnboardingLightsRow(context: context)
             }
         }
     }
@@ -160,15 +163,15 @@ struct OnboardingGlowPage: View {
                     right: sides.right
                 )
                 .frame(maxWidth: .infinity)
-                .frame(height: 66)
+                .frame(height: 44)
                 Text(context.t("settings.appearance.nook.halo.\(style.rawValue)"))
                     .font(.system(size: 13.5, weight: .semibold))
                     .foregroundStyle(OnboardingStyle.primaryText)
                     .frame(maxWidth: .infinity)
-                    .padding(.bottom, 11)
+                    .padding(.bottom, 8)
             }
         }
-        .frame(height: 100)
+        .frame(height: 74)
     }
 
     /// The color the three sample pills glow in: the first color of the

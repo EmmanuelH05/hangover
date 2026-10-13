@@ -111,4 +111,20 @@ struct HangoverBrandTests {
         #expect(script.contains("Contents/Resources/\(AppBrand.bundledLicenseFileName)"))
         #expect(script.contains("Contents/Resources/NOTICE.md"))
     }
+
+    /// A release signed ad-hoc, or with another certificate of the same
+    /// name, makes every user grant their permissions again (D57).
+    @Test func thePackageScriptSignsWithTheReleasesCertificateOrStops() throws {
+        let script = try Self.text(of: "scripts/package-app.sh")
+        // No signing command is ad-hoc by itself: each takes the identity
+        // the script chose, and ad-hoc is that choice only when asked for.
+        #expect(!script.contains("--sign - "))
+        #expect(script.contains("--sign \"$local_sign\""))
+        #expect(script.contains("OPEN_ISLAND_ADHOC_SIGN"))
+        // The certificate is named by its hash, before the build and in the
+        // signed bundle's requirement after it.
+        #expect(script.contains("release_leaf=\"${OPEN_ISLAND_LOCAL_SIGN_LEAF:-515cccddad0bac81c73a09fa96c07077110661d2}\""))
+        #expect(script.contains("[[ \"$found_leaf\" != \"${release_leaf:l}\" ]]"))
+        #expect(script.contains("certificate leaf = H\\\"$release_leaf\\\""))
+    }
 }

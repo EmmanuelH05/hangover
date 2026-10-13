@@ -50,6 +50,7 @@ struct ActiveAgentProcessDiscoveryTests {
             sessionID: nil,
             workingDirectory: "/tmp/open-island",
             terminalTTY: "/dev/ttys002",
+            pid: 102,
             terminalApp: "Ghostty"
         )))
         #expect(snapshots.contains(.init(
@@ -57,6 +58,7 @@ struct ActiveAgentProcessDiscoveryTests {
             sessionID: "019d516f-71ee-7e40-bcff-502fedac0928",
             workingDirectory: "/tmp/open-island",
             terminalTTY: "/dev/ttys001",
+            pid: 202,
             terminalApp: "Ghostty"
         )))
     }
@@ -90,6 +92,7 @@ struct ActiveAgentProcessDiscoveryTests {
                 sessionID: "9df061a9-6836-4ccb-b83b-aea3196eca43",
                 workingDirectory: "/tmp/open-island",
                 terminalTTY: "/dev/ttys002",
+                pid: 102,
                 terminalApp: "Ghostty"
             ),
         ])
@@ -132,6 +135,7 @@ struct ActiveAgentProcessDiscoveryTests {
                 sessionID: "019e0dc1-3f8b-7eb0-ae8d-04a5911e95b9",
                 workingDirectory: "/tmp/open-island",
                 terminalTTY: "/dev/ttys001",
+                pid: 202,
                 terminalApp: "Ghostty"
             ),
         ])
@@ -174,6 +178,7 @@ struct ActiveAgentProcessDiscoveryTests {
                 sessionID: "6f7b9f8a-2bd0-48b4-a497-9801dd191d03",
                 workingDirectory: "/tmp/simple-agent-lab",
                 terminalTTY: "/dev/ttys003",
+                pid: 302,
                 terminalApp: "Ghostty"
             ),
         ])
@@ -253,6 +258,7 @@ struct ActiveAgentProcessDiscoveryTests {
                 sessionID: nil,
                 workingDirectory: "/tmp/open-island",
                 terminalTTY: "/dev/ttys002",
+                pid: 102,
                 terminalApp: expectedTerminal
             ),
         ])
@@ -321,6 +327,7 @@ struct ActiveAgentProcessDiscoveryTests {
             sessionID: nil,
             workingDirectory: "/tmp/pi-project",
             terminalTTY: "/dev/ttys001",
+            pid: 101,
             terminalApp: "Ghostty"
         )))
         #expect(snapshots.contains(.init(
@@ -328,6 +335,7 @@ struct ActiveAgentProcessDiscoveryTests {
             sessionID: nil,
             workingDirectory: "/tmp/omp-project",
             terminalTTY: "/dev/ttys002",
+            pid: 102,
             terminalApp: "Ghostty"
         )))
     }

@@ -84,6 +84,10 @@ final class AgentHotkeyController {
 
     // MARK: - Settings
 
+    /// Shortcuts something else in the app holds, which these may not take.
+    /// The design kit's eyedropper has its own while it is switched on.
+    @ObservationIgnored var reservedShortcuts: () -> [AgentHotkeyCombo] = { [] }
+
     func combo(for action: AgentHotkeyAction) -> AgentHotkeyCombo {
         settings.combo(for: action)
     }
@@ -106,6 +110,7 @@ final class AgentHotkeyController {
         if let problem = AgentHotkeyRules.problem(with: combo, for: action, in: settings) {
             return problem
         }
+        if reservedShortcuts().contains(combo) { return .usedByEyedropper }
         guard settings.combo(for: action) != combo else { return nil }
         settings.setCombo(combo, for: action)
         defaults.set(combo.storageValue, forKey: action == .approve ? Self.approveComboKey : Self.denyComboKey)

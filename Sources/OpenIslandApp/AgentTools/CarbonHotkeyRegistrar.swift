@@ -207,7 +207,9 @@ final class CarbonHotkeyRegistrar: AgentHotkeyRegistering {
         }
     }
 
-    private static func carbonModifiers(_ modifiers: AgentHotkeyModifiers) -> UInt32 {
+    /// Not private: the design kit's eyedropper shortcut registers its
+    /// own hot key with the same modifiers.
+    static func carbonModifiers(_ modifiers: AgentHotkeyModifiers) -> UInt32 {
         var result = 0
         if modifiers.contains(.control) { result |= controlKey }
         if modifiers.contains(.option) { result |= optionKey }

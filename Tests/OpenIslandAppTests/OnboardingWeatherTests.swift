@@ -44,8 +44,8 @@ struct OnboardingWeatherTests {
         let with = OnboardingPage.shown(agentsEnabled: true, hasWeatherWidget: true)
         let without = OnboardingPage.shown(agentsEnabled: true, hasWeatherWidget: false)
 
-        #expect(with == OnboardingPage.allCases)
-        #expect(without == OnboardingPage.allCases.filter { $0 != .weather })
+        #expect(with == OnboardingPage.mainTour)
+        #expect(without == OnboardingPage.mainTour.filter { $0 != .weather })
         #expect(OnboardingPage.allCases.filter(\.needsWeatherWidget) == [.weather])
         #expect(OnboardingPage.weather.isLive)
         #expect(OnboardingPage.weather.chapter == .yours)
@@ -56,14 +56,14 @@ struct OnboardingWeatherTests {
     }
 
     @Test func thePageListAndTheStepCountCountTheWeatherPage() {
-        #expect(OnboardingPage.shown(agentsEnabled: true).count == 18)
-        #expect(OnboardingPage.shown(agentsEnabled: true, hasWeatherWidget: false).count == 17)
+        #expect(OnboardingPage.shown(agentsEnabled: true).count == 19)
+        #expect(OnboardingPage.shown(agentsEnabled: true, hasWeatherWidget: false).count == 18)
         // Everything optional off: welcome to the widgets, layout and
         // arrange, then the opened island and the last chapter.
         #expect(OnboardingPage.shown(
             agentsEnabled: false, hasTodoWidget: false, hasNotesWidget: false, hasWeatherWidget: false
         ) == [
-            .welcome, .purpose, .opening, .closed, .widgets, .features, .layout, .arrange, .opened, .look,
+            .welcome, .length, .purpose, .opening, .closed, .widgets, .features, .layout, .arrange, .opened, .look,
             .permissions, .integrations, .tips, .done,
         ])
     }
@@ -263,7 +263,7 @@ struct OnboardingWeatherTests {
     @Test func theRecapNamesThePlaceOnlyWhileTheWeatherWidgetIsOn() {
         #expect(OnboardingRecapRow.shown(agentsEnabled: true).contains(.weather))
         #expect(OnboardingRecapRow.shown(agentsEnabled: true, hasWeatherWidget: false)
-            == OnboardingRecapRow.allCases.filter { $0 != .weather })
+            == OnboardingRecapRow.standard.filter { $0 != .weather })
         // Right after the notes row.
         let rows = OnboardingRecapRow.shown(agentsEnabled: true)
         #expect(rows.firstIndex(of: .weather) == (rows.firstIndex(of: .notes) ?? -2) + 1)

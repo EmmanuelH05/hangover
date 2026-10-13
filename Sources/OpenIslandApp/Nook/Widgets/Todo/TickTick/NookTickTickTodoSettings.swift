@@ -44,7 +44,7 @@ struct NookTickTickTodoSettings: View {
                 if needsToken {
                     Button(lang.t("nook.todo.ticktick.connect"), action: connect)
                         .disabled(draftToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            || service.state == .connecting)
+                            || service.state == .connecting || service.isMovingToken)
                 }
                 if service.hasToken {
                     Button(lang.t("nook.todo.ticktick.disconnect"), role: .destructive) {
@@ -57,9 +57,29 @@ struct NookTickTickTodoSettings: View {
                     Link(lang.t("nook.todo.ticktick.openWeb"), destination: url)
                 }
             }
+            if service.tokenMoveOffer.isShown {
+                moveOffer
+            }
             statusRow
             if service.tokenRemovalFailed {
                 warning("nook.todo.ticktick.error.tokenNotRemoved")
+            }
+        }
+    }
+
+    /// Shown only when an older build may have left a token in the Keychain.
+    /// The press is what reads it, because reading is what macOS asks about.
+    private var moveOffer: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button(lang.t("nook.todo.token.bringOver")) {
+                Task { await service.bringTokenOver() }
+            }
+            .disabled(service.isMovingToken || service.state == .connecting)
+            Text(lang.t("nook.todo.token.bringOver.caption"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if service.moveFailed {
+                warning("nook.todo.token.moveFailed")
             }
         }
     }
@@ -77,6 +97,9 @@ struct NookTickTickTodoSettings: View {
 
     private var statusText: String {
         var text = lang.t(service.state.messageKey)
+        if let problem = service.tokenProblemText {
+            text += " " + problem
+        }
         if service.isShowingCachedItems {
             text += " " + lang.t("nook.todo.ticktick.savedTasks")
         }
@@ -94,10 +117,13 @@ struct NookTickTickTodoSettings: View {
     }
 
     private func connect() {
+        // Return in the field reaches here too, which the button's own
+        // disabled state does not stop.
+        guard !service.isMovingToken else { return }
         let token = draftToken
         Task {
             await service.connect(token: token)
-            // Once it connects the token lives only in the Keychain. After a
+            // Once it connects the token lives only in its file. After a
             // failure it stays in the field for another try.
             if service.hasToken, !service.tokenRejected, draftToken == token {
                 draftToken = ""

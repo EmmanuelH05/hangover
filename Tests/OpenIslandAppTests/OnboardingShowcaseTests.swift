@@ -39,6 +39,7 @@ struct OnboardingShowcaseProofTests {
     }
 
     @Test func everyWidgetHasFourToSevenLines() {
+        // Every widget has lines, the design kit and Link to MP3 included.
         for kind in NookWidgetKind.allCases {
             let lines = OnboardingAbility.lines(for: kind)
             #expect((4...7).contains(lines.count), "\(kind) has \(lines.count) lines")
@@ -107,7 +108,7 @@ struct OnboardingIntegrationsTests {
         let index = pages.firstIndex(of: .integrations) ?? -1
         #expect(index >= 0 && pages[index + 1] == .tips)
         #expect(OnboardingPage.integrations.chapter == .know)
-        #expect(OnboardingPage.integrations.snapshotName == "16-integrations")
+        #expect(OnboardingPage.integrations.snapshotName == "32-integrations")
         #expect(!OnboardingPage.integrations.isAgentsOnly)
         #expect(!OnboardingPage.integrations.needsTodoWidget)
     }
@@ -118,12 +119,14 @@ struct OnboardingIntegrationsTests {
         let tour = OnboardingTour(startingAt: .integrations, state: { state })
         let pages = tour.pages
 
-        #expect(pages.count == 17)
-        #expect(pages.firstIndex(of: .integrations) == 14)
+        // A tour that starts past the question walks the main tour.
+        #expect(pages.count == 18)
+        #expect(pages.firstIndex(of: .integrations) == 15)
         var nookOnly = state
         nookOnly.agentsEnabled = false
-        #expect(OnboardingTour.pages(for: nookOnly).count == 16)
-        #expect(OnboardingView.progressFraction(step: 15, count: pages.count) == CGFloat(15) / CGFloat(17))
+        nookOnly.length = .medium
+        #expect(OnboardingTour.pages(for: nookOnly).count == 17)
+        #expect(OnboardingView.progressFraction(step: 16, count: pages.count) == CGFloat(16) / CGFloat(18))
     }
 }
 

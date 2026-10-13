@@ -106,11 +106,15 @@ final class NookTodoHub {
     init(
         defaults: UserDefaults = .standard,
         notion: NookNotionTodoService? = nil,
-        tickTick: NookTickTickTodoService? = nil
+        tickTick: NookTickTickTodoService? = nil,
+        tokenMoves: NookTodoTokenMoves = .forThisRun
     ) {
         self.defaults = defaults
-        self.notion = notion ?? NookNotionTodoService(defaults: defaults)
-        self.tickTick = tickTick ?? NookTickTickTodoService(defaults: defaults)
+        // The real services are the only ones that can reach the Keychain,
+        // and only to bring an older token over when the user asks. A test
+        // run gets no way to reach it, whatever the test builds.
+        self.notion = notion ?? NookNotionTodoService(defaults: defaults, tokenMove: tokenMoves.notion)
+        self.tickTick = tickTick ?? NookTickTickTodoService(defaults: defaults, tokenMove: tokenMoves.tickTick)
         selectedKind = defaults.string(forKey: Self.sourceKey).flatMap(NookTodoSourceKind.init(rawValue:)) ?? .reminders
         self.notion.onNotesWriteFinished = { [weak self] id, text, saved in
             self?.notesWriteFinished(id: id, text: text, saved: saved)
@@ -145,8 +149,8 @@ final class NookTodoHub {
         }
     }
 
-    /// A network source does no Keychain, disk or network work unless it is
-    /// the selected one.
+    /// A network source does no token file, disk or network work unless it
+    /// is the selected one.
     private func applySelection() {
         guard hasStarted else { return }
         notion.setActive(selectedKind == .notion)

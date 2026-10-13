@@ -78,7 +78,7 @@ private final class SeekCommandLog {
         tracker.begin(target: 120, state: track, now: Self.start)
 
         // Half a second later the player reports the new position.
-        let answered = NookMediaSamples.track(elapsed: 120, at: Self.start.addingTimeInterval(0.5))
+        let answered = NookMediaSamples.track(identifier: "after-the-seek", elapsed: 120, at: Self.start.addingTimeInterval(0.5))
         tracker.observe(answered, now: Self.start.addingTimeInterval(0.5))
 
         #expect(tracker.pending == nil)
@@ -102,8 +102,8 @@ private final class SeekCommandLog {
     }
 
     @Test func oneTrackRefusingDoesNotSwitchSeekingOffForTheWholeApp() {
-        let live = NookMediaSamples.track(bundle: "com.google.Chrome", item: "live-stream", elapsed: 10)
-        let video = NookMediaSamples.track(bundle: "com.google.Chrome", item: "video", elapsed: 10)
+        let live = NookMediaSamples.track(bundle: "com.google.Chrome", title: "live-stream", elapsed: 10)
+        let video = NookMediaSamples.track(bundle: "com.google.Chrome", title: "video", elapsed: 10)
         var tracker = NookSeekTracker()
         tracker.begin(target: 120, state: live, now: Self.start)
         tracker.observe(live, now: Self.start.addingTimeInterval(10))
@@ -113,8 +113,8 @@ private final class SeekCommandLog {
     }
 
     @Test func aTrackChangeDropsTheSeekWithoutBlamingEitherTrack() {
-        let first = NookMediaSamples.track(item: "one", elapsed: 190)
-        let second = NookMediaSamples.track(item: "two", elapsed: 0, at: Self.start.addingTimeInterval(5))
+        let first = NookMediaSamples.track(title: "one", elapsed: 190)
+        let second = NookMediaSamples.track(title: "two", elapsed: 0, at: Self.start.addingTimeInterval(5))
         var tracker = NookSeekTracker()
         tracker.begin(target: 199, state: first, now: Self.start)
         tracker.observe(second, now: Self.start.addingTimeInterval(5))
@@ -139,7 +139,7 @@ private final class SeekCommandLog {
         #expect(tracker.heldPosition(for: playing, now: Self.start) == atOnce)
         #expect(tracker.heldPosition(for: playing, now: Self.start.addingTimeInterval(2)) == twoSecondsOn)
         // Another track is not held anywhere.
-        #expect(tracker.heldPosition(for: NookMediaSamples.track(item: "other"), now: Self.start) == nil)
+        #expect(tracker.heldPosition(for: NookMediaSamples.track(title: "other"), now: Self.start) == nil)
 
         // A paused track stays put.
         let paused = NookMediaSamples.track(isPlaying: false, elapsed: 10)
@@ -253,13 +253,13 @@ private final class SeekCommandLog {
         #expect(tracker.refusesSeek(live))
 
         // A fresh report five seconds on, exactly where the clock would be.
-        let playing = NookMediaSamples.track(elapsed: 15, at: Self.start.addingTimeInterval(5))
+        let playing = NookMediaSamples.track(identifier: "second", elapsed: 15, at: Self.start.addingTimeInterval(5))
         tracker.observe(playing, previous: live, now: Self.start.addingTimeInterval(5))
         // Paused at twenty seconds in.
-        let paused = NookMediaSamples.track(isPlaying: false, elapsed: 20, at: Self.start.addingTimeInterval(10))
+        let paused = NookMediaSamples.track(identifier: "third", isPlaying: false, elapsed: 20, at: Self.start.addingTimeInterval(10))
         tracker.observe(paused, previous: playing, now: Self.start.addingTimeInterval(10))
         // Resumed a minute later from the same place.
-        let resumed = NookMediaSamples.track(elapsed: 20, at: Self.start.addingTimeInterval(70))
+        let resumed = NookMediaSamples.track(identifier: "fourth", elapsed: 20, at: Self.start.addingTimeInterval(70))
         tracker.observe(resumed, previous: paused, now: Self.start.addingTimeInterval(70))
 
         #expect(tracker.refusesSeek(live))
@@ -267,8 +267,8 @@ private final class SeekCommandLog {
 
     @Test func aClockJumpIsOnlyReadFromReportsThatCanBeCompared() {
         let now = Self.start.addingTimeInterval(30)
-        let one = NookMediaSamples.track(item: "one", elapsed: 10)
-        let two = NookMediaSamples.track(item: "two", elapsed: 150)
+        let one = NookMediaSamples.track(title: "one", elapsed: 10)
+        let two = NookMediaSamples.track(title: "two", elapsed: 150)
         // Another track is a track change, not a jump.
         #expect(!NookSeekTracker.clockJumped(from: one, to: two, now: now))
 
@@ -281,10 +281,10 @@ private final class SeekCommandLog {
 
         // No position at all proves nothing either.
         let silent = NookMediaSamples.track(elapsed: nil)
-        #expect(!NookSeekTracker.clockJumped(from: silent, to: one, now: now))
+        #expect(!NookSeekTracker.clockJumped(from: silent, to: NookMediaSamples.track(elapsed: 150), now: now))
 
         // The same track, far from where its clock would be.
-        let moved = NookMediaSamples.track(item: "one", elapsed: 150, at: now)
+        let moved = NookMediaSamples.track(title: "one", elapsed: 150, at: now)
         #expect(NookSeekTracker.clockJumped(from: one, to: moved, now: now))
     }
 
@@ -292,20 +292,23 @@ private final class SeekCommandLog {
         var tracker = NookSeekTracker()
         let count = NookSeekTracker.maxRemembered + 5
         for index in 0..<count {
-            let track = NookMediaSamples.track(item: "track-\(index)", elapsed: 10)
+            let track = NookMediaSamples.track(title: "track-\(index)", elapsed: 10)
             tracker.begin(target: 120, state: track, now: Self.start)
             tracker.observe(track, now: Self.start.addingTimeInterval(10))
         }
 
         #expect(tracker.refusing.count == NookSeekTracker.maxRemembered)
-        #expect(!tracker.refusesSeek(NookMediaSamples.track(item: "track-0")))
-        #expect(tracker.refusesSeek(NookMediaSamples.track(item: "track-\(count - 1)")))
+        #expect(!tracker.refusesSeek(NookMediaSamples.track(title: "track-0")))
+        #expect(tracker.refusesSeek(NookMediaSamples.track(title: "track-\(count - 1)")))
     }
 
-    @Test func aTrackWithoutAnItemIdentifierIsKeyedByItsTitle() {
-        let one = NookMediaSamples.track(item: nil, title: "First")
-        let two = NookMediaSamples.track(item: nil, title: "Second")
+    @Test func aTrackIsKeyedByItsAppAndWhatItIs() {
+        let one = NookMediaSamples.track(title: "First")
+        let two = NookMediaSamples.track(title: "Second")
         #expect(NookSeekTracker.trackKey(one) != NookSeekTracker.trackKey(two))
-        #expect(NookSeekTracker.trackKey(one) == "com.spotify.client|First")
+        #expect(NookSeekTracker.trackKey(one) == "com.spotify.client|\(one.trackIdentity)")
+        // The same title in another app is another track.
+        let elsewhere = NookMediaSamples.track(bundle: "com.google.Chrome", title: "First")
+        #expect(NookSeekTracker.trackKey(one) != NookSeekTracker.trackKey(elsewhere))
     }
 }

@@ -61,7 +61,7 @@ struct OnboardingTodosTests {
 
         widgets.remove(.todo)
         #expect(!tour.pages.contains(.todos))
-        #expect(tour.pages.count == OnboardingPage.allCases.count - 2, "the weather page is off too")
+        #expect(tour.pages.count == OnboardingPage.mainTour.count - 2, "the weather page is off too")
         tour.next()
         #expect(tour.page == .notes)
         tour.back()
@@ -178,9 +178,9 @@ struct OnboardingTodosTests {
     // MARK: The recap
 
     @Test func theRecapNamesTheSourceOnlyWhileTheToDoWidgetIsOn() {
-        #expect(OnboardingRecapRow.shown(agentsEnabled: true, hasTodoWidget: true) == OnboardingRecapRow.allCases)
+        #expect(OnboardingRecapRow.shown(agentsEnabled: true, hasTodoWidget: true) == OnboardingRecapRow.standard)
         #expect(OnboardingRecapRow.shown(agentsEnabled: true, hasTodoWidget: false)
-            == OnboardingRecapRow.allCases.filter { $0 != .todos })
+            == OnboardingRecapRow.standard.filter { $0 != .todos })
         #expect(OnboardingRecapRow.shown(agentsEnabled: false, hasTodoWidget: false, hasNotesWidget: false, hasWeatherWidget: false)
             == [.opens, .closed, .widgets, .calendar, .layout, .opened, .glow])
     }
@@ -188,6 +188,6 @@ struct OnboardingTodosTests {
     @Test func theRecapNamesTheNotesPlaceOnlyWhileTheNotesWidgetIsOn() {
         #expect(OnboardingRecapRow.shown(agentsEnabled: true).contains(.notes))
         #expect(OnboardingRecapRow.shown(agentsEnabled: true, hasNotesWidget: false)
-            == OnboardingRecapRow.allCases.filter { $0 != .notes })
+            == OnboardingRecapRow.standard.filter { $0 != .notes })
     }
 }

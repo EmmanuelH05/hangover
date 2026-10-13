@@ -561,6 +561,17 @@ final class OverlayPanelController {
         OverlayTrace.log("frame \(change.rawValue) from \(fromHeight) to \(frame.height)")
     }
 
+    /// How many times something asked for the panel to become the key window.
+    private(set) var keyRequestCount = 0
+
+    /// Makes the island's panel the key window, which lets a field in it take
+    /// the keyboard. A right click on a widget does not do that by itself.
+    func makePanelKey() {
+        keyRequestCount += 1
+        guard putsPanelOnScreen else { return }
+        panel?.makeKey()
+    }
+
     private func presentPanel(_ panel: NSPanel, activates: Bool) {
         guard putsPanelOnScreen else { return }
         if activates {
@@ -678,12 +689,17 @@ final class OverlayPanelController {
         let inClosedSurfaceArea = isPointInClosedSurfaceArea(screenLocation)
 
         if model.notchStatus == .closed && inClosedSurfaceArea {
+            let isSamplingColor = model.nook.design.isSampling
             if IslandPointerRules.hoverOpens(
                 trigger: model.islandOpenTrigger,
                 isSuppressed: isHoverSuppressedUntilExit,
-                isScrolling: swipe.isInProgress(at: ProcessInfo.processInfo.systemUptime)
+                isScrolling: swipe.isInProgress(at: ProcessInfo.processInfo.systemUptime),
+                isSamplingColor: isSamplingColor
             ) {
                 scheduleHoverOpen()
+            } else if isSamplingColor {
+                // A wait that began before the loupe came up ends with it.
+                cancelHoverOpenImmediately()
             }
         } else if model.notchStatus == .closed && !inClosedSurfaceArea {
             isHoverSuppressedUntilExit = false
@@ -913,7 +929,10 @@ final class OverlayPanelController {
                 status: model.notchStatus,
                 reason: model.notchOpenReason,
                 showsNookPage: model.showsNookPage,
+                // The design kit's card takes dropped pictures too. Either
+                // card on the page is a place for the files to land.
                 trayIsOnPage: model.nookVisibleWidgets.contains(.tray)
+                    || model.nookVisibleWidgets.contains(.design)
             ) {
             case .openOnNook:
                 // Opened like a hover: once the drag is over, the island
@@ -1037,7 +1056,7 @@ final class OverlayPanelController {
     }
 
     private func performHoverOpen(_ model: AppModel) {
-        guard model.notchStatus == .closed else { return }
+        guard model.notchStatus == .closed, !model.nook.design.isSampling else { return }
 
         if model.hapticFeedbackEnabled {
             NSHapticFeedbackManager.defaultPerformer.perform(

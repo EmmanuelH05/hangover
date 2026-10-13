@@ -16,20 +16,26 @@ struct OnboardingWidgetsPage: View {
 
     private static let rowHeight: CGFloat = 38
 
+    /// The footnote names the widgets that start off. Where the build does not
+    /// offer Link to MP3 it names three, and says nothing about that one.
+    static var footnoteKey: String {
+        NookLinkAudioOffer.isOffered ? "onboarding.widgets.note" : "onboarding.widgets.note.release"
+    }
+
     var body: some View {
         OnboardingPageScaffold(
             page: .widgets,
             context: context,
             title: context.t("onboarding.widgets.title"),
             text: context.t("onboarding.widgets.body"),
-            footnote: context.t("onboarding.widgets.note"),
+            footnote: context.t(Self.footnoteKey),
             gap: 12
         ) {
             VStack(spacing: 12) {
                 OnboardingLiveLine(text: context.t("onboarding.live.line"))
 
                 VStack(spacing: 0) {
-                    ForEach(Array(NookWidgetKind.allCases.enumerated()), id: \.element) { index, kind in
+                    ForEach(Array(NookWidgetKind.offered.enumerated()), id: \.element) { index, kind in
                         if index > 0 { OnboardingDivider() }
                         row(kind)
                     }
@@ -121,6 +127,17 @@ struct OnboardingLayoutPage: View {
         state.shownTemplate == nil || state.canKeepOwnLayout
     }
 
+    /// The page a layout makes for this user: its own widgets that are
+    /// switched on, then the design kit and Link to MP3 when they are on the
+    /// page, which the tour keeps there after a layout.
+    static func page(of template: PersonalizationTemplate, keeping state: OnboardingState) -> [NookWidgetPlacement] {
+        let own = template.widgets.filter { state.enabledWidgets.contains($0.kind) }
+        let kept = state.shownPlacements.filter { placement in
+            NookWidgetKind.tools.contains(placement.kind) && !own.contains { $0.kind == placement.kind }
+        }
+        return own + kept
+    }
+
     /// The name of the layout in use and what it is best for.
     private var description: some View {
         let text = state.shownTemplate.map { TemplateText($0, lang: context.lang, showsAgents: state.agentsEnabled) }
@@ -159,10 +176,7 @@ struct OnboardingLayoutPage: View {
             context.actions.applyTemplate(template)
         } content: {
             cardBody(title: text.title, isSelected: isSelected) {
-                thumb(
-                    template.widgets.filter { state.enabledWidgets.contains($0.kind) },
-                    calendarStyle: template.nook.calendarStyle
-                )
+                thumb(Self.page(of: template, keeping: state), calendarStyle: template.nook.calendarStyle)
             }
         }
         .frame(height: Self.cardHeight)

@@ -101,7 +101,7 @@ struct AppearanceSettingsPane: View {
             }
             nookHost { nookLeftSlotSection }
             nookHost { nookClosedSection }
-            nookHost { nookHaloSection }
+            glowAndAccentSections
         }
     }
 
@@ -130,7 +130,7 @@ struct AppearanceSettingsPane: View {
     /// Hosts one of the Nook extension's sections as its own view. What it
     /// reads from the model is tracked here, so the pane does not re-run for
     /// it, and an unrelated change to the pane leaves it alone.
-    private func nookHost<Content: View>(@ViewBuilder _ content: @escaping () -> Content) -> some View {
+    func nookHost<Content: View>(@ViewBuilder _ content: @escaping () -> Content) -> some View {
         NookSectionHost(profile: editingProfile, languageCode: languageCode, content: content)
             .equatable()
     }

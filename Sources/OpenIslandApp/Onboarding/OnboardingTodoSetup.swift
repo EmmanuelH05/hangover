@@ -155,23 +155,41 @@ extension OnboardingTodoMessage {
     /// The sentence for a Notion state, or nil when the state needs none:
     /// idle, ready, no token yet and no database yet are the checklist
     /// itself.
-    static func notion(_ state: NotionTodoState, lang: LanguageManager) -> OnboardingTodoMessage? {
+    /// A token file that cannot be used adds why, as Settings and the card do.
+    static func notion(
+        _ state: NotionTodoState,
+        lang: LanguageManager,
+        tokenProblem: NookTodoTokenFileError? = nil
+    ) -> OnboardingTodoMessage? {
         switch state {
         case .inactive, .noToken, .noDatabase, .ready: nil
         case .connecting: OnboardingTodoMessage(text: lang.t(state.messageKey), isProblem: false)
-        case .keychainUnavailable, .invalidToken, .needsAttention, .databaseUnavailable,
+        case .keychainUnavailable:
+            OnboardingTodoMessage(text: withReason(lang.t(state.messageKey), tokenProblem, lang: lang), isProblem: true)
+        case .invalidToken, .needsAttention, .databaseUnavailable,
              .missingReadCapability, .rateLimited, .offline, .serverError:
             OnboardingTodoMessage(text: lang.t(state.messageKey), isProblem: true)
         }
     }
 
-    static func tickTick(_ state: TickTickTodoState, lang: LanguageManager) -> OnboardingTodoMessage? {
+    static func tickTick(
+        _ state: TickTickTodoState,
+        lang: LanguageManager,
+        tokenProblem: NookTodoTokenFileError? = nil
+    ) -> OnboardingTodoMessage? {
         switch state {
         case .inactive, .noToken, .ready: nil
         case .connecting: OnboardingTodoMessage(text: lang.t(state.messageKey), isProblem: false)
-        case .keychainUnavailable, .invalidToken, .connectFailed, .listUnavailable, .rejected,
+        case .keychainUnavailable:
+            OnboardingTodoMessage(text: withReason(lang.t(state.messageKey), tokenProblem, lang: lang), isProblem: true)
+        case .invalidToken, .connectFailed, .listUnavailable, .rejected,
              .forbidden, .rateLimited, .offline, .serverError:
             OnboardingTodoMessage(text: lang.t(state.messageKey), isProblem: true)
         }
+    }
+
+    private static func withReason(_ sentence: String, _ problem: NookTodoTokenFileError?, lang: LanguageManager) -> String {
+        guard let problem else { return sentence }
+        return sentence + " " + lang.t(problem.messageKey)
     }
 }

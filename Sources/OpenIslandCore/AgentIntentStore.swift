@@ -51,6 +51,20 @@ public final class AgentIntentStore: @unchecked Sendable {
         set { defaults.set(newValue, forKey: Self.welcomeTourEndedKey) }
     }
 
+    /// The length of the welcome tour the user finished, as the raw value of
+    /// the app's `OnboardingLength`: short, medium or long. Nil until a tour
+    /// was finished. A later version can offer the rest of the tour from it.
+    public var welcomeTourLength: String? {
+        get { defaults.string(forKey: Self.welcomeTourLengthKey) }
+        set {
+            if let newValue {
+                defaults.set(newValue, forKey: Self.welcomeTourLengthKey)
+            } else {
+                defaults.removeObject(forKey: Self.welcomeTourLengthKey)
+            }
+        }
+    }
+
     // MARK: - Legacy migration
 
     /// Reconciles intent state with what is actually on disk the first time a
@@ -106,6 +120,7 @@ public final class AgentIntentStore: @unchecked Sendable {
 
     private static let firstLaunchCompletedKey = "firstLaunchCompleted"
     private static let welcomeTourEndedKey = "welcomeTourEnded"
+    private static let welcomeTourLengthKey = "welcomeTourLength"
     private static let migrationVersionKey = "agentIntentMigrationVersion"
     private static let currentMigrationVersion = 1
 }

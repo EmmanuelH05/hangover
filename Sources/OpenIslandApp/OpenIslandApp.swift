@@ -93,6 +93,12 @@ final class OpenIslandAppDelegate: NSObject, NSApplicationDelegate {
             // The model holds them back while the agents are switched off.
             if demo == nil, harnessLaunchConfiguration.scenario == nil {
                 model.activateAgentHotkeys(registrar: CarbonHotkeyRegistrar())
+                // Listening to the Mac's sound belongs to a real launch too
+                // (D56). Nothing listens until the user switches it on.
+                model.beat.activate(makeListener: IslandBeatSupport.makeListener)
+                // The same goes for the design kit's sampler, panels,
+                // clipboard reads and shortcut.
+                model.nook.design.activate(.system())
             }
 
             if let scenario = harnessLaunchConfiguration.scenario {
@@ -140,6 +146,23 @@ final class OpenIslandAppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+    }
+
+    /// A change to the designer kit's colors, links or pictures made just
+    /// before a quit is still being written. The quit waits for it, and gives
+    /// up after a few seconds, which keeps a stuck disk from stopping a quit.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard model.designKitQuitDecision == .afterWrites else { return .terminateNow }
+        Task { @MainActor [model] in
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { await model.flushDesignKitBeforeQuit() }
+                group.addTask { try? await Task.sleep(for: .seconds(3)) }
+                _ = await group.next()
+                group.cancelAll()
+            }
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

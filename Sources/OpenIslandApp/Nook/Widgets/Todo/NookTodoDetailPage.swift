@@ -3,6 +3,8 @@ import SwiftUI
 /// The page a task opens to inside the todo card: its title, due date and
 /// notes. The card owns the draft and decides when to save.
 struct NookTodoDetailPage: View {
+    @Environment(\.hangoverAccent) private var accent
+
     let item: NookTodoItem
     let canEdit: Bool
     /// Shown under the notes: a failed save, or why notes are read-only.
@@ -72,6 +74,7 @@ struct NookTodoDetailPage: View {
     private var notes: some View {
         if canEdit {
             TextEditor(text: $draft)
+                .tint(accent.controlTint)
                 .font(.system(size: 12))
                 .foregroundStyle(.white.opacity(0.85))
                 .scrollContentBackground(.hidden)

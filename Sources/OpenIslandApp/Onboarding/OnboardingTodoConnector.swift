@@ -7,11 +7,11 @@ import Foundation
 /// `loadDatabases()`, `selectDatabase(_:)` and the TickTick pair, and the
 /// Reminders access request. It holds no state of its own. In particular
 /// it never keeps a token: the secret is passed on to the service and the
-/// service writes it to the Keychain.
+/// service writes it to its token file.
 ///
 /// The services take their transport, token store and defaults as init
 /// arguments, which is how a test drives this without a network, a
-/// Keychain or the real settings.
+/// token file or the real settings.
 @MainActor
 struct OnboardingTodoConnector {
     let hub: NookTodoHub
@@ -33,7 +33,7 @@ struct OnboardingTodoConnector {
         let service = hub.notion
         let choices = service.databases.map { OnboardingTodoChoice(id: $0.id, title: $0.title) }
         let isConnected = service.hasToken && !service.tokenRejected
-        var message = OnboardingTodoMessage.notion(service.state, lang: lang)
+        var message = OnboardingTodoMessage.notion(service.state, lang: lang, tokenProblem: service.tokenProblem)
         if message == nil, isConnected, service.hasLoadedDatabases, choices.isEmpty, service.selectedDatabaseID == nil {
             message = OnboardingTodoMessage(text: lang.t("onboarding.todos.notion.noneShared"), isProblem: false)
         }
@@ -41,7 +41,7 @@ struct OnboardingTodoConnector {
         if case .needsAttention = service.state { needsColumns = true }
         return OnboardingTodoSetup(
             isConnected: isConnected,
-            isBusy: service.state == .connecting || service.isLoadingDatabases,
+            isBusy: service.state == .connecting || service.isLoadingDatabases || service.isMovingToken,
             accountName: isConnected ? service.accountName : nil,
             choices: choices,
             hasLoadedChoices: service.hasLoadedDatabases,
@@ -59,12 +59,12 @@ struct OnboardingTodoConnector {
         let isConnected = service.hasToken && !service.tokenRejected
         return OnboardingTodoSetup(
             isConnected: isConnected,
-            isBusy: service.state == .connecting || service.isLoadingLists,
+            isBusy: service.state == .connecting || service.isLoadingLists || service.isMovingToken,
             choices: choices,
             hasLoadedChoices: service.hasLoadedLists,
             chosenID: service.selectedListID,
             taskCount: service.state == .ready ? service.items.count : nil,
-            message: OnboardingTodoMessage.tickTick(service.state, lang: lang)
+            message: OnboardingTodoMessage.tickTick(service.state, lang: lang, tokenProblem: service.tokenProblem)
         )
     }
 

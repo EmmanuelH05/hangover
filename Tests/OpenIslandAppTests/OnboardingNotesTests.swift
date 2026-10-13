@@ -15,8 +15,8 @@ struct OnboardingNotesTests {
         let with = OnboardingPage.shown(agentsEnabled: true, hasNotesWidget: true)
         let without = OnboardingPage.shown(agentsEnabled: true, hasNotesWidget: false)
 
-        #expect(with == OnboardingPage.allCases)
-        #expect(without == OnboardingPage.allCases.filter { $0 != .notes })
+        #expect(with == OnboardingPage.mainTour)
+        #expect(without == OnboardingPage.mainTour.filter { $0 != .notes })
         #expect(OnboardingPage.allCases.filter(\.needsNotesWidget) == [.notes])
         #expect(OnboardingPage.notes.isLive)
         #expect(OnboardingPage.notes.chapter == .yours)

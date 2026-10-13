@@ -39,6 +39,10 @@ jobs:
           pip3 install --break-system-packages Pillow
 
       - name: Build and package
+        # A runner has no local signing identity. This package is never
+        # shipped, and an ad-hoc signature is enough to check the bundle.
+        env:
+          OPEN_ISLAND_ADHOC_SIGN: "1"
         run: zsh scripts/package-app.sh
 
       # Bundle structure is verified inside package-app.sh itself.

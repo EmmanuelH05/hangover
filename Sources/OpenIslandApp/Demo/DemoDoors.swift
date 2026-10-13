@@ -54,6 +54,7 @@ final class AppDemoDoors: DemoDoors {
         case .showCalendarNotice: showCalendarNotice()
         case .openTour: openTour()
         case .tourNext: currentTour()?.next()
+        case .tourChooseLength(let length): currentTour()?.actions.chooseLength(length)
         case .tourSetWidget(let kind, let isOn): currentTour()?.actions.setWidget(kind, isOn)
         case .tourNextFeature: currentTour()?.actions.nextFeature()
         case .tourTry(let step): press(step)

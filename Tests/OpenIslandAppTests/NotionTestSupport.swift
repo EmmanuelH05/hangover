@@ -77,7 +77,7 @@ final class InMemoryTodoTokenStore: NookTodoTokenStoring, @unchecked Sendable {
     private let lock = NSLock()
     private var stored: String?
     private var reads = 0
-    var failure: NookTodoKeychainError?
+    var failure: (any Error)?
 
     init(token: String? = nil) { stored = token }
 

@@ -5,8 +5,15 @@ import ServiceManagement
 /// login item. `SMAppService.mainApp` is authoritative — the UI reads its
 /// status on demand so the toggle stays in sync with System Settings ->
 /// General -> Login Items changes that happen outside the app.
+/// What the app needs of the login item, which lets a test stand in for it.
 @MainActor
-final class LaunchAtLoginService {
+protocol LaunchAtLoginControlling: AnyObject {
+    var isEnabled: Bool { get }
+    func setEnabled(_ enabled: Bool) throws
+}
+
+@MainActor
+final class LaunchAtLoginService: LaunchAtLoginControlling {
     static let shared = LaunchAtLoginService()
 
     /// `.enabled` and `.requiresApproval` both count as "on": if the user

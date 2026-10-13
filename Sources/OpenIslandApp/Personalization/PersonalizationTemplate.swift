@@ -43,10 +43,12 @@ struct PersonalizationTemplate: Identifiable, Equatable, Sendable {
     let id: ID
     let symbol: String
     let appearance: IslandAppearancePreferences
-    /// The Nook choices. Six fields are not read from here: the page comes
+    /// The Nook choices. Nine fields are not read from here: the page comes
     /// from `widgets` (`widgetOrder`, `widgetSizes`, `hiddenWidgets`), and the
-    /// calendars, the glow colors and the opened look stay the user's
-    /// (`hiddenCalendarIDs`, `haloColors`, `openedLook`).
+    /// calendars, the glow colors, the opened look and the pulse with the
+    /// beat stay the user's (`hiddenCalendarIDs`, `haloColors`, `openedLook`,
+    /// `haloPulsesWithBeat`, `haloPulseReach`, `haloBeatLook`). The pulse is the one choice macOS asked the
+    /// user about (D56), and no layout answers that for them.
     let nook: NookDisplayPreferences
     /// The Nook page from top to bottom. Never the mirror: a camera control
     /// is the user's to add. A widget that is switched off in the Nook tab
@@ -73,6 +75,12 @@ extension PersonalizationTemplate {
         result.hiddenCalendarIDs = current.hiddenCalendarIDs
         result.haloColors = current.haloColors
         result.openedLook = current.openedLook
+        result.haloPulsesWithBeat = current.haloPulsesWithBeat
+        result.haloPulseReach = current.haloPulseReach
+        result.haloBeatLook = current.haloBeatLook
+        result.haloLaserReach = current.haloLaserReach
+        result.haloLaserCount = current.haloLaserCount
+        result.haloLaserMode = current.haloLaserMode
         result.widgetOrder = kinds + current.normalizedWidgetOrder.filter { !kinds.contains($0) }
         result.widgetSizes = current.widgetSizes.filter { !kinds.contains($0.key) }
         for placement in widgets where placement.size != .medium {
@@ -96,6 +104,12 @@ extension PersonalizationTemplate {
         choices.hiddenCalendarIDs = nook.hiddenCalendarIDs
         choices.haloColors = nook.haloColors
         choices.openedLook = nook.openedLook
+        choices.haloPulsesWithBeat = nook.haloPulsesWithBeat
+        choices.haloPulseReach = nook.haloPulseReach
+        choices.haloBeatLook = nook.haloBeatLook
+        choices.haloLaserReach = nook.haloLaserReach
+        choices.haloLaserCount = nook.haloLaserCount
+        choices.haloLaserMode = nook.haloLaserMode
         return choices == nook
     }
 
@@ -487,6 +501,12 @@ extension PersonalizationSetup {
         result.nook.hiddenCalendarIDs = nook.hiddenCalendarIDs
         result.nook.haloColors = nook.haloColors
         result.nook.openedLook = nook.openedLook
+        result.nook.haloPulsesWithBeat = nook.haloPulsesWithBeat
+        result.nook.haloPulseReach = nook.haloPulseReach
+        result.nook.haloBeatLook = nook.haloBeatLook
+        result.nook.haloLaserReach = nook.haloLaserReach
+        result.nook.haloLaserCount = nook.haloLaserCount
+        result.nook.haloLaserMode = nook.haloLaserMode
         return result
     }
 }

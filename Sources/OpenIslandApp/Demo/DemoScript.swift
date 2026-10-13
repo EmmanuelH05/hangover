@@ -38,6 +38,7 @@ enum DemoAction: Equatable, Sendable {
     // The welcome tour
     case openTour
     case tourNext
+    case tourChooseLength(OnboardingLength)
     case tourSetWidget(NookWidgetKind, isOn: Bool)
     case tourNextFeature
     case tourTry(OnboardingTry)
@@ -76,6 +77,7 @@ enum DemoAction: Equatable, Sendable {
         case .showCalendarNotice: "notice-calendar"
         case .openTour: "tour-open"
         case .tourNext: "tour-next"
+        case .tourChooseLength(let length): "tour-length-\(length.rawValue)"
         case .tourSetWidget(let kind, let isOn): "tour-widget-\(kind.rawValue)-\(isOn ? "on" : "off")"
         case .tourNextFeature: "tour-next-feature"
         case .tourTry(let step): "tour-try-\(step.rawValue)"
@@ -117,6 +119,7 @@ enum DemoAction: Equatable, Sendable {
         case .showCalendarNotice: "NookCalendarService.checkNextUp(now:), the minute tick"
         case .openTour: "AppModel.showWelcomeTour()"
         case .tourNext: "OnboardingTour.next(), the Next button"
+        case .tourChooseLength: "OnboardingActions.chooseLength, the question page's card"
         case .tourSetWidget: "OnboardingActions.setWidget, the widgets page's switch"
         case .tourNextFeature: "OnboardingActions.nextFeature, the features page's arrow"
         case .tourTry: "OnboardingTry.press(reading:sample:actions:), a Try it button"

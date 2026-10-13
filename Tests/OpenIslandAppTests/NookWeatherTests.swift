@@ -788,7 +788,7 @@ private struct NookWeatherDecodingProbe: Decodable {
     /// Keys passed to `t("…")` in the folders this work added or changed.
     private static func keysUsedInCode() throws -> Set<String> {
         let folders = ["Nook/Media", "Nook/Widgets/Volume", "Nook/Widgets/Weather"]
-        let files = ["Nook/Views/NookMediaControls.swift", "Nook/NookModel.swift"]
+        let files = ["Nook/Views/NookMediaControls.swift", "Nook/Views/NookMediaViews.swift", "Nook/NookModel.swift"]
         let base = repoRoot.appendingPathComponent("Sources/OpenIslandApp")
         var urls = files.map { base.appendingPathComponent($0) }
         for folder in folders {
@@ -806,6 +806,8 @@ private struct NookWeatherDecodingProbe: Decodable {
         }
         used.formUnion(NookWeatherCondition.allCases.map(\.titleKey))
         used.formUnion(NookWeatherForecastMode.allCases.map(\.titleKey))
+        used.formUnion(NowPlayingShuffle.allCases.map(\.labelKey))
+        used.formUnion(NowPlayingRepeat.allCases.map(\.labelKey))
         return used
     }
 

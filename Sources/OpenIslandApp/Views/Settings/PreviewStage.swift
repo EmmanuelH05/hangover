@@ -353,6 +353,8 @@ struct PreviewStageView: View {
 /// The stage with its controls: a caption for the moment on screen, the
 /// storyboard player, a chip per moment, and the buttons that leave.
 struct PreviewStageSheet: View {
+    @Environment(\.hangoverAccent) private var accent
+
     let title: String
     let setup: PersonalizationSetup
     let profile: IslandAppearanceDisplayProfile
@@ -561,10 +563,10 @@ struct PreviewStageSheet: View {
                 Button(action: onPrimary) {
                     Text(primaryTitle)
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(V6Palette.ink)
+                        .foregroundStyle(accent.textOnHighlight(V6Palette.ink))
                         .padding(.horizontal, 14)
                         .frame(height: 28)
-                        .background(Capsule().fill(V6Palette.paper))
+                        .background(Capsule().fill(accent.highlight(V6Palette.paper)))
                         .contentShape(Capsule())
                 }
                 .buttonStyle(PressableButtonStyle())

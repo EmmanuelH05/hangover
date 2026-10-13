@@ -10,6 +10,7 @@ struct OnboardingPlaceField: View {
     let buttonTitle: String
     let isBusy: Bool
     let onSearch: (String) -> Void
+    @Environment(\.hangoverAccent) private var accent
 
     @State private var draft = ""
 
@@ -19,6 +20,7 @@ struct OnboardingPlaceField: View {
         VStack(alignment: .leading, spacing: 7) {
             TextField(placeholder, text: $draft)
                 .textFieldStyle(.plain)
+                .tint(accent.controlTint)
                 .font(.system(size: 12.5))
                 .foregroundStyle(OnboardingStyle.primaryText)
                 .padding(.horizontal, 10)

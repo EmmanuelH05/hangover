@@ -149,6 +149,130 @@ import Testing
         NookMediaKeyEvent(key: key, isDown: false)
     }
 
+    // MARK: A grant macOS no longer honors
+
+    @Test func aLaunchWithTheSwitchOnAndNoGrantPointsAtAnOlderVersionsPermission() {
+        let rig = Rig(trusted: false)
+        defer { rig.store.remove() }
+        rig.store.defaults.set(true, forKey: NookMediaKeys.enabledKey)
+
+        rig.keys.start()
+        #expect(rig.keys.status == .waitingForAccess)
+        #expect(rig.keys.accessWasMissingAtLaunch)
+
+        // The grant arrives: the hint goes with the wait.
+        rig.trust.trusted = true
+        rig.keys.checkAccess()
+        #expect(rig.keys.status == .active)
+        #expect(!rig.keys.accessWasMissingAtLaunch)
+        rig.keys.setEnabled(false)
+    }
+
+    @Test func turningItOnForTheFirstTimeSaysNothingAboutAnOlderVersion() {
+        let rig = Rig(trusted: false)
+        defer { rig.store.remove() }
+
+        rig.keys.start()
+        #expect(!rig.keys.accessWasMissingAtLaunch)
+        rig.keys.setEnabled(true)
+        #expect(rig.keys.status == .waitingForAccess)
+        #expect(!rig.keys.accessWasMissingAtLaunch)
+        rig.keys.setEnabled(false)
+    }
+
+    @Test func aLaunchWithTheGrantInPlaceHasNothingToSay() {
+        let rig = Rig(trusted: true)
+        defer { rig.store.remove() }
+        rig.store.defaults.set(true, forKey: NookMediaKeys.enabledKey)
+
+        rig.keys.start()
+        #expect(rig.keys.status == .active)
+        #expect(!rig.keys.accessWasMissingAtLaunch)
+        rig.keys.setEnabled(false)
+    }
+
+    @Test func switchingItOffAndOnKeepsTheHintBecauseNothingAboutTheGrantChanged() {
+        let rig = Rig(trusted: false)
+        defer { rig.store.remove() }
+        rig.store.defaults.set(true, forKey: NookMediaKeys.enabledKey)
+        rig.store.defaults.set(true, forKey: NookMediaKeys.askedKey)
+
+        rig.keys.start()
+        #expect(rig.keys.accessWasMissingAtLaunch)
+        rig.keys.setEnabled(false)
+        rig.keys.setEnabled(true)
+        #expect(rig.keys.status == .waitingForAccess)
+        #expect(rig.keys.accessWasMissingAtLaunch)
+        rig.keys.setEnabled(false)
+    }
+
+    @Test func aGrantTakenAwayAfterATrustedLaunchSaysNothingAboutAnOlderVersion() {
+        let rig = Rig(trusted: true)
+        defer { rig.store.remove() }
+        rig.store.defaults.set(true, forKey: NookMediaKeys.enabledKey)
+
+        rig.keys.start()
+        #expect(rig.keys.status == .active)
+        // Switched off by hand in System Settings while the app runs: the
+        // user knows what happened, and the hint would be wrong.
+        rig.trust.trusted = false
+        rig.keys.checkAccess()
+        #expect(rig.keys.status == .waitingForAccess)
+        #expect(!rig.keys.accessWasMissingAtLaunch)
+        rig.keys.setEnabled(false)
+    }
+
+    @Test func theSettingsButtonDoesNothingWhileTheSwitchIsOff() {
+        let rig = Rig(trusted: false)
+        defer { rig.store.remove() }
+
+        rig.keys.start()
+        rig.keys.requestAccess()
+        #expect(rig.trust.prompts == 0)
+        #expect(rig.keys.status == .off)
+    }
+
+    @Test func eachPressOfTheSettingsButtonAsksAgainAndTheGrantClearsTheHint() {
+        let rig = Rig(trusted: false)
+        defer { rig.store.remove() }
+        rig.store.defaults.set(true, forKey: NookMediaKeys.enabledKey)
+        rig.store.defaults.set(true, forKey: NookMediaKeys.askedKey)
+        rig.keys.start()
+        #expect(rig.keys.accessWasMissingAtLaunch)
+
+        rig.keys.requestAccess()
+        rig.keys.requestAccess()
+        #expect(rig.trust.prompts == 2)
+        #expect(rig.keys.accessWasMissingAtLaunch)
+
+        rig.trust.trusted = true
+        rig.keys.requestAccess()
+        #expect(rig.trust.prompts == 2)
+        #expect(rig.keys.status == .active)
+        #expect(!rig.keys.accessWasMissingAtLaunch)
+        rig.keys.setEnabled(false)
+    }
+
+    @Test func theSettingsButtonAsksMacOSAgainOnlyWhileTheGrantIsMissing() {
+        let rig = Rig(trusted: false)
+        defer { rig.store.remove() }
+        rig.store.defaults.set(true, forKey: NookMediaKeys.enabledKey)
+        rig.store.defaults.set(true, forKey: NookMediaKeys.askedKey)
+        rig.keys.start()
+
+        // Taken out of the list in System Settings: only a new request puts
+        // the app back in it.
+        rig.keys.requestAccess()
+        #expect(rig.trust.prompts == 1)
+
+        // With the grant there, the button takes the keys and asks nothing.
+        rig.trust.trusted = true
+        rig.keys.requestAccess()
+        #expect(rig.trust.prompts == 1)
+        #expect(rig.keys.status == .active)
+        rig.keys.setEnabled(false)
+    }
+
     @Test func theTakeoverIsOffUntilTurnedOnAndLaunchNeverAsksForAnything() {
         let rig = Rig(trusted: false)
         defer { rig.store.remove() }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct NookTimerCard: View {
     var nook: NookModel
+    @Environment(\.hangoverAccent) private var accent
 
     static let height: CGFloat = 96
 
@@ -190,11 +191,12 @@ struct NookTimerCard: View {
         }
     }
 
-    /// What was typed with an orange caret. Empty shows the current length
+    /// What was typed with a caret in the Nook's orange, or in the accent
+    /// when one is set. Empty shows the current length
     /// dimmed. Red after a Return that could not be read.
     private func entryField(_ typed: String, fontSize: CGFloat) -> some View {
         let caret = Rectangle()
-            .fill(Color.orange)
+            .fill(accent.highlight(.orange))
             .frame(width: 2, height: fontSize * 0.8)
         let shown = typed.isEmpty ? NookFocusTimer.format(timer.remaining) : typed
         let tint: Color = entry.isInvalid
@@ -397,15 +399,7 @@ struct NookTimerCard: View {
     }
 
     private var progressLine: some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.white.opacity(0.1))
-                Capsule()
-                    .fill(NookPomodoroLook.tint(for: timer.pomodoro))
-                    .frame(width: proxy.size.width * timer.progress)
-            }
-        }
-        .frame(height: 3)
+        NookTimerProgressLine(progress: timer.progress, pomodoro: timer.pomodoro)
     }
 
     private func chip(_ minutes: Int) -> some View {
@@ -424,19 +418,41 @@ struct NookTimerCard: View {
     }
 }
 
+/// How far a countdown has run. A pomodoro round colors it, and a plain
+/// countdown is the Nook's orange, or the accent when one is set.
+struct NookTimerProgressLine: View {
+    let progress: Double
+    let pomodoro: NookPomodoroState?
+
+    @Environment(\.hangoverAccent) private var accent
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.white.opacity(0.1))
+                Capsule()
+                    .fill(NookPomodoroLook.tint(for: pomodoro, plain: accent.highlight(NookPomodoroLook.workTint)))
+                    .frame(width: proxy.size.width * progress)
+            }
+        }
+        .frame(height: 3)
+    }
+}
+
 /// A 24pt capsule button. `width` nil fills the space it is given.
-private struct NookTimerButtonStyle: ButtonStyle {
+struct NookTimerButtonStyle: ButtonStyle {
     let prominent: Bool
     let width: CGFloat?
+    @Environment(\.hangoverAccent) private var accent
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(prominent ? Color.black.opacity(0.85) : .white.opacity(0.6))
+            .foregroundStyle(prominent ? accent.textOnHighlight(.black.opacity(0.85)) : .white.opacity(0.6))
             .frame(maxWidth: width == nil ? .infinity : nil)
             .frame(width: width, height: 24)
             .background(
-                Capsule().fill(prominent ? Color.orange : Color.white.opacity(0.09))
+                Capsule().fill(prominent ? accent.highlight(.orange) : Color.white.opacity(0.09))
             )
             .opacity(configuration.isPressed ? 0.7 : 1)
     }

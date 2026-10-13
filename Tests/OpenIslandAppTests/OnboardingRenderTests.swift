@@ -39,9 +39,12 @@ struct OnboardingRenderTests {
 
     /// The sample state, with a page that has the to-do, notes and weather widgets
     /// for the pages that need them: the planner template leaves notes off.
+    /// The long tour is the one that has every page, which the pages of its
+    /// own need to be on the list.
     static func state(for page: OnboardingPage) -> OnboardingState {
-        guard page == .notes || page == .weather else { return sampleState }
         var state = sampleState
+        state.length = .long
+        guard page == .notes || page == .weather else { return state }
         state.nookPlacements = [.todo, .notes, .weather].map { NookWidgetPlacement(kind: $0, size: .medium) }
         return state
     }
@@ -512,18 +515,26 @@ struct OnboardingRenderTests {
 
     // MARK: The agents switched off
 
+    /// A state that has answered the question with the main tour, which is
+    /// what gives a page a step count to differ in.
+    private static func mainTourState(_ state: OnboardingState) -> OnboardingState {
+        var state = state
+        state.length = .medium
+        return state
+    }
+
     @Test func thePagesSayNothingAboutAgentsWhileTheSwitchIsOff() throws {
         for page in OnboardingPage.shown(agentsEnabled: false) where !page.offersAgentsSwitch {
             let size = OnboardingTestSize.of(page)
             let expectedWidth = Int(size.width * Self.scale)
             let expectedHeight = Int(size.height * Self.scale)
-            let withAgents = try render(nil) { tourView(page, Self.sampleState) }
-            let without = try render(Self.name(page, "agents-off")) { tourView(page, Self.nookOnlyState) }
+            let withAgents = try render(nil) { tourView(page, Self.mainTourState(Self.sampleState)) }
+            let without = try render(Self.name(page, "agents-off")) { tourView(page, Self.mainTourState(Self.nookOnlyState)) }
             // On a page that says nothing of agents either way, the step
             // count and the progress dots alone differ: one page fewer.
             #expect(without != withAgents, "\(page) drew the same with the agents off")
 
-            let image = try image { tourView(page, Self.nookOnlyState) }
+            let image = try image { tourView(page, Self.mainTourState(Self.nookOnlyState)) }
             #expect(image.width == expectedWidth, "\(page) is \(image.width) wide")
             #expect(image.height == expectedHeight, "\(page) is \(image.height) tall")
         }

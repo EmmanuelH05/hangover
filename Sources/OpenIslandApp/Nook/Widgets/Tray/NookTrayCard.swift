@@ -253,6 +253,7 @@ private struct NookTrayDropTarget: ViewModifier {
 /// to the card under it.
 private struct NookTrayDropHighlight: View {
     let isCompact: Bool
+    @Environment(\.hangoverAccent) private var accent
 
     private static let cornerRadius: CGFloat = 16
 
@@ -263,8 +264,8 @@ private struct NookTrayDropHighlight: View {
     var body: some View {
         shape
             .fill(Color.black.opacity(0.72))
-            .overlay(shape.fill(Color.orange.opacity(0.14)))
-            .overlay(shape.strokeBorder(Color.orange, style: StrokeStyle(lineWidth: 2, dash: [6, 4])))
+            .overlay(shape.fill(accent.highlight(.orange).opacity(0.14)))
+            .overlay(shape.strokeBorder(accent.highlight(.orange), style: StrokeStyle(lineWidth: 2, dash: [6, 4])))
             .overlay {
                 HStack(spacing: 6) {
                     Image(systemName: "tray.and.arrow.down.fill")
@@ -274,7 +275,7 @@ private struct NookTrayDropHighlight: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                 }
-                .foregroundStyle(Color.orange)
+                .foregroundStyle(accent.highlight(.orange))
                 .padding(.horizontal, 10)
             }
             .allowsHitTesting(false)
@@ -450,6 +451,14 @@ private struct NookTrayTile: View {
                 Button(LanguageManager.shared.t(format.actionTitleKey)) { store.convert(item, to: format) }
             }
             Button(LanguageManager.shared.t("nook.tray.action.copyPath")) { store.copyPath(of: item) }
+            // A picture can go to the design kit's references while that
+            // widget is on. The tray keeps its own copy.
+            if let design = store.nook?.design, store.nook?.isWidgetEnabled(.design) == true,
+               NookDesignReferenceRules.isPictureFileName(item.originalName) {
+                Button(LanguageManager.shared.t("nook.design.action.addFromTray")) {
+                    design.addReference(fileAt: url)
+                }
+            }
             Divider()
             Button(LanguageManager.shared.t("nook.tray.action.reveal")) { store.revealInFinder(item) }
             Button(LanguageManager.shared.t("nook.tray.action.remove")) { store.remove(item) }

@@ -238,6 +238,99 @@ extension AppearanceSettingsPane {
                 \.haloFollowsMusic,
                 enabledWhen: { $0.haloStyle != .off && $0.mediaStyle != .off }
             )
+            // The pulse needs the process tap of macOS 14.2 (D56).
+            if IslandBeatSupport.isAvailable {
+                nookToggleRow(
+                    titleKey: "settings.appearance.nook.halo.beat.title",
+                    noteKey: "settings.appearance.nook.halo.beat.note",
+                    \.haloPulsesWithBeat,
+                    enabledWhen: { $0.haloStyle != .off && $0.mediaStyle != .off && $0.haloFollowsMusic }
+                )
+                // How far the pulse goes out, only while it is switched on.
+                NookSliceReader(
+                    nook: model.nook,
+                    profile: editingProfile,
+                    showsAgents: showsAgents,
+                    select: {
+                        NookBeatReachState(
+                            isShown: $0.haloPulsesWithBeat && $0.haloFollowsMusic
+                                && $0.haloStyle != .off && $0.mediaStyle != .off,
+                            reach: $0.haloPulseReach,
+                            look: $0.haloBeatLook,
+                            laserReach: $0.haloLaserReach,
+                            laserCount: $0.haloLaserCount,
+                            laserMode: $0.haloLaserMode
+                        )
+                    }
+                ) { state in
+                    if state.isShown {
+                        // The glow, or beams from under the notch. It is
+                        // first: the rows under it belong to the look, and
+                        // picking one never moves this row.
+                        NookBeatLookRow(
+                            title: lang.t("settings.appearance.nook.halo.beat.look"),
+                            name: { lang.t($0.titleKey) },
+                            look: Binding(
+                                get: { state.look },
+                                set: { look in updateNook { $0.haloBeatLook = look } }
+                            )
+                        )
+                        // Each hit for itself, or a show: only for the
+                        // lasers.
+                        if state.look == .lasers {
+                            NookLaserModeRow(
+                                title: lang.t(IslandLaserMode.titleKey),
+                                name: { lang.t($0.titleKey) },
+                                mode: Binding(
+                                    get: { state.laserMode },
+                                    set: { mode in updateNook { $0.haloLaserMode = mode } }
+                                )
+                            )
+                        }
+                        // One slider at a time: the glow's reach, or the
+                        // lasers' own, which goes much further.
+                        let slider = state.look.reachSlider
+                        NookBeatReachRow(
+                            title: lang.t(slider.titleKey),
+                            reach: Binding(
+                                get: { slider == .lasers ? state.laserReach : state.reach },
+                                set: { value in
+                                    // A drag writes many values a second, and
+                                    // none of them is a choice to animate.
+                                    model.nook.updateDisplayPreferences(for: editingProfile) {
+                                        if slider == .lasers {
+                                            $0.haloLaserReach = IslandLaserReach.clamped(value)
+                                        } else {
+                                            $0.haloPulseReach = IslandBeatReach.clamped(value)
+                                        }
+                                    }
+                                }
+                            )
+                        )
+                        .id(slider)
+                        // How many beams, only for the lasers.
+                        if state.look == .lasers {
+                            NookLaserCountRow(
+                                title: lang.t(IslandLaserCount.titleKey),
+                                count: Binding(
+                                    get: { state.laserCount },
+                                    set: { value in
+                                        model.nook.updateDisplayPreferences(for: editingProfile) {
+                                            $0.haloLaserCount = IslandLaserCount.clamped(value)
+                                        }
+                                    }
+                                )
+                            )
+                        }
+                    }
+                }
+                if model.beat.problem == .cannotHear {
+                    Text(lang.t("settings.appearance.nook.halo.beat.cannotHear"))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Color.orange.opacity(0.85))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
             if SystemMotionMonitor.shared.reduceMotion {
                 Text(lang.t("settings.appearance.nook.halo.reducedMotion"))
                     .font(.system(size: 11.5))
@@ -546,6 +639,125 @@ private struct NookHaloStyleChoice: Equatable, Sendable {
 private struct NookSwitchState: Equatable, Sendable {
     var isOn: Bool
     var isEnabled: Bool
+}
+
+/// What the reach slider under "Pulse with the beat" draws from.
+private struct NookBeatReachState: Equatable, Sendable {
+    var isShown: Bool
+    var reach: Double
+    var look: IslandBeatLook
+    var laserReach: Double
+    var laserCount: Int
+    var laserMode: IslandLaserMode
+}
+
+/// "Mode": each hit for itself, or a show, side by side (D56).
+private struct NookLaserModeRow: View {
+    let title: String
+    let name: (IslandLaserMode) -> String
+    @Binding var mode: IslandLaserMode
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.88))
+            Spacer(minLength: 12)
+            Picker(title, selection: $mode) {
+                ForEach(IslandLaserMode.allCases) { choice in
+                    Text(name(choice)).tag(choice)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .frame(width: 180)
+            .accessibilityLabel(title)
+        }
+    }
+}
+
+/// "Look": the glow or the lasers, side by side (D56).
+private struct NookBeatLookRow: View {
+    let title: String
+    let name: (IslandBeatLook) -> String
+    @Binding var look: IslandBeatLook
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.88))
+            Spacer(minLength: 12)
+            Picker(title, selection: $look) {
+                ForEach(IslandBeatLook.allCases) { choice in
+                    Text(name(choice)).tag(choice)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .frame(width: 180)
+            .accessibilityLabel(title)
+        }
+    }
+}
+
+/// "How many lasers": a slider from the fewest beams to the most, two at
+/// a time, with the number beside it (D56).
+private struct NookLaserCountRow: View {
+    let title: String
+    @Binding var count: Int
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.88))
+            Spacer(minLength: 12)
+            Slider(
+                value: Binding(get: { Double(count) }, set: { count = Int($0.rounded()) }),
+                in: Double(IslandLaserCount.least)...Double(IslandLaserCount.most),
+                step: Double(IslandLaserCount.step)
+            )
+            .controlSize(.small)
+            .frame(width: 150)
+            .accessibilityLabel(title)
+            .accessibilityValue(String(count))
+            Text(verbatim: String(count))
+                .font(.system(size: 12, weight: .medium).monospacedDigit())
+                .foregroundStyle(Color.white.opacity(0.6))
+                .frame(width: 20, alignment: .trailing)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+/// "How far it reaches": a slider from a small glow to a large one (D56).
+private struct NookBeatReachRow: View {
+    let title: String
+    @Binding var reach: Double
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.88))
+            Spacer(minLength: 12)
+            Image(systemName: "light.min")
+                .font(.system(size: 11))
+                .foregroundStyle(Color.white.opacity(0.4))
+                .accessibilityHidden(true)
+            Slider(value: $reach, in: 0...1)
+                .controlSize(.small)
+                .frame(width: 150)
+                .accessibilityLabel(title)
+            Image(systemName: "light.max")
+                .font(.system(size: 14))
+                .foregroundStyle(Color.white.opacity(0.6))
+                .accessibilityHidden(true)
+        }
+    }
 }
 
 /// What sets the layout editor's page: the calendar look and the opened

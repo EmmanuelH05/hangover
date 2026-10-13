@@ -154,7 +154,8 @@ import Testing
         let states = [Self.breathing(), Self.flash(token: 1), Self.drift(), Self.steady(radius: 18), .off]
         let radius = [IslandHaloMetrics.subtle, .vivid, .opened].map(\.radius).max() ?? 0
         let drop = [IslandHaloMetrics.subtle, .vivid, .opened].map(\.drop).max() ?? 0
-        #expect(IslandHaloLayerView.maxSpread == radius * 2 + drop)
+        // Room for every resting glow, and more for a pulse (D56).
+        #expect(IslandHaloLayerView.maxSpread >= radius * 2 + drop)
         for state in states {
             #expect(IslandHaloLayerView.spread(for: state) == IslandHaloLayerView.maxSpread)
         }
@@ -253,6 +254,68 @@ import Testing
         #expect(animation.autoreverses)
     }
 
+    // MARK: What the loop costs the window system (D60)
+
+    /// Every animation on the glow that never ends.
+    private static func endlessAnimations(of view: IslandHaloLayerView) -> [CAAnimation] {
+        (view.glowLayer.animationKeys() ?? [])
+            .compactMap { view.glowLayer.animation(forKey: $0) }
+            .filter { $0.repeatCount == .infinity }
+    }
+
+    @Test func aDriftAsksForFifteenFramesASecondAndNoMore() throws {
+        let state = Self.drift(rest: 0.65)
+        let view = Self.makeView(for: state)
+
+        view.apply(state: state)
+        let range = try #require(Self.opacityAnimation(of: view)).preferredFrameRateRange
+
+        #expect(range.maximum == 15)
+        #expect(range.preferred == 15)
+        #expect(range.minimum == 10)
+    }
+
+    @Test func aBreathAsksForThirtyFramesASecondAndNoMore() throws {
+        let state = Self.breathing()
+        let view = Self.makeView(for: state)
+
+        view.apply(state: state)
+        let range = try #require(Self.opacityAnimation(of: view)).preferredFrameRateRange
+
+        #expect(range.maximum == 30)
+        #expect(range.preferred == 30)
+        #expect(range.minimum == 15)
+    }
+
+    @Test func theOnlyAnimationThatNeverEndsIsTheOpacityLoopAndItNamesAFrameRate() throws {
+        // A loop over a glow that was already up, which also leaves a fading
+        // copy and an envelope: neither of those may run for ever.
+        let view = Self.makeView(for: Self.steady())
+        view.apply(state: Self.steady())
+        for state in [Self.drift(rest: 0.65), Self.breathing()] {
+            view.apply(state: state)
+            let endless = Self.endlessAnimations(of: view)
+            #expect(endless.count == 1)
+            let loop = try #require(endless.first as? CABasicAnimation)
+            #expect(loop.keyPath == "opacity")
+            // An endless loop with no say runs at the display's own rate.
+            #expect(loop.preferredFrameRateRange.maximum > 0)
+            #expect(loop.preferredFrameRateRange.maximum <= Motion.Halo.breathingFramesPerSecond)
+        }
+    }
+
+    @Test func aGlowThatDoesNotMoveHasNothingRunning() {
+        let view = Self.makeView(for: Self.steady())
+        view.apply(state: Self.steady())
+        #expect(Self.endlessAnimations(of: view).isEmpty)
+        #expect((view.glowLayer.animationKeys() ?? []).isEmpty)
+
+        // A loop that ends leaves nothing running behind it either.
+        view.apply(state: Self.drift(rest: 0.65))
+        view.apply(state: Self.steady())
+        #expect(Self.endlessAnimations(of: view).isEmpty)
+    }
+
     @Test func steadyFadesInFromWhatIsOnScreenWithoutAnimatingTheFirstApply() {
         let state = Self.steady(rest: 0.7)
         let view = Self.makeView(for: state)
@@ -306,7 +369,9 @@ import Testing
         let state = Self.steady(radius: 10)
         let view = Self.makeView(for: state, cornerRadius: 16)
         let spread = IslandHaloLayerView.maxSpread
-        #expect(spread == 41)
+        // It was 41, what a resting glow paints. A pulse at its largest reach
+        // paints further out (D56).
+        #expect(spread == 80)
 
         view.apply(state: state)
         view.layoutSubtreeIfNeeded()

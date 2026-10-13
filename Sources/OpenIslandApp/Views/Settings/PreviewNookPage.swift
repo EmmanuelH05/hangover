@@ -283,23 +283,6 @@ private struct NookSampleTransport: View {
     }
 }
 
-private struct NookSampleProgress: View {
-    var fraction: CGFloat = 0.4
-
-    var body: some View {
-        Capsule()
-            .fill(Color.white.opacity(0.15))
-            .frame(height: 3)
-            .overlay(alignment: .leading) {
-                GeometryReader { geometry in
-                    Capsule()
-                        .fill(Color.white.opacity(0.8))
-                        .frame(width: geometry.size.width * fraction)
-                }
-            }
-    }
-}
-
 // MARK: - Cards
 
 /// A still picture of one widget at one size, with sample content, in the
@@ -331,6 +314,8 @@ struct NookSampleCard: View {
         case .timer: timer
         case .mirror: mirror
         case .weather: NookWeatherContent.sample(size: size)
+        case .design: NookDesignCard.sample(size: size)
+        case .linkAudio: NookLinkAudioCard.sample(size: size)
         }
     }
 
@@ -631,6 +616,7 @@ struct NookSampleCard: View {
 private struct NookSampleCalendar: View {
     let size: NookWidgetSize
     let style: NookCalendarStyle
+    @Environment(\.hangoverAccent) private var accent
 
     private static let verticalPadding: CGFloat = 12
 
@@ -796,9 +782,12 @@ private struct NookSampleCalendar: View {
                         Text(date.formatted(.dateTime.weekday(.narrow)))
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.white.opacity(0.35))
-                        Text("\(calendar.component(.day, from: date))")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(isToday ? Color.orange : .white.opacity(0.85))
+                        NookDayNumber(
+                            text: "\(calendar.component(.day, from: date))",
+                            isToday: isToday,
+                            font: .system(size: 13, weight: .semibold),
+                            diameter: 20
+                        )
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 42)
@@ -858,9 +847,9 @@ private struct NookSampleCalendar: View {
         return VStack(spacing: 1) {
             Text(isInMonth ? "\(number)" : "")
                 .font(.system(size: 11, weight: isToday ? .bold : .medium))
-                .foregroundStyle(isToday ? Color.black : .white.opacity(0.8))
+                .foregroundStyle(isToday ? accent.textOnHighlight(.black) : .white.opacity(0.8))
                 .frame(width: 20, height: 20)
-                .background(Circle().fill(isToday ? Color.orange : .clear))
+                .background(Circle().fill(isToday ? accent.highlight(.orange) : .clear))
             Circle()
                 .fill(Color.white.opacity(isInMonth && marked.contains(number) && !isToday ? 0.5 : 0))
                 .frame(width: 3, height: 3)

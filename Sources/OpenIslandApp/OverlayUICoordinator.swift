@@ -224,6 +224,14 @@ final class OverlayUICoordinator {
         if IslandPointerRules.openingBringsBackHiddenContent(reason: reason) {
             appModel?.nook.closedContentHiddenBySwipe = false
         }
+        // An island that opens starts with no line held. A card still on
+        // screen for the closing fade may have reported one after the close.
+        if notchStatus != .opened {
+            appModel?.nook.forgetDrafts()
+            // The design kit looks at its files again, for a change the other
+            // copy of the app made, and says once what it could not read.
+            appModel?.nook.design.islandOpened()
+        }
         transitionOverlay(
             to: .opened,
             reason: reason,
@@ -281,6 +289,8 @@ final class OverlayUICoordinator {
                 self?.appModel?.nook.isEditingLayout = false
                 // A closed island holds no line: the next one starts clean.
                 self?.appModel?.nook.forgetDrafts()
+                // What the design kit still has to write is written.
+                self?.appModel?.nook.design.islandClosed()
                 // Closing the island turns the mirror, the camera and the
                 // ring light off. The next open never starts the camera.
                 self?.appModel?.nook.isMirrorOn = false
@@ -643,6 +653,11 @@ final class OverlayUICoordinator {
             return false
         }
 
+        // A question in the design card that waits for a name.
+        if appModel?.showsNookPage == true, appModel?.nook.design.isAskingForName == true {
+            return false
+        }
+
         // The tray's share picker hangs off the island. Closing under it
         // would pull away the file being shared.
         if appModel?.nook.tray.isSharePickerOpen == true {
@@ -656,7 +671,9 @@ final class OverlayUICoordinator {
 
         // Nor a line typed in a widget and not saved: a note, a to-do, a
         // timer length (`NookDraft`).
-        if appModel?.nook.holdsUnsavedDraft == true {
+        // Only on the Nook page: a card or the agents page shows no widget
+        // that could hold one.
+        if appModel?.showsNookPage == true, appModel?.nook.holdsUnsavedDraft == true {
             return false
         }
 

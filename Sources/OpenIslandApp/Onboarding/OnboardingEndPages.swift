@@ -11,7 +11,7 @@ struct OnboardingPermissionsPage: View {
     let context: OnboardingPageContext
 
     var body: some View {
-        let grants = OnboardingGrant.shown(agentsEnabled: context.state.agentsEnabled)
+        let grants = OnboardingGrant.shown(agentsEnabled: context.state.agentsEnabled, beatIsOn: context.state.beat.isOn)
         OnboardingPageScaffold(
             page: .permissions,
             context: context,
@@ -64,6 +64,10 @@ enum OnboardingGrant: String, CaseIterable, Sendable {
     case camera
     case accessibility
     case calendar
+    /// Asked for when "Pulse with the beat" is switched on (D56): the app
+    /// listens to the Mac's sound to find the beat. Listed only while the
+    /// switch is on.
+    case audio
     /// Asked for by the session monitor, a terminal jump and a reply, all
     /// of which belong to the agent half.
     case automation
@@ -73,6 +77,7 @@ enum OnboardingGrant: String, CaseIterable, Sendable {
         case .camera: "camera.fill"
         case .accessibility: "accessibility"
         case .calendar: "calendar"
+        case .audio: "waveform"
         case .automation: "terminal.fill"
         }
     }
@@ -86,8 +91,8 @@ enum OnboardingGrant: String, CaseIterable, Sendable {
         return self == .accessibility && agentsEnabled ? base + ".agents" : base
     }
 
-    static func shown(agentsEnabled: Bool) -> [OnboardingGrant] {
-        agentsEnabled ? allCases : allCases.filter { !$0.isAgentsOnly }
+    static func shown(agentsEnabled: Bool, beatIsOn: Bool = false) -> [OnboardingGrant] {
+        allCases.filter { (agentsEnabled || !$0.isAgentsOnly) && (beatIsOn || $0 != .audio) }
     }
 }
 
@@ -168,12 +173,17 @@ struct OnboardingDonePage: View {
 
     var body: some View {
         let rows = OnboardingRecapRow.shown(
+            length: state.length ?? .medium,
             agentsEnabled: state.agentsEnabled,
             hasTodoWidget: state.showsWidget(.todo),
             hasNotesWidget: state.showsWidget(.notes),
             hasWeatherWidget: state.showsWidget(.weather),
-            hasCalendarWidget: state.showsWidget(.calendar)
+            hasCalendarWidget: state.showsWidget(.calendar),
+            hasDesignKit: state.features.design.isOn,
+            hasLights: state.beat.showsInSummary,
+            hasMoreSwitches: !state.moreSwitchedOn.isEmpty
         )
+        let rowHeight = Self.rowHeight(rowCount: rows.count)
         VStack(spacing: 0) {
             OnboardingPillArt(
                 width: 230,
@@ -196,7 +206,7 @@ struct OnboardingDonePage: View {
             VStack(spacing: 0) {
                 ForEach(Array(rows.enumerated()), id: \.element) { index, row in
                     if index > 0 { OnboardingDivider() }
-                    recapRow("onboarding.done.recap.\(row.rawValue)") { recapContent(row) }
+                    recapRow("onboarding.done.recap.\(row.rawValue)", height: rowHeight) { recapContent(row) }
                 }
             }
             .background(OnboardingCardBackground())
@@ -206,6 +216,15 @@ struct OnboardingDonePage: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: OnboardingStyle.textWidth)
                 .padding(.top, 12)
+
+            // The short tour says it can be run again, for a longer one. The
+            // main tour's recap has no room for a second line.
+            if state.length == .short {
+                OnboardingNote(text: context.t("onboarding.done.again"))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: OnboardingStyle.textWidth)
+                    .padding(.top, 6)
+            }
 
             Spacer(minLength: 0)
         }
@@ -227,7 +246,29 @@ struct OnboardingDonePage: View {
         case .layout: recapValue(layoutText)
         case .opened: recapValue(openedLookText)
         case .glow: recapValue(glowText)
+        case .design: recapValue(context.t("onboarding.done.recap.design.on"))
+        case .lights: recapValue(lightsText)
+        case .goodToKnow: recapValue(goodToKnowText)
         }
+    }
+
+    /// A row is 27 points while thirteen or fewer fit above the buttons. With
+    /// the design kit, the lights and the Good to know row chosen there are
+    /// sixteen at most, and each takes a little less, which keeps the whole
+    /// list the height thirteen were.
+    static func rowHeight(rowCount: Int) -> CGFloat {
+        if rowCount > 15 { return 21.9 }
+        return rowCount > 13 ? 23.4 : 27
+    }
+
+    /// The Good to know switches turned on in this tour, by short name.
+    private var goodToKnowText: String {
+        state.moreSwitchedOn.map { context.t("onboarding.done.recap.more.\($0.rawValue)") }.joined(separator: ", ")
+    }
+
+    /// The pulse and the look it is in.
+    private var lightsText: String {
+        context.lang.t("onboarding.done.recap.lights.value", context.t(state.beat.look.titleKey))
     }
 
     /// The saved place, or that none is saved yet.
@@ -283,7 +324,7 @@ struct OnboardingDonePage: View {
         )
     }
 
-    private func recapRow<Value: View>(_ key: String, @ViewBuilder value: () -> Value) -> some View {
+    private func recapRow<Value: View>(_ key: String, height: CGFloat, @ViewBuilder value: () -> Value) -> some View {
         HStack(spacing: 12) {
             Text(context.t(key))
                 .font(.system(size: 12.5, weight: .medium))
@@ -294,8 +335,9 @@ struct OnboardingDonePage: View {
             value()
         }
         .padding(.horizontal, 14)
-        // Thirteen rows have to fit the window above its buttons.
-        .frame(height: 27)
+        // Thirteen rows have to fit the window above its buttons, and two more
+        // take a little less each (`rowHeight`).
+        .frame(height: height)
         .accessibilityElement(children: .combine)
     }
 
@@ -337,27 +379,53 @@ enum OnboardingRecapRow: String, CaseIterable, Sendable {
     case layout
     case opened
     case glow
+    /// The design kit, while it is switched on.
+    case design
+    /// The lights that follow the beat, while the pulse is switched on.
+    case lights
+    /// The Good to know switches the user turned on, in one row.
+    case goodToKnow
 
     var isAgentsOnly: Bool {
         self == .agents || self == .approve || self == .deny
     }
 
+    /// True for a row of something the short tour asked about: how the
+    /// island opens, what the closed island shows, the agents that are
+    /// connected and the widgets. The rows of the pages it skips are left
+    /// off its recap.
+    var isInShortTour: Bool {
+        switch self {
+        case .opens, .closed, .agents, .widgets: true
+        case .approve, .deny, .calendar, .todos, .notes, .weather, .layout, .opened, .glow, .design, .lights, .goodToKnow: false
+        }
+    }
+
     /// The rows the recap shows: nothing of agents while they are off, and
     /// no task source while the to-do widget is off the page, and no notes
-    /// place while the notes widget is.
+    /// place while the notes widget is. The short tour recaps only what it
+    /// asked.
     static func shown(
+        length: OnboardingLength = .medium,
         agentsEnabled: Bool,
         hasTodoWidget: Bool = true,
         hasNotesWidget: Bool = true,
         hasWeatherWidget: Bool = true,
-        hasCalendarWidget: Bool = true
+        hasCalendarWidget: Bool = true,
+        hasDesignKit: Bool = false,
+        hasLights: Bool = false,
+        hasMoreSwitches: Bool = false
     ) -> [OnboardingRecapRow] {
         allCases.filter { row in
-            (agentsEnabled || !row.isAgentsOnly)
+            (length > .short || row.isInShortTour)
+                && (agentsEnabled || !row.isAgentsOnly)
                 && (hasTodoWidget || row != .todos)
                 && (hasNotesWidget || row != .notes)
                 && (hasWeatherWidget || row != .weather)
                 && (hasCalendarWidget || row != .calendar)
+                && (hasDesignKit || row != .design)
+                && (hasLights || row != .lights)
+                && (hasMoreSwitches || row != .goodToKnow)
         }
     }
 }

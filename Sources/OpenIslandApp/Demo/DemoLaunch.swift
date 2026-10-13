@@ -20,6 +20,8 @@ final class DemoSession {
     /// Nil when the environment names no script, or one that does not exist.
     let script: DemoScript?
     let backdropPath: String?
+    /// Whether the design kit is on the page, for a recording made by hand.
+    let showsDesignKit: Bool
     /// The demo's own folder under the temporary directory.
     let folder: URL
 
@@ -37,6 +39,7 @@ final class DemoSession {
         let script = environment[DemoMode.scriptKey].flatMap(DemoScripts.named)
         self.script = script
         backdropPath = environment[DemoMode.backdropKey]
+        showsDesignKit = environment[DemoMode.designKey] == "1"
         folder = temporary.appendingPathComponent("open-island-demo-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
 
         // The store starts from the app's defaults and goes nowhere. The
@@ -86,12 +89,32 @@ final class DemoSession {
                 defaults: defaults
             ),
             weather: NookWeatherService(transport: weatherTransport, defaults: defaults),
+            // The design kit is off in a demo unless its switch asks for
+            // it. Its files are the demo's own either way (D53).
+            design: NookDesignKit(
+                folder: folder.appendingPathComponent("Design", isDirectory: true),
+                defaults: defaults
+            ),
+            // Link to MP3 is off in a demo, and could start nothing if it
+            // were on: it finds no programs and has no runner.
+            linkAudio: NookLinkAudioService.isolated(
+                defaults: defaults,
+                folder: folder.appendingPathComponent("LinkAudio", isDirectory: true)
+            ),
             defaults: defaults,
             looksForImportedGIF: false,
             asksMacOSForAccess: false
         )
         // A meeting link opens nothing in the demo.
         nook.openURL = { _ in }
+        if showsDesignKit {
+            // First on every display's page and at its largest, which is
+            // where a recording of the kit wants it.
+            for profile in IslandAppearanceDisplayProfile.allCases {
+                nook.addWidget(.design, at: 0, for: profile)
+                nook.setWidgetSize(.design, .large, for: profile)
+            }
+        }
 
         model = AppModel(defaults: defaults, nookModel: nook)
         // A model on a store of its own keeps its panel off screen, which is
@@ -112,6 +135,17 @@ final class DemoSession {
         }
         if let screen = model.islandScreen ?? NSScreen.main {
             DemoPointer.park(on: screen)
+        }
+        if showsDesignKit {
+            // A hand drives this run, and it picks from the real screen and
+            // pastes into a real app: the kit gets its real services, and
+            // its copies go to the real clipboard, not the demo's.
+            let kit = model.nook.design
+            kit.activate(.system())
+            kit.copyText = { text in
+                NSPasteboard.general.clearContents()
+                return NSPasteboard.general.setString(text, forType: .string)
+            }
         }
         guard let script else {
             print("DEMO no script to run")

@@ -34,8 +34,15 @@ final class NookPowerMonitor {
         self.defaults = defaults
     }
 
-    private var isEnabled: Bool {
+    /// The switch in Settings, Nook tab: the notices are on until it is
+    /// turned off.
+    var isEnabled: Bool {
         defaults.object(forKey: Self.enabledKey) as? Bool ?? true
+    }
+
+    /// Writes the key the switch in Settings writes (`@AppStorage`).
+    func setEnabled(_ enabled: Bool) {
+        defaults.set(enabled, forKey: Self.enabledKey)
     }
 
     func start(nook: NookModel) {

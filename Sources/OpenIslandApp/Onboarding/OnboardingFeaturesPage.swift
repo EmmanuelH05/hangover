@@ -9,6 +9,12 @@ struct OnboardingFeaturesPage: View {
 
     private var state: OnboardingState { context.state }
 
+    /// The footnote says which tools stay on. Where the build does not offer
+    /// Link to MP3 it names the design kit alone.
+    static var footnoteKey: String {
+        NookLinkAudioOffer.isOffered ? "onboarding.features.note" : "onboarding.features.note.release"
+    }
+
     var body: some View {
         let walk = state.featureWalk
         OnboardingPageScaffold(
@@ -16,7 +22,7 @@ struct OnboardingFeaturesPage: View {
             context: context,
             title: context.t("onboarding.features.title"),
             text: context.t(walk.current == nil ? "onboarding.features.none" : "onboarding.features.body"),
-            footnote: context.t("onboarding.features.note"),
+            footnote: context.t(Self.footnoteKey),
             gap: 12
         ) {
             VStack(alignment: .leading, spacing: 12) {
@@ -30,7 +36,7 @@ struct OnboardingFeaturesPage: View {
                         OnboardingCalendarLookPicker(context: context)
                     }
                     lines(kind)
-                    if walk.isAtEnd, walk.kinds.count < NookWidgetKind.allCases.count {
+                    if walk.isAtEnd, walk.kinds.count < OnboardingFeatureWalk.everyKind.count {
                         OnboardingNote(text: context.t("onboarding.features.others"))
                     }
                 }

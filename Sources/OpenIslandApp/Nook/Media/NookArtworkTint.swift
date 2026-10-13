@@ -40,8 +40,8 @@ final class NookArtworkTintService {
 
     /// The same key `NookModel.artwork` caches its decoded image under.
     private func currentSource() -> NookArtworkSource? {
-        guard let state = nook?.media.state, let data = state.artworkData else { return nil }
-        return NookArtworkSource(key: "\(state.itemIdentifier ?? state.title)#\(data.count)", data: data)
+        guard let state = nook?.media.state, let data = state.artworkData, let key = state.artworkKey else { return nil }
+        return NookArtworkSource(key: key, data: data)
     }
 
     private func apply(_ source: NookArtworkSource?) {

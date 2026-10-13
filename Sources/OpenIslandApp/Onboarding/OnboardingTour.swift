@@ -142,6 +142,17 @@ struct OnboardingState: Equatable, Sendable {
     /// while that shortcut is switched off.
     var approveKeys: [String]?
     var denyKeys: [String]?
+    /// How long a tour the user asked for. Nil until the question page is
+    /// answered. The tour holds the answer itself and lays it over this, which
+    /// lets a snapshot hand one in.
+    var length: OnboardingLength?
+    /// The lights that follow the beat, on the display in use (D56).
+    var beat = OnboardingBeatReading()
+    /// The switches of the Good to know pages (what the app says).
+    var more = OnboardingMoreReading()
+    /// The switches the user turned on in this tour and has not turned off,
+    /// in the order the pages come. The tour lays this over the state.
+    var moreSwitchedOn: [OnboardingMoreSwitch] = []
 
     func status(of agent: OnboardingAgent) -> OnboardingAgentStatus {
         agents[agent] ?? OnboardingAgentStatus()
@@ -154,7 +165,15 @@ struct OnboardingState: Equatable, Sendable {
 
     /// The widget page the tour draws: the display's own, or the shown
     /// template's widgets that are switched on, or the app's starting page.
+    /// Every widget the app offers is on offer, the design kit and Link to MP3
+    /// included where the build has it (`NookLinkAudioOffer`), and each is
+    /// drawn once it is on the page. A widget the build does not offer is never
+    /// in it, whatever a state handed in says.
     var shownPlacements: [NookWidgetPlacement] {
+        offeredOnly(unfilteredPlacements)
+    }
+
+    private var unfilteredPlacements: [NookWidgetPlacement] {
         if let nookPlacements { return nookPlacements }
         if let id = shownTemplate, let template = PersonalizationTemplate.all.first(where: { $0.id == id }) {
             return template.widgets.filter { enabledWidgets.contains($0.kind) }
@@ -162,11 +181,15 @@ struct OnboardingState: Equatable, Sendable {
         return NookDisplayPreferences().placements(enabled: Array(enabledWidgets))
     }
 
+    private func offeredOnly(_ placements: [NookWidgetPlacement]) -> [NookWidgetPlacement] {
+        placements.filter { $0.kind.isOffered }
+    }
+
     /// The page the "Keep mine" card draws: the display's own while it is on
     /// no template, else the one the tour holds, else the app's starting page.
     var ownLayoutPlacements: [NookWidgetPlacement] {
         if shownTemplate == nil { return shownPlacements }
-        return ownPlacements ?? NookDisplayPreferences().placements(enabled: Array(enabledWidgets))
+        return offeredOnly(ownPlacements ?? NookDisplayPreferences().placements(enabled: Array(enabledWidgets)))
     }
 
     /// What the arrange page shows for the picked widget. Nil until one is
@@ -186,7 +209,16 @@ struct OnboardingState: Equatable, Sendable {
     /// The features page's list: the widgets on the page, in order, and the
     /// one shown.
     var featureWalk: OnboardingFeatureWalk {
-        OnboardingFeatureWalk(kinds: shownPlacements.map(\.kind), current: featureKind)
+        OnboardingFeatureWalk(kinds: featureKinds, current: featureKind)
+    }
+
+    /// The walk's widgets: the ones on the page, in order, then the design
+    /// kit and Link to MP3. Those two are always the last steps, switched on
+    /// or not, because the first button of each is the one that switches it
+    /// on. One that is on the page does not come up twice: it takes its step
+    /// at the end. Only the medium and long tours have the page.
+    var featureKinds: [NookWidgetKind] {
+        shownPlacements.map(\.kind).filter { !NookWidgetKind.tools.contains($0) } + NookWidgetKind.tools
     }
 
     /// True once the app showed a "Try it" done. The notes step is the
@@ -265,6 +297,21 @@ struct OnboardingActions {
     var keepOwnLayout: () -> Void = {}
     var setGlowStyle: (IslandHaloStyle) -> Void = { _ in }
     var setGlowTheme: (IslandHaloTheme) -> Void = { _ in }
+    /// The switch "Pulse with the beat", written for the display in use as
+    /// Settings writes it. Flipping it on is what makes the app listen to
+    /// the Mac's sound, and macOS asks once: the one call here that does.
+    var setBeatPulse: (Bool) -> Void = { _ in }
+    /// The Look of the pulse, Glow or Lasers, as Settings writes it.
+    var setBeatLook: (IslandBeatLook) -> Void = { _ in }
+    /// A switch of a Good to know page, written through the door the switch
+    /// in Settings uses. Flipping the keys switch on is what raises macOS's
+    /// request for Accessibility access: the one switch here that does.
+    var setMore: (OnboardingMoreSwitch, Bool) -> Void = { _, _ in }
+    /// The button beside "Waiting for Accessibility access", which is the one
+    /// in Settings: it asks macOS again and opens the Accessibility list.
+    var requestKeysAccess: () -> Void = {}
+    /// Opens Settings on a tab, for a feature that needs setup.
+    var openSettings: (SettingsTab) -> Void = { _ in }
     var setOpenedWidth: (IslandOpenedWidth) -> Void = { _ in }
     var setOpenedCorners: (IslandOpenedCorners) -> Void = { _ in }
     /// Holds the real island open on the Nook page, or lets it go (D44).
@@ -318,10 +365,19 @@ struct OnboardingActions {
     /// Writes the calendar look for the display the island is on: the write
     /// the picker in Settings makes. Kept when the user moves on (D50).
     var setCalendarStyle: (NookCalendarStyle) -> Void = { _ in }
+    /// Opens the design kit's eyedropper, the macOS color loupe, through the
+    /// kit's own pick door. It needs no permission. The color the user picks
+    /// is kept and copied, as it is from the card.
+    var pickDesignColor: () -> Void = {}
     /// The features page's next and previous widget. The tour answers them
     /// with the walk it kept; the app never sees these.
     var nextFeature: () -> Void = {}
     var previousFeature: () -> Void = {}
+    /// The question page's cards, and the buttons on a last page that carry
+    /// on to a longer tour. The tour answers them with its own state; the
+    /// app never sees these.
+    var chooseLength: (OnboardingLength) -> Void = { _ in }
+    var carryOn: (OnboardingLength) -> Void = { _ in }
 }
 
 /// What the user chose in one run of the tour, kept by the tour itself.
@@ -343,6 +399,21 @@ struct OnboardingPicks: Equatable, Sendable {
     var musicOptions: [NookClosedMusicOption: Bool] = [:]
     /// Agents whose Connect button was pressed.
     var connectAttempts: Set<OnboardingAgent> = []
+    /// The length picked on the question page, or carried on to from a last
+    /// page. The pages after the question follow it.
+    var length: OnboardingLength?
+    /// The longest length the user has reached the last page of and carried
+    /// on from. It is what a skipped tour records as done.
+    var finished: OnboardingLength?
+    /// The tools (the design kit, Link to MP3) the user switched on in this
+    /// run and has not switched off. A layout lists neither and hides every
+    /// widget it does not list. They are switched on again after one.
+    var tools: Set<NookWidgetKind> = []
+    /// The Good to know switches turned on here and not turned off since.
+    var more: Set<OnboardingMoreSwitch> = []
+    /// The last pick of the usage meter, which a layout writes over (it carries
+    /// a usage setting of its own) and which comes back after one.
+    var usageMeter: Bool?
 }
 
 extension OnboardingPicks {
@@ -382,6 +453,9 @@ final class OnboardingTour {
     /// The app's count of swipes when this tour came up. A count over it
     /// means the island acted on a swipe since.
     @ObservationIgnored private let swipeBaseline: Int
+    /// Set the first time the count is seen over the baseline, and never
+    /// cleared: an answer given stays, as it does for the opened island.
+    @ObservationIgnored private var hasSeenSwipe = false
     /// True while this tour has asked the app to hold the island open.
     @ObservationIgnored private var holdsIsland = false
     /// Whether Hangover is the active app and the tour window can be seen.
@@ -419,32 +493,75 @@ final class OnboardingTour {
     /// Runs once, when the tour ends by its last button, by Skip or by its
     /// window closing.
     @ObservationIgnored private let onEnd: (OnboardingOutcome) -> Void
+    /// Runs just before `onEnd` with the length the user finished, when
+    /// there is one: the length at the last button, or the longest one
+    /// carried on from when the tour was skipped.
+    @ObservationIgnored private let onLength: (OnboardingLength) -> Void
+    /// True when the run began past the question page. The question can no
+    /// longer be asked first, and the run walks the main tour.
+    @ObservationIgnored private let startsPastQuestion: Bool
+    /// Every page that has been up in this run, which is what a longer tour
+    /// carried on to leaves out.
+    @ObservationIgnored private var visited: Set<OnboardingPage> = []
+    /// The pages seen before the user carried on to a longer tour. The walk
+    /// leaves them out: a page already seen is not shown again.
+    private var leftOut: Set<OnboardingPage> = []
 
     init(
         startingAt page: OnboardingPage = .welcome,
         state: @escaping () -> OnboardingState,
         actions: OnboardingActions = OnboardingActions(),
-        onEnd: @escaping (OnboardingOutcome) -> Void = { _ in }
+        onEnd: @escaping (OnboardingOutcome) -> Void = { _ in },
+        onLength: @escaping (OnboardingLength) -> Void = { _ in }
     ) {
-        let first = state()
+        var first = state()
+        let startsPastQuestion = page.rawValue > OnboardingPage.length.rawValue
+        first.length = first.length ?? (startsPastQuestion ? .medium : nil)
         flow = OnboardingFlow(startingAt: page, pages: Self.pages(for: first))
         swipeBaseline = first.swipeCount
         readState = state
         appActions = actions
         self.onEnd = onEnd
+        self.onLength = onLength
+        self.startsPastQuestion = startsPastQuestion
+        visited = [flow.page]
+    }
+
+    /// The length this run walks: the pick of this run, else the one the
+    /// state holds. Nil until the question page is answered.
+    var length: OnboardingLength? {
+        picks.length ?? readState().length ?? (startsPastQuestion ? .medium : nil)
     }
 
     /// The pages this run walks, read from the app as it is now. The agents
-    /// switch and the to-do widget can change under the tour, from its own
-    /// pages or from Settings.
-    var pages: [OnboardingPage] { Self.pages(for: readState()) }
+    /// switch and the widgets can change under the tour, from its own pages
+    /// or from Settings. A page seen before a longer tour was carried on to
+    /// is left out. With no length picked yet these are the welcome page and
+    /// the question.
+    var pages: [OnboardingPage] {
+        pages(of: length, leaving: leftOut)
+    }
 
+    /// The pages a tour of `length` walks with the app as it is now, less
+    /// the pages in `seen`.
+    private func pages(of length: OnboardingLength?, leaving seen: Set<OnboardingPage>) -> [OnboardingPage] {
+        var state = readState()
+        state.length = length
+        return Self.pages(for: state).filter { !seen.contains($0) }
+    }
+
+    /// The pages a tour walks for a state, whose length is the pick: a pure
+    /// function of the state, which lets the question page count the pages of
+    /// each answer.
     static func pages(for state: OnboardingState) -> [OnboardingPage] {
         OnboardingPage.shown(
+            length: state.length,
             agentsEnabled: state.agentsEnabled,
             hasTodoWidget: state.showsWidget(.todo),
             hasNotesWidget: state.showsWidget(.notes),
-            hasWeatherWidget: state.showsWidget(.weather)
+            hasWeatherWidget: state.showsWidget(.weather),
+            hasPermissionWidget: OnboardingGrant.widgetsAskingMacOS.contains(where: state.showsWidget),
+            hasLights: state.beat.isAvailable
         )
     }
 
@@ -452,16 +569,36 @@ final class OnboardingTour {
     /// the page before it.
     var page: OnboardingPage { OnboardingPage.landing(flow.page, in: pages) }
     var isFirstPage: Bool { page == pages.first }
-    var isLastPage: Bool { page == pages.last }
+    /// False while the question is unanswered: its page is the end of the
+    /// list the tour knows, and not the end of the tour.
+    var isLastPage: Bool { length != nil && page == pages.last }
+    /// Next waits on the question page until one card is picked.
+    var canGoNext: Bool { !(page == .length && length == nil) }
+
+    /// This page's place in the list the user picked, counted from one.
+    var step: Int { (pages.firstIndex(of: page) ?? 0) + 1 }
+    /// How many pages the run walks, counted from the list as it stands now.
+    /// Nil until a length is picked: the total is not known yet.
+    var stepCount: Int? { length == nil ? nil : pages.count }
+
+    /// The longer tours the last page offers to carry on to. Empty on any
+    /// other page, and on the long tour. A tour whose pages have all been
+    /// seen already is not offered: carrying on would have nothing to show.
+    var carryOnLengths: [OnboardingLength] {
+        guard isLastPage, !flow.hasEnded, let length else { return [] }
+        return length.longer.filter { !pages(of: $0, leaving: visited).isEmpty }
+    }
 
     /// The app's state with this run's picks laid over it. What the state
     /// already says about a pick, a failure or the island having been
     /// opened is kept, which lets a snapshot hand in a fixed one.
     var state: OnboardingState {
         var state = readState()
+        state.length = length
         if state.isIslandOpen { hasSeenIslandOpen = true }
         state.hasOpenedIsland = state.hasOpenedIsland || hasSeenIslandOpen
-        state.hasSwiped = state.hasSwiped || state.swipeCount > swipeBaseline
+        if state.swipeCount > swipeBaseline { hasSeenSwipe = true }
+        state.hasSwiped = state.hasSwiped || hasSeenSwipe
         trackArrange(in: state)
         // A state handed in with a pick, as a snapshot does, is kept.
         if page == .arrange, let pick = arrangePick {
@@ -475,6 +612,11 @@ final class OnboardingTour {
         state.hasSavedNote = state.hasSavedNote || notesBaseline.map { state.notesSavedCount > $0 } ?? false
         state.arrangeStart = state.arrangeStart ?? arrangeStart
         state.pickedTemplate = picks.template ?? state.pickedTemplate
+        // A state handed in with switches, as a snapshot does, is kept.
+        state.moreSwitchedOn = OnboardingMoreSwitch.allCases.filter {
+            (picks.more.contains($0) || state.moreSwitchedOn.contains($0))
+                && state.more.isOn($0) && (state.agentsEnabled || !$0.needsAgents)
+        }
         state.canKeepOwnLayout = state.canKeepOwnLayout || picks.hasOwnLayout
         for agent in picks.connectAttempts {
             var status = state.status(of: agent)
@@ -488,19 +630,39 @@ final class OnboardingTour {
     /// some of them also keep a note of the pick.
     var actions: OnboardingActions {
         var actions = appActions
+        // A tool switched on here is noted: a layout hides it, and it comes
+        // back (`putPicksBack`). Switched off, it is no longer the user's pick.
+        actions.setWidget = { [weak self, appActions] kind, isOn in
+            if NookWidgetKind.tools.contains(kind) {
+                if isOn { self?.picks.tools.insert(kind) } else { self?.picks.tools.remove(kind) }
+            }
+            // The same for a widget that was switched on from its card.
+            if !isOn, kind == .mirror { self?.picks.more.remove(.mirrorWidget) }
+            if !isOn, kind == .weather { self?.picks.more.remove(.weatherWidget) }
+            appActions.setWidget(kind, isOn)
+        }
+        // A switch turned on here is noted, for the summary. Nothing is turned
+        // back when the tour ends: these are the user's choices.
+        actions.setMore = { [weak self, appActions] item, isOn in
+            if isOn { self?.picks.more.insert(item) } else { self?.picks.more.remove(item) }
+            if item == .usageMeter { self?.picks.usageMeter = isOn }
+            appActions.setMore(item, isOn)
+        }
         actions.connect = { [weak self, appActions] agent in
             self?.picks.connectAttempts.insert(agent)
             appActions.connect(agent)
         }
         actions.applyTemplate = { [weak self, appActions, readState] template in
             let wasOnNoTemplate = readState().appliedTemplate == nil
+            self?.dropCardWidgetsSwitchedOffSince(readState().more)
             appActions.applyTemplate(template)
             guard let self else { return }
             if picks.template == nil, wasOnNoTemplate { picks.hasOwnLayout = true }
             picks.template = template.id
             putPicksBack()
         }
-        actions.keepOwnLayout = { [weak self, appActions] in
+        actions.keepOwnLayout = { [weak self, appActions, readState] in
+            self?.dropCardWidgetsSwitchedOffSince(readState().more)
             appActions.keepOwnLayout()
             guard let self else { return }
             picks.template = nil
@@ -573,6 +735,8 @@ final class OnboardingTour {
         }
         actions.nextFeature = { [weak self] in self?.showFeature(self?.currentWalk.next) }
         actions.previousFeature = { [weak self] in self?.showFeature(self?.currentWalk.previous) }
+        actions.chooseLength = { [weak self] in self?.chooseLength($0) }
+        actions.carryOn = { [weak self] in self?.carryOn(to: $0) }
         actions.pickArrangeWidget = { [weak self] in self?.pickArrangeWidget($0) }
         actions.tryAnotherWidget = { [weak self] in self?.endArrange() }
         actions.resetArrangement = { [weak self, appActions] in
@@ -683,7 +847,7 @@ final class OnboardingTour {
 
     /// The list of the features page as it stands now.
     private var currentWalk: OnboardingFeatureWalk {
-        OnboardingFeatureWalk(kinds: readState().shownPlacements.map(\.kind), current: featureKind)
+        OnboardingFeatureWalk(kinds: readState().featureKinds, current: featureKind)
     }
 
     /// Notes what the app shows while the features page is up, and starts
@@ -763,6 +927,17 @@ final class OnboardingTour {
 
     /// A template, and the layout from before it, carry a glow style, a
     /// calendar look and a closed island (both sides) of their own. The ones
+    /// A widget switched on from its Good to know page is the user's pick
+    /// only while it is still on the page. Switched off since, on the
+    /// widgets page, in Settings or on the island itself, it is not put back
+    /// by a layout and the summary does not list it. Asked before a layout
+    /// is applied, which is the last moment the page says what the user left.
+    private func dropCardWidgetsSwitchedOffSince(_ reading: OnboardingMoreReading) {
+        for item in [OnboardingMoreSwitch.mirrorWidget, .weatherWidget] where !reading.isOn(item) {
+            picks.more.remove(item)
+        }
+    }
+
     /// picked on other pages of this tour are the user's and come back.
     private func putPicksBack() {
         if let style = picks.glowStyle { appActions.setGlowStyle(style) }
@@ -770,12 +945,72 @@ final class OnboardingTour {
         if let side = picks.closedSide { appActions.setClosedSide(side) }
         if let left = picks.closedLeft { appActions.setClosedLeft(left) }
         for pick in picks.musicPicks { appActions.setClosedMusic(pick) }
+        // A widget the user switched on stays on the page: the layout did not
+        // list it, and put back it goes after the layout's own widgets.
+        for kind in NookWidgetKind.tools where picks.tools.contains(kind) { appActions.setWidget(kind, true) }
+        if let usage = picks.usageMeter { appActions.setMore(.usageMeter, usage) }
+        // A widget switched on from its Good to know page: a layout hides what
+        // it does not list, and the user's pick comes back.
+        for item in [OnboardingMoreSwitch.mirrorWidget, .weatherWidget] where picks.more.contains(item) {
+            appActions.setMore(item, true)
+        }
     }
 
-    func next() { move { $0.next() } }
+    func next() {
+        guard canGoNext else { return }
+        move { $0.next() }
+    }
     func back() { move { $0.back() } }
     func skip() { move { $0.skip() } }
     func go(to page: OnboardingPage) { move { $0.go(to: page) } }
+
+    /// Turns the tour to a page that something outside it asked for, such as
+    /// the island's hint to connect an agent. A page this run does not walk
+    /// is brought back: it is no longer left out, and a length too short for
+    /// it gives way to the shortest one that has it. A page the app takes
+    /// out, such as the agents page with the agents off, stays out.
+    func show(_ page: OnboardingPage) {
+        if !pages.contains(page) {
+            var seen = leftOut
+            seen.remove(page)
+            let wanted = max(length ?? .medium, page.shortestLength)
+            guard pages(of: wanted, leaving: seen).contains(page) else { return }
+            leftOut = seen
+            picks.length = wanted
+        }
+        go(to: page)
+    }
+
+    /// A card of the question page. The pages after the question follow the
+    /// pick, and a later pick, after Back, changes them again.
+    func chooseLength(_ length: OnboardingLength) {
+        guard !flow.hasEnded, page == .length else { return }
+        picks.length = length
+        move { _ in }
+    }
+
+    /// A last page's button for a longer tour. The length changes, the
+    /// pages already seen are left out, and the tour carries on from the
+    /// first page the shorter one did not show.
+    func carryOn(to target: OnboardingLength) {
+        guard carryOnLengths.contains(target), let current = length else { return }
+        picks.finished = current
+        leftOut = visited
+        picks.length = target
+        move { flow in
+            if let first = flow.pages.first { flow.go(to: first) }
+        }
+    }
+
+    /// The length a tour that ended this way counts as done: the length
+    /// of the last page it came to, or, for a tour skipped on the way, the
+    /// longest one it carried on from.
+    private func finishedLength(for outcome: OnboardingOutcome) -> OnboardingLength? {
+        switch outcome {
+        case .finished: length
+        case .skipped: picks.finished
+        }
+    }
 
     private func move(_ change: (inout OnboardingFlow) -> Void) {
         let hadEnded = flow.hasEnded
@@ -783,6 +1018,7 @@ final class OnboardingTour {
         let pages = pages
         if flow.pages != pages { flow.pages = pages }
         change(&flow)
+        visited.insert(page)
         if page != .arrange || flow.hasEnded { endArrange() }
         if page != .features || flow.hasEnded { endFeatures() }
         trackArrange(in: readState())
@@ -790,6 +1026,7 @@ final class OnboardingTour {
         // The hold goes before the end is recorded and the window closed.
         syncIsland()
         if !hadEnded, let outcome = flow.outcome {
+            if let finished = finishedLength(for: outcome) { onLength(finished) }
             onEnd(outcome)
         }
     }
@@ -806,11 +1043,17 @@ extension OnboardingTour {
         actions: OnboardingActions = OnboardingActions(),
         close: @escaping @MainActor () -> Void = {}
     ) -> OnboardingTour {
-        OnboardingTour(startingAt: page, state: state, actions: actions) { _ in
-            store.welcomeTourEnded = true
-            store.firstLaunchCompleted = true
-            close()
-        }
+        OnboardingTour(
+            startingAt: page,
+            state: state,
+            actions: actions,
+            onEnd: { _ in
+                store.welcomeTourEnded = true
+                store.firstLaunchCompleted = true
+                close()
+            },
+            onLength: { store.welcomeTourLength = $0.rawValue }
+        )
     }
 }
 

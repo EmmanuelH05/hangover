@@ -54,6 +54,11 @@ final class NookVolumeMonitor {
         defaults.object(forKey: Self.noticeKey) as? Bool ?? true
     }
 
+    /// Writes the key the switch in Settings writes (`@AppStorage`).
+    func setNoticeEnabled(_ enabled: Bool) {
+        defaults.set(enabled, forKey: Self.noticeKey)
+    }
+
     func start(nook: NookModel) {
         self.nook = nook
         guard !started else { return }

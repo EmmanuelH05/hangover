@@ -9,8 +9,9 @@ struct OnboardingPageContext {
     let lang: LanguageManager
     /// This page's place in the run, counted from one.
     var step = 1
-    /// How many pages this run walks.
-    var stepCount = OnboardingPage.allCases.count
+    /// How many pages this run walks. Nil until the user has picked a
+    /// length: the total is not known yet, and the page says no total.
+    var stepCount: Int?
 
     func t(_ key: String) -> String { lang.t(key) }
 }
@@ -26,6 +27,7 @@ struct OnboardingPageView: View {
         Group {
             switch page {
             case .welcome: OnboardingWelcomePage(context: context)
+            case .length: OnboardingLengthPage(context: context)
             case .purpose: OnboardingPurposePage(context: context)
             case .opening: OnboardingOpeningPage(context: context)
             case .closed: OnboardingClosedPage(context: context)
@@ -39,6 +41,8 @@ struct OnboardingPageView: View {
             case .arrange: OnboardingArrangePage(context: context)
             case .opened: OnboardingOpenedPage(context: context)
             case .look: OnboardingGlowPage(context: context)
+            case .mirror, .booth, .weatherCard, .lights, .accent, .power, .volume, .usage, .quiet, .phone, .screens, .sounds, .links, .startup, .updates:
+                OnboardingMorePage(page: page, context: context)
             case .permissions: OnboardingPermissionsPage(context: context)
             case .integrations: OnboardingIntegrationsPage(context: context)
             case .tips: OnboardingTipsPage(context: context)
@@ -171,10 +175,12 @@ struct OnboardingPageScaffold<Content: View>: View {
         }
     }
 
-    /// "Basics · Step 2 of 11".
+    /// "Basics · Step 2 of 11", or "Basics · Step 2" before the user has
+    /// picked a length and the total is not known.
     static func eyebrow(_ page: OnboardingPage, _ context: OnboardingPageContext) -> String {
         let chapter = context.lang.t(page.chapter.titleKey)
-        let step = context.lang.t("onboarding.step", context.step, context.stepCount)
+        let step = context.stepCount.map { context.lang.t("onboarding.step", context.step, $0) }
+            ?? context.lang.t("onboarding.step.open", context.step)
         return "\(chapter) · \(step)"
     }
 }

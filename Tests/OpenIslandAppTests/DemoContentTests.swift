@@ -143,14 +143,14 @@ struct DemoMusicTests {
 
     @Test func eachTrackKeepsItsOwnIdentityAndCover() {
         let (player, _) = player()
-        var identities: [String?] = []
+        var identities: [String] = []
         var covers: [Data?] = []
         for _ in DemoTrack.all {
-            identities.append(player.state.itemIdentifier)
+            identities.append(player.state.trackIdentity)
             covers.append(player.state.artworkData)
             player.handle(.nextTrack)
         }
-        #expect(Set(identities.compactMap { $0 }).count == 4)
+        #expect(Set(identities).count == 4)
         #expect(Set(covers.compactMap { $0 }).count == 4)
     }
 

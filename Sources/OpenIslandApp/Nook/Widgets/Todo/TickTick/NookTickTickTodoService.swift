@@ -4,8 +4,9 @@ import Observation
 /// TickTick as a task source for the todo card. Reads the open tasks of one
 /// list, marks them done, adds new ones and edits their notes.
 ///
-/// Idle until `setActive(true)`: no Keychain, disk or network work happens
-/// while another source is selected.
+/// Idle until `setActive(true)`: no token file, disk or network work happens
+/// while another source is selected. The Keychain is never read here: an
+/// older build's token comes over only when the user asks for it.
 @MainActor
 @Observable
 final class NookTickTickTodoService {
@@ -13,6 +14,9 @@ final class NookTickTickTodoService {
         /// Absent means the inbox.
         static let listID = "nook.todo.ticktick.listID"
         static let listName = "nook.todo.ticktick.listName"
+        /// Set once the token an older build kept in the Keychain was moved
+        /// to the file, found missing or deleted. Holds no token.
+        static let keychainSettled = "nook.todo.ticktick.keychainSettled"
     }
 
     /// Most tasks loaded for the card.
@@ -41,9 +45,20 @@ final class NookTickTickTodoService {
     /// TickTick answered 401 for the stored token. Stays set until a new
     /// token connects, which keeps the token field on screen.
     var tokenRejected = false
-    /// Disconnect could not take the token out of the Keychain. It is
-    /// still stored, and the session is as it was.
+    /// Disconnect could not remove the token file. It is still stored, and
+    /// the session is as it was.
     var tokenRemovalFailed = false
+    /// Why the token file could not be used. Set with `.keychainUnavailable`.
+    var tokenProblem: NookTodoTokenFileError?
+    /// An offline copy of the tasks was found at launch. Only a connected
+    /// account leaves one.
+    var hasOfflineCopy = false
+    /// The token an older build kept in the Keychain is dealt with.
+    var isKeychainSettled = false
+    /// The user pressed "Bring my saved token over" and it is running.
+    var isMovingToken = false
+    /// The last try to bring the token over could not read it.
+    var moveFailed = false
     var lists: [TickTickListChoice] = []
     var hasLoadedLists = false
     var isLoadingLists = false
@@ -88,6 +103,9 @@ final class NookTickTickTodoService {
 
     @ObservationIgnored let defaults: UserDefaults
     @ObservationIgnored let tokenStore: any NookTodoTokenStoring
+    /// The way an older build's Keychain token comes over. Nothing in the
+    /// default reads the Keychain: the hub passes the real one.
+    @ObservationIgnored let tokenMove: NookTodoTokenMove
     @ObservationIgnored let cache: TickTickTodoCache
     @ObservationIgnored let now: @Sendable () -> Date
     @ObservationIgnored private var transport: (any NookTodoTransport)?
@@ -95,13 +113,15 @@ final class NookTickTickTodoService {
     init(
         defaults: UserDefaults = .standard,
         transport: (any NookTodoTransport)? = nil,
-        tokenStore: any NookTodoTokenStoring = NookTodoKeychain.tickTick,
+        tokenStore: any NookTodoTokenStoring = NookTodoTokenFile.tickTick,
+        tokenMove: NookTodoTokenMove = .none,
         cache: TickTickTodoCache = TickTickTodoCache(),
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.defaults = defaults
         self.transport = transport
         self.tokenStore = tokenStore
+        self.tokenMove = tokenMove
         self.cache = cache
         self.now = now
     }
@@ -125,22 +145,28 @@ final class NookTickTickTodoService {
         }
     }
 
-    /// Reads the token and the offline copy, then refreshes.
-    private func finishActivation(epoch startEpoch: Int) async {
+    /// Reads the token file and the offline copy, then refreshes. Only the
+    /// file is read: a missing token shows the "not connected" state, and
+    /// whatever an older build left in the Keychain waits for the user.
+    func finishActivation(epoch startEpoch: Int) async {
         guard isActive, epoch == startEpoch else { return }
         let store = tokenStore
         let tokenResult = await Task.detached { Result { try store.read() } }.value
         let snapshot = await cache.load()
         guard isActive, epoch == startEpoch else { return }
+        hasOfflineCopy = snapshot != nil
 
         switch tokenResult {
-        case .failure:
+        case .failure(let error):
+            tokenProblem = .describing(error, fallback: .unreadable)
             state = .keychainUnavailable
             return
         case .success(nil):
+            tokenProblem = nil
             state = .noToken
             return
         case .success(let stored?):
+            tokenProblem = nil
             token = stored
             hasToken = true
         }
@@ -163,6 +189,8 @@ final class NookTickTickTodoService {
         hasLoadedLists = false
         listsLoadFailed = false
         tokenRemovalFailed = false
+        tokenProblem = nil
+        moveFailed = false
         state = .inactive
     }
 
@@ -352,6 +380,7 @@ final class NookTickTickTodoService {
         do {
             try await cache.clear()
             cacheFailed = false
+            hasOfflineCopy = false
         } catch {
             cacheFailed = true
         }
@@ -360,6 +389,7 @@ final class NookTickTickTodoService {
     private func loadPreferences() {
         selectedListID = defaults.string(forKey: Keys.listID).flatMap { $0.isEmpty ? nil : $0 } ?? TickTickClient.inboxID
         listName = defaults.string(forKey: Keys.listName)
+        isKeychainSettled = defaults.bool(forKey: Keys.keychainSettled)
     }
 
     func persistSelection() {

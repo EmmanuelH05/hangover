@@ -5,6 +5,7 @@ import SwiftUI
 /// background and padding, and the grid fixes the height.
 struct NookCalendarCompactView: View {
     var nook: NookModel
+    @Environment(\.hangoverAccent) private var accent
     /// Opens the card's add-event form on a day.
     var onAdd: (Date) -> Void = { _ in }
 
@@ -45,7 +46,7 @@ struct NookCalendarCompactView: View {
                 .lineLimit(1)
             Text(now.formatted(.dateTime.day()))
                 .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(.orange)
+                .foregroundStyle(accent.highlight(.orange))
             Spacer(minLength: 0)
             NookCalendarAddButton(isInline: true) { onAdd(now) }
         }

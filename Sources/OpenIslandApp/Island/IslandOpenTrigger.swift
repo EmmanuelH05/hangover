@@ -114,8 +114,16 @@ enum IslandPointerRules {
     /// `isScrolling` is true while a scroll gesture is under way over the
     /// pill: a swipe is being made there, and an island that opens under the
     /// fingers would take it.
-    static func hoverOpens(trigger: IslandOpenTrigger, isSuppressed: Bool, isScrolling: Bool = false) -> Bool {
-        trigger == .hover && !isSuppressed && !isScrolling
+    /// `isSamplingColor` is true while the design kit's loupe is up: the
+    /// pointer crosses the pill on its way to the color it wants, and an
+    /// island that opens there would cover that color.
+    static func hoverOpens(
+        trigger: IslandOpenTrigger,
+        isSuppressed: Bool,
+        isScrolling: Bool = false,
+        isSamplingColor: Bool = false
+    ) -> Bool {
+        trigger == .hover && !isSuppressed && !isScrolling && !isSamplingColor
     }
 
     /// Whether the pointer leaving the open island closes it, given what

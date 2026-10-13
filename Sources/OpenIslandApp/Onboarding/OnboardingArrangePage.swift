@@ -213,6 +213,7 @@ struct OnboardingArrangePage: View {
 /// The small picture beside a step: still shapes, no motion.
 struct OnboardingArrangeArt: View {
     let step: OnboardingRearrangeStep
+    @Environment(\.hangoverAccent) private var accent
 
     private static let size = CGSize(width: 58, height: 52)
 
@@ -268,9 +269,9 @@ struct OnboardingArrangeArt: View {
     private var finish: some View {
         Text("Done")
             .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(accent.textOnHighlight(.white))
             .padding(.horizontal, 10)
             .frame(height: 24)
-            .background(Capsule().fill(Color.orange))
+            .background(Capsule().fill(accent.highlight(.orange)))
     }
 }

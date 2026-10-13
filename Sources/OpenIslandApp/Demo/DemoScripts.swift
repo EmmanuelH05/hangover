@@ -12,10 +12,11 @@ enum DemoScripts {
         all.first { $0.name == name }
     }
 
-    /// The pages the tour walks in the demo: no agents page and no weather
+    /// The pages the tour walks in the demo: the main tour, because the
+    /// script picks the middle length, with no agents page and no weather
     /// page, because the agents are off and the weather widget starts off.
     static let tourPages = OnboardingPage.shown(
-        agentsEnabled: false, hasTodoWidget: true, hasNotesWidget: true, hasWeatherWidget: false
+        length: .medium, agentsEnabled: false, hasTodoWidget: true, hasNotesWidget: true, hasWeatherWidget: false
     )
 
     // MARK: tour
@@ -28,8 +29,11 @@ enum DemoScripts {
         startsPlaying: true,
         steps: [
             DemoStep(2.5, .openTour),
-            // welcome, purpose, opening, closed
+            // welcome, then the question: the main tour, the length the
+            // recorded tour has always been. Then purpose, opening, closed.
             DemoStep(3.5, .tourNext),
+            DemoStep(2.0, .tourChooseLength(.medium)),
+            DemoStep(1.5, .tourNext),
             DemoStep(3.0, .tourNext),
             DemoStep(3.0, .tourNext),
             DemoStep(3.5, .tourNext),

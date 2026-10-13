@@ -129,6 +129,8 @@ final class NookPhotoBoothModel {
     @ObservationIgnored var camera: any NookPhotoBoothCamera
     @ObservationIgnored var defaultFolder: URL
     @ObservationIgnored var advancesItself: Bool
+    /// Where strips are composed. A test may swap it for a counting one.
+    @ObservationIgnored var stripGate: NookPhotoStripGate = .shared
 
     /// True while the mirror is on. The app's model answers this.
     @ObservationIgnored var isMirrorOn: () -> Bool = { false }
@@ -243,14 +245,15 @@ final class NookPhotoBoothModel {
         let store = store
         let folder = folderURL
         let scale = Self.previewScale
-        return await Task.detached(priority: .userInitiated) { () -> NookPhotoBoothResult? in
-            guard let pdf = NookPhotoStripComposer.pdf(input),
-                  let preview = NookPhotoStripComposer.bitmap(input, scale: scale) else {
+        let gate = stripGate
+        return await Task.detached(priority: .userInitiated) { () async -> NookPhotoBoothResult? in
+            // The strip is composed at the gate, ahead of any preview in Settings.
+            guard let printed = await gate.makeStrip(input, previewScale: scale) else {
                 return nil
             }
             do {
-                let url = try store.save(pdf, into: folder, at: input.date)
-                return NookPhotoBoothResult(fileURL: url, preview: preview, pageSize: input.layout.pageSize)
+                let url = try store.save(printed.pdf, into: folder, at: input.date)
+                return NookPhotoBoothResult(fileURL: url, preview: printed.picture, pageSize: input.layout.pageSize)
             } catch {
                 Self.log.error("Could not save the strip: \(error.localizedDescription, privacy: .public)")
                 return nil

@@ -60,6 +60,43 @@ enum Motion {
         static let approvalPeriod: TimeInterval = 2.0
         static let questionPeriod: TimeInterval = 2.6
         static let driftPeriod: TimeInterval = 8.0
+
+        /// How many frames a second an endless glow loop asks for (D60). A
+        /// Core Animation loop that names no rate runs at the display's own,
+        /// 120 a second on a MacBook Pro, and the window system composes
+        /// every one of those frames for as long as the loop is up: measured
+        /// at about half a processor core, against none of the app's own. A
+        /// drift moves less than one step of opacity a frame at 15, and a
+        /// breath a few steps a frame at 30, which the eye does not see.
+        static let driftFramesPerSecond: Float = 15
+        static let breathingFramesPerSecond: Float = 30
+        /// A loop that changes its opacity slower than this, per second, is a
+        /// drift. The drifts move about 0.03 a second and the breaths 0.2 and up.
+        static let slowLoopSpeed: Double = 0.1
+
+        /// The rate a loop asks for, from how fast its opacity moves.
+        static func loopFramesPerSecond(opacityPerSecond speed: Double) -> Float {
+            speed < slowLoopSpeed ? driftFramesPerSecond : breathingFramesPerSecond
+        }
+
+        /// The range handed to Core Animation for that rate: the rate itself
+        /// at most and by preference, and two thirds or half of it at least,
+        /// which are the two ranges that were measured.
+        static func loopFrameRateRange(opacityPerSecond speed: Double) -> CAFrameRateRange {
+            let rate = loopFramesPerSecond(opacityPerSecond: speed)
+            let least: Float = rate == driftFramesPerSecond ? 10 : 15
+            return CAFrameRateRange(minimum: least, maximum: rate, preferred: rate)
+        }
+
+        /// The rate a hit's animation asks for (D60): the punch of the glow
+        /// and every move of the lasers. They are over in about 140 ms and
+        /// there are a few of them a second, and an animation that names no
+        /// rate is composed at the display's 120. Sixty is half of that and
+        /// still eight frames of a punch.
+        static let hitFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+        /// The rate of a slow move that lasts seconds: a breath or a wave
+        /// of the lasers.
+        static let slowFrameRateRange = CAFrameRateRange(minimum: 15, maximum: 30, preferred: 30)
     }
 
     // MARK: Transitions

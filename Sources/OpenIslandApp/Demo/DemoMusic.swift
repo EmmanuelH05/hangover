@@ -49,6 +49,9 @@ final class DemoPlayer {
     private let now: () -> Date
     private(set) var index: Int
     private(set) var isPlaying: Bool
+    /// The sample reports both modes, like a player that has them.
+    private(set) var shuffle = NowPlayingShuffle.off
+    private(set) var repeating = NowPlayingRepeat.off
     /// Where the track was at `anchor`.
     private var elapsedAtAnchor: TimeInterval
     private var anchor: Date
@@ -88,6 +91,8 @@ final class DemoPlayer {
             "duration": track.duration,
             "elapsedTime": elapsedAtAnchor,
             "contentItemIdentifier": "demo-track-\(index)",
+            "shuffleMode": shuffle.rawValue,
+            "repeatMode": repeating.rawValue,
         ])!
         state.timestamp = anchor
         state.artworkData = covers[index]
@@ -112,7 +117,8 @@ final class DemoPlayer {
             }
         case .skipFifteenSeconds: seek(to: position + 15)
         case .goBackFifteenSeconds: seek(to: position - 15)
-        case .toggleShuffle, .toggleRepeat: break
+        case .toggleShuffle: shuffle = shuffle.toggled
+        case .toggleRepeat: repeating = repeating.next
         }
     }
 

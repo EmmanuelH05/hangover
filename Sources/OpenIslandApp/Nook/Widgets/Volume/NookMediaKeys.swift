@@ -52,8 +52,9 @@ protocol NookMediaKeyFilter: AnyObject {
 /// closed notch shows the result. Off until the user turns it on, because
 /// it needs the Accessibility grant.
 ///
-/// The grant is asked for once, by the switch in Settings and never at
-/// launch. After that the app only checks, quietly, whether it is there:
+/// The switch in Settings asks for the grant once, the button beside
+/// "Waiting" asks each time it is pressed, and a launch never asks. Apart
+/// from that the app only checks, quietly, whether the grant is there:
 /// it takes the keys when the grant arrives and lets go of them when the
 /// grant is taken away, because a key filter left in place without the
 /// grant can hold up the keyboard.
@@ -74,6 +75,14 @@ final class NookMediaKeys {
     }
 
     private(set) var status: Status = .off
+
+    /// True when a launch found the switch on and the grant missing, until
+    /// the keys are taken. Switching off and on again changes nothing about
+    /// the grant and leaves the hint where it is. Somebody who turned this
+    /// on in an earlier run gave the grant then. macOS ties a grant to the
+    /// build that asked for it, and after an update it can show the switch
+    /// on in System Settings and still say no. Settings says what to do.
+    private(set) var accessWasMissingAtLaunch = false
 
     /// False while the closed notch cannot show a notice (the island is
     /// open, or notices are off on this display). The keys then stay with
@@ -120,7 +129,20 @@ final class NookMediaKeys {
     /// the grant is already there and waits quietly when it is not.
     func start() {
         guard isEnabled else { return }
+        accessWasMissingAtLaunch = !trust.isTrusted()
         activateOrWait()
+    }
+
+    /// The button in Settings beside "Waiting". It asks macOS again, which
+    /// is the one thing that puts the app back in the Accessibility list
+    /// after it was taken out of it. With the grant there it takes the keys.
+    func requestAccess() {
+        guard isEnabled else { return }
+        if trust.isTrusted() {
+            checkAccess()
+        } else {
+            trust.prompt()
+        }
     }
 
     /// The switch in Settings. Turning it on without the grant asks macOS
@@ -181,6 +203,8 @@ final class NookMediaKeys {
             self?.handle(event) ?? false
         }
         if !installed { keysLog.error("macOS refused the media key filter") }
+        // The grant is here, whatever the filter said.
+        accessWasMissingAtLaunch = false
         status = installed ? .active : .unavailable
     }
 

@@ -13,9 +13,22 @@ extension View {
     /// padding never animates with the island's spring and the pill stays
     /// exactly where the host view is. Applying an equal state is a no-op, so
     /// SwiftUI re-renders do not restart any animation.
-    func islandHalo(_ state: IslandHaloState, cornerRadius: CGFloat) -> some View {
+    ///
+    /// `beatFeed` is where the island's own glow hears the song from (D56).
+    /// The frames go from the feed to the layer and pass no view on the way.
+    ///
+    /// `laserStage` is the Lasers look of the beat. Only the island's own
+    /// glow is handed one: it says when the beams exist and where.
+    func islandHalo(
+        _ state: IslandHaloState,
+        cornerRadius: CGFloat,
+        beatFeed: IslandBeatFeed? = nil,
+        laserStage: IslandLaserStage? = nil
+    ) -> some View {
         background(
-            IslandHaloLayerRepresentable(state: state, cornerRadius: cornerRadius)
+            IslandHaloLayerRepresentable(
+                state: state, cornerRadius: cornerRadius, beatFeed: beatFeed, laserStage: laserStage
+            )
                 .padding(-IslandHaloLayerView.maxSpread)
                 .allowsHitTesting(false)
         )
@@ -25,6 +38,8 @@ extension View {
 private struct IslandHaloLayerRepresentable: NSViewRepresentable {
     let state: IslandHaloState
     let cornerRadius: CGFloat
+    let beatFeed: IslandBeatFeed?
+    let laserStage: IslandLaserStage?
 
     func makeNSView(context: Context) -> IslandHaloLayerView {
         let view = IslandHaloLayerView()
@@ -38,6 +53,8 @@ private struct IslandHaloLayerRepresentable: NSViewRepresentable {
 
     private func configure(_ view: IslandHaloLayerView) {
         view.cornerRadius = cornerRadius
+        view.beatFeed = beatFeed
+        view.laserStage = laserStage
         view.apply(state: state)
     }
 }
@@ -47,16 +64,32 @@ private struct IslandHaloLayerRepresentable: NSViewRepresentable {
 /// `maxSpread`.
 @MainActor
 final class IslandHaloLayerView: NSView {
-    /// How far the view reaches past the pill: twice the largest blur radius
-    /// plus the largest drop of any metrics set. One constant for every state
-    /// (including `.off`), so the padding the modifier applies never changes
-    /// while the island's spring is moving the host view.
+    /// How far the view reaches past the pill: the most any glow paints.
+    /// For a resting glow that is twice the largest blur radius plus the
+    /// largest drop of any metrics set. A pulse at the far end of "How far
+    /// it reaches" is scaled further out (D56), on the lowest pill the
+    /// island draws, and that is the larger of the two. One constant for
+    /// every state (including `.off`), which keeps the padding the modifier
+    /// applies from changing while the island's spring moves the host view.
     static let maxSpread: CGFloat = {
         let all = [IslandHaloMetrics.subtle, .vivid, .opened]
         let radius = all.map(\.radius).max() ?? 0
         let drop = all.map(\.drop).max() ?? 0
-        return max(0, radius * 2 + drop)
+        let pulsing = [IslandHaloMetrics.subtle, .vivid].map { metrics in
+            IslandBeatReach.outerExtent(
+                half: lowestPillHalf, radius: metrics.radius, drop: metrics.drop,
+                scale: IslandBeatReach.peakScale(
+                    half: lowestPillHalf, radius: metrics.radius, factor: IslandBeatReach.mostFactor
+                )
+            )
+        }.max() ?? 0
+        return max(0, radius * 2 + drop, pulsing).rounded(.up)
     }()
+
+    /// Half the height of the lowest closed island, a menu bar's on a
+    /// display with no notch. A lower pill would be scaled further, and the
+    /// pulse holds itself to the drawing area whatever the pill is.
+    static let lowestPillHalf: CGFloat = 11
 
     /// Kept for callers of the old per-state API. It is `maxSpread` for every state.
     static func spread(for state: IslandHaloState) -> CGFloat {
@@ -81,6 +114,19 @@ final class IslandHaloLayerView: NSView {
     /// The one live layer: it has no contents, its shadow is the glow.
     let glowLayer = CALayer()
 
+    /// The glow while it follows a song (D56). It sits over the live layer,
+    /// which steps aside for it.
+    let beatGlow = IslandBeatGlow()
+
+    /// Where the song's frames come from. Only the island's own glow has
+    /// one; a preview in Settings has none and never pulses.
+    var beatFeed: IslandBeatFeed? {
+        didSet {
+            guard beatFeed !== oldValue else { return }
+            beatFeed?.onFrame = { [weak self] frame in self?.applyBeat(frame) }
+        }
+    }
+
     /// The pill's corner radius.
     var cornerRadius: CGFloat = 0 {
         didSet { if cornerRadius != oldValue { needsLayout = true } }
@@ -89,6 +135,18 @@ final class IslandHaloLayerView: NSView {
     /// What the system allows right now. Read when a flash starts, to turn the
     /// rise and settle into one fade under Reduce Motion. Tests replace it.
     var policyProvider: @MainActor () -> IslandMotionPolicy = { SystemMotionMonitor.shared.policy }
+
+    /// The Lasers look of the beat (D56), in a window of its own. Only the
+    /// island's own glow has one. This view says when the beams exist,
+    /// which is while its state is a pulse with that look, and where the
+    /// closed island is on its screen.
+    var laserStage: IslandLaserStage? {
+        didSet {
+            guard laserStage !== oldValue else { return }
+            oldValue?.close()
+            updateLasers()
+        }
+    }
 
     private(set) var lastState: IslandHaloState?
     /// How many opacity animations were added to the live layer, which lets
@@ -137,6 +195,7 @@ final class IslandHaloLayerView: NSView {
         glowLayer.shadowRadius = 0
         glowLayer.shouldRasterize = true
         layer?.addSublayer(glowLayer)
+        layer?.addSublayer(beatGlow.container)
         updateScale()
     }
 
@@ -156,17 +215,53 @@ final class IslandHaloLayerView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         updateScale()
+        watchScreens()
+        updateLasers()
+    }
+
+    /// What tells the view that the island is on another screen, or that
+    /// its screen changed. Neither lays the view out again when the two
+    /// screens have one scale and the panel keeps its size, and the
+    /// lasers must still move with the island.
+    static let screenNotifications: [Notification.Name] = [
+        NSWindow.didChangeScreenNotification,
+        NSApplication.didChangeScreenParametersNotification,
+    ]
+
+    private var screenObservers: [any NSObjectProtocol] = []
+    /// How many of those notices the view is listening for.
+    var screenObserverCount: Int { screenObservers.count }
+
+    private func watchScreens() {
+        let center = NotificationCenter.default
+        screenObservers.forEach(center.removeObserver)
+        screenObservers = []
+        guard let window else { return }
+        screenObservers = Self.screenNotifications.map { name in
+            // The window's own move, and the app's notice for the screens.
+            let sender: Any? = name == NSWindow.didChangeScreenNotification ? window : nil
+            return center.addObserver(forName: name, object: sender, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.screenChanged() }
+            }
+        }
+    }
+
+    /// The island is on another screen, or its screen is another size.
+    func screenChanged() {
+        updateLasers()
     }
 
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         updateScale()
+        updateLasers()
     }
 
     /// Geometry only. Never touches animations.
     override func layout() {
         super.layout()
         updatePath()
+        updateLasers()
     }
 
     // MARK: Applying a state
@@ -188,6 +283,58 @@ final class IslandHaloLayerView: NSView {
         applyGeometry(of: state, animated: animated && !startsLoop)
         applyMotion(of: state, previous: previous, animated: animated)
         CATransaction.commit()
+        updateLasers()
+    }
+
+    /// The pulse of the state on screen when its look is Lasers.
+    private var laserPulse: IslandHaloPulse? {
+        guard case let .pulse(pulse) = lastState?.motion, pulse.look == .lasers else { return nil }
+        return pulse
+    }
+
+    /// Tells the lasers whether to exist and where the closed island is.
+    /// With no window, which is a test or a view on its way out, there are
+    /// none.
+    private func updateLasers() {
+        guard let laserStage else { return }
+        guard let pulse = laserPulse, let window, let screen = window.screen else {
+            laserStage.close()
+            return
+        }
+        let spread = Self.maxSpread
+        let pill = window.convertToScreen(convert(bounds, to: nil)).insetBy(dx: spread, dy: spread)
+        laserStage.update(
+            pulse: pulse,
+            pill: pill,
+            screen: screen.frame,
+            contentsScale: window.backingScaleFactor,
+            islandWindowNumber: window.windowNumber
+        )
+    }
+
+    /// One frame of the song. It moves the glow only while the state on
+    /// screen is a pulse: an agent that waits keeps its own glow.
+    func applyBeat(_ frame: IslandBeatFrame) {
+        guard case .pulse = lastState?.motion else { return }
+        // With the Lasers look the beams take the song, and the glow stays
+        // at rest under them, a faint base. Lasers that cannot be shown
+        // leave the song to the glow.
+        if laserPulse != nil, let laserStage, laserStage.isShowing {
+            laserStage.follow(frame)
+            return
+        }
+        beatGlow.room = pulseRoom()
+        beatGlow.follow(frame)
+    }
+
+    /// How far past the pill the pulse may paint: what the island's window
+    /// has to the side and below, and never more than this view's own
+    /// drawing area. With no window, which is a test, the drawing area.
+    private func pulseRoom() -> (side: CGFloat, below: CGFloat) {
+        let spread = Self.maxSpread
+        guard let window else { return (spread, spread) }
+        let pill = convert(bounds, to: nil).insetBy(dx: spread, dy: spread)
+        return IslandBeatReach.room(pill: pill, inWindowOfSize: window.frame.size, limit: spread)
     }
 
     // MARK: Color and geometry
@@ -238,8 +385,17 @@ final class IslandHaloLayerView: NSView {
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        let path = Self.pillPath(for: key, inset: Self.pillInset)
         glowLayer.frame = bounds
-        glowLayer.shadowPath = Self.pillPath(for: key, inset: Self.pillInset)
+        glowLayer.shadowPath = path
+        beatGlow.layout(
+            frame: bounds,
+            pill: CGSize(
+                width: max(0, bounds.width - Self.maxSpread * 2),
+                height: max(0, bounds.height - Self.maxSpread * 2)
+            ),
+            path: path
+        )
         for glow in outgoing {
             var outgoingKey = key
             outgoingKey.drop = glow.drop
@@ -266,6 +422,7 @@ final class IslandHaloLayerView: NSView {
         CATransaction.setDisableActions(true)
         glowLayer.contentsScale = scale
         glowLayer.rasterizationScale = scale
+        beatGlow.setContentsScale(scale)
         for glow in outgoing {
             glow.layer.contentsScale = scale
             glow.layer.rasterizationScale = scale
@@ -295,7 +452,7 @@ final class IslandHaloLayerView: NSView {
                 duration: period,
                 cycle: period * 2
             )
-        case .none, .steady, .flash:
+        case .none, .steady, .flash, .pulse:
             return nil
         }
     }
@@ -309,8 +466,16 @@ final class IslandHaloLayerView: NSView {
         let motionChanged = previous?.motion != state.motion
         guard motionChanged || previous?.restOpacity != state.restOpacity else { return }
         let rest = Float(state.restOpacity)
+        if case .pulse = state.motion {} else { beatGlow.end(animated: animated) }
 
         switch state.motion {
+        case let .pulse(pulse):
+            // The live layer steps aside and the pictures take over.
+            fadeOpacity(to: 0, animated: animated)
+            beatGlow.room = pulseRoom()
+            beatGlow.begin(pulse, radius: state.radius, drop: state.drop, animated: animated)
+            // Under the beams the glow holds still.
+            if pulse.look == .lasers { beatGlow.rest(animated: animated) }
         case .none:
             fadeOpacity(to: 0, animated: animated)
         case .steady:
@@ -363,6 +528,12 @@ final class IslandHaloLayerView: NSView {
         animation.repeatCount = .infinity
         animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         animation.beginTime = Self.gridBeginTime(cycle: spec.cycle)
+        // The one animation of the glow that never ends. Without a rate of
+        // its own it would keep the window system composing at the display's
+        // full rate for as long as music plays or an agent waits (D60).
+        animation.preferredFrameRateRange = Motion.Halo.loopFrameRateRange(
+            opacityPerSecond: (spec.high - spec.low) / spec.duration
+        )
         addOpacityAnimation(animation)
         if fadesIn {
             glowLayer.add(

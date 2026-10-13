@@ -32,6 +32,7 @@ struct PersonalizationCard<Icon: View>: View {
 
     @State private var isHovering = false
     @State private var checkBounce = 0
+    @Environment(\.hangoverAccent) private var accent
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
@@ -109,7 +110,7 @@ struct PersonalizationCard<Icon: View>: View {
     }
 
     private var ring: some View {
-        cardShape.strokeBorder(V6Palette.paper.opacity(0.9), lineWidth: 1.5)
+        cardShape.strokeBorder(accent.highlight(V6Palette.paper).opacity(0.9), lineWidth: 1.5)
     }
 
     @ViewBuilder
@@ -164,7 +165,7 @@ struct PersonalizationCard<Icon: View>: View {
         HStack(spacing: 12) {
             icon
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(selected ? V6Palette.paper : V6Palette.paper.opacity(0.55))
+                .foregroundStyle(selected ? accent.highlight(V6Palette.paper) : V6Palette.paper.opacity(0.55))
                 .frame(width: 34, height: 34)
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -186,7 +187,7 @@ struct PersonalizationCard<Icon: View>: View {
             if selected {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(V6Palette.paper.opacity(0.9))
+                    .foregroundStyle(accent.highlight(V6Palette.paper).opacity(0.9))
                     .symbolEffect(.bounce, value: checkBounce)
                     .transition(Motion.transition(.scale.combined(with: .opacity), reduceMotion: reduceMotion))
             }
@@ -211,6 +212,7 @@ struct MonoChip: View {
     let action: () -> Void
 
     @State private var isHovering = false
+    @Environment(\.hangoverAccent) private var accent
 
     init(title: String, selected: Bool, action: @escaping () -> Void) {
         self.title = title
@@ -226,7 +228,7 @@ struct MonoChip: View {
                 .fixedSize(horizontal: true, vertical: false)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .foregroundStyle(selected ? V6Palette.ink : V6Palette.paper.opacity(0.7))
+                .foregroundStyle(selected ? accent.textOnHighlight(V6Palette.ink) : V6Palette.paper.opacity(0.7))
                 .background(Capsule().fill(fillColor))
                 .motionAnimation(Motion.selection, value: selected)
                 .motionAnimation(Motion.hover, value: isHovering)
@@ -238,7 +240,7 @@ struct MonoChip: View {
     }
 
     private var fillColor: Color {
-        if selected { return V6Palette.paper }
+        if selected { return accent.highlight(V6Palette.paper) }
         return Color.white.opacity(isHovering ? 0.1 : 0.06)
     }
 }

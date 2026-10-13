@@ -18,6 +18,8 @@ enum OnboardingAbility: String, CaseIterable, Identifiable, Sendable {
     case trayDrag, trayActions, trayClipboard, trayPrivate
     case timerSet, timerPomodoro, timerPause, timerClosed
     case weatherForecast, weatherCity, weatherClosed, weatherSource
+    case designColors, designEyedropper, designKeep, designShortcut, designLinks, designReferences, designPrivate
+    case linkAudioSave, linkAudioTools, linkAudioQueue, linkAudioFolder, linkAudioRights
 
     var id: String { rawValue }
 
@@ -34,6 +36,9 @@ enum OnboardingAbility: String, CaseIterable, Identifiable, Sendable {
         case .trayDrag, .trayActions, .trayClipboard, .trayPrivate: .tray
         case .timerSet, .timerPomodoro, .timerPause, .timerClosed: .timer
         case .weatherForecast, .weatherCity, .weatherClosed, .weatherSource: .weather
+        case .designColors, .designEyedropper, .designKeep, .designShortcut, .designLinks, .designReferences,
+             .designPrivate: .design
+        case .linkAudioSave, .linkAudioTools, .linkAudioQueue, .linkAudioFolder, .linkAudioRights: .linkAudio
         }
     }
 
@@ -207,6 +212,56 @@ enum OnboardingAbility: String, CaseIterable, Identifiable, Sendable {
         case .weatherSource: [
             .widget("Weather/NookWeatherClient.swift", "api.open-meteo.com"),
             .widget("Weather/NookWeatherSettings.swift", "nook.weather.settings.privacy"),
+        ]
+        case .designColors: [
+            .widget("Design/NookDesignColor.swift", "case hex"),
+            .widget("Design/NookDesignColor.swift", "case rgb"),
+            .widget("Design/NookDesignColor.swift", "case hsl"),
+            .widget("Design/NookDesignPaletteEditor.swift", "nook.design.editor.newPalette"),
+        ]
+        case .designEyedropper: [
+            .widget("Design/NookDesignEyedropper.swift", "NSColorSampler()"),
+            .app("Resources/en.lproj/Localizable.strings", "which needs no Screen Recording permission"),
+        ]
+        case .designKeep: [
+            .widget("Design/NookDesignKit.swift", "var keepsPicking: Bool"),
+            .widget("Design/NookDesignKit.swift", "var savesPicksToPalette: Bool"),
+        ]
+        case .designShortcut: [
+            .widget("Design/NookDesignKit.swift", "hotkey.onPress = { [weak self] in self?.pickColor(from: .shortcut) }"),
+            .app("Resources/en.lproj/Localizable.strings", "No shortcut is set to begin with."),
+        ]
+        case .designLinks: [
+            .widget("Design/NookDesignKit.swift", "case links"),
+            .widget("Design/NookDesignLinkRules.swift", "enum NookDesignLinkRules"),
+        ]
+        case .designReferences: [
+            .widget("Design/NookDesignKit.swift", "case references"),
+            .widget("Design/NookDesignReferencePanel.swift", "isPinned ? .floating : .normal"),
+            .app("Resources/en.lproj/Localizable.strings", "Keep on top of other windows"),
+        ]
+        case .designPrivate: [
+            .widget("Design/NookDesignKit.swift", "Nothing here talks to a server."),
+        ]
+        case .linkAudioSave: [
+            .widget("LinkAudio/NookLinkAudioCard.swift", "nook.linkAudio.paste"),
+            .app("Resources/en.lproj/Localizable.strings", "Hangover saves its sound as an MP3."),
+        ]
+        case .linkAudioTools: [
+            .widget("LinkAudio/NookLinkAudioTools.swift", "case ytDlp = \"yt-dlp\""),
+            .widget("LinkAudio/NookLinkAudioTools.swift", "case ffmpeg"),
+            .widget("LinkAudio/NookLinkAudioTools.swift", "The app ships neither and fetches"),
+        ]
+        case .linkAudioQueue: [
+            .widget("LinkAudio/NookLinkAudioQueue.swift", "static let maxWaiting = 5"),
+        ]
+        case .linkAudioFolder: [
+            .widget("LinkAudio/NookLinkAudioFiles.swift", "appendingPathComponent(\"Music\", isDirectory: true)"),
+            .widget("LinkAudio/NookLinkAudioFiles.swift", "appendingPathComponent(\"Hangover\", isDirectory: true)"),
+            .widget("LinkAudio/NookLinkAudioSettings.swift", "nook.linkAudio.settings.chooseFolder"),
+        ]
+        case .linkAudioRights: [
+            .app("Resources/en.lproj/Localizable.strings", "Only save what you have the right to."),
         ]
         }
     }

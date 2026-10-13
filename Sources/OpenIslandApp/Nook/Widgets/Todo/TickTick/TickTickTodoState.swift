@@ -7,7 +7,8 @@ enum TickTickTodoState: Equatable, Sendable {
     case inactive
     case connecting
     case noToken
-    /// The Keychain refused to read, save or delete the token.
+    /// The token file could not be read, saved or deleted. The name is from
+    /// when the Keychain held the token.
     case keychainUnavailable
     /// 401: the token is wrong or was revoked.
     case invalidToken

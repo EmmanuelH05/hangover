@@ -4,11 +4,14 @@ import Foundation
 extension NookNotionTodoService {
     // MARK: Token
 
-    /// Checks a pasted token against Notion and, when it works, stores it in
-    /// the Keychain. The token is never written anywhere else.
+    /// Checks a pasted token against Notion and, when it works, writes it to
+    /// the token file. The token is never written anywhere else, and the
+    /// Keychain is not touched. While an older token is being brought over a
+    /// connect does nothing: the move would write the file after it and put
+    /// the old token over the new one.
     func connect(token raw: String) async {
         let candidate = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isActive, !candidate.isEmpty else { return }
+        guard isActive, !isMovingToken, !candidate.isEmpty else { return }
         // A token is one unbroken run of characters. Anything else cannot be
         // sent as a header value.
         guard !candidate.contains(where: { $0.isWhitespace || $0.isNewline }) else {
@@ -40,6 +43,7 @@ extension NookNotionTodoService {
         do {
             try await Task.detached { try store.save(candidate) }.value
         } catch {
+            tokenProblem = .describing(error, fallback: .cannotSave)
             state = .keychainUnavailable
             return
         }
@@ -48,6 +52,8 @@ extension NookNotionTodoService {
         token = candidate
         hasToken = true
         tokenRejected = false
+        tokenProblem = nil
+        moveFailed = false
         accountName = user.displayName
         resetSession()
         gate.reset(forgetRateLimit: true)
@@ -61,12 +67,16 @@ extension NookNotionTodoService {
         }
     }
 
-    /// Deletes the Keychain item, the offline copy and the saved setup.
+    /// Deletes the token file, the offline copy and the saved setup. While an
+    /// older build's Keychain item may still be there, it goes too: a delete
+    /// does not raise macOS's prompt.
     func disconnect() async {
         cancelWork()
         token = nil
         hasToken = false
         tokenRejected = false
+        tokenProblem = nil
+        moveFailed = false
         resetSession()
         gate.reset(forgetRateLimit: true)
         databases = []
@@ -79,12 +89,80 @@ extension NookNotionTodoService {
         state = .noToken
 
         let store = tokenStore
-        do {
-            try await Task.detached { try store.delete() }.value
-        } catch {
+        let move = tokenMove
+        let removesOldItem = !isKeychainSettled
+        let fileResult = await Task.detached { Result { try store.delete() } }.value
+        if case .failure(let error) = fileResult {
+            tokenProblem = .describing(error, fallback: .cannotRemove)
             state = .keychainUnavailable
+        } else if removesOldItem {
+            let oldResult = await Task.detached { Result { try move.removeOldItem() } }.value
+            if case .failure = oldResult {
+                tokenProblem = NookTodoTokenFileError(.oldItemRemains)
+                state = .keychainUnavailable
+            } else {
+                settleKeychain()
+            }
         }
         await clearCache()
+    }
+
+    // MARK: Bringing an older token over
+
+    /// What Settings reads to decide on the "Bring my saved token over"
+    /// button. Built from what the app already saved: no Keychain query.
+    var tokenMoveOffer: NookTodoTokenMoveOffer {
+        NookTodoTokenMoveOffer(
+            isNotConnected: isActive && !hasToken,
+            hasSavedAccountSign: accountName != nil || selectedDatabaseID != nil || hasOfflineCopy,
+            isKeychainSettled: isKeychainSettled,
+            canMove: tokenMove.hasOldStore
+        )
+    }
+
+    /// Reads the Keychain item once, writes the token file and deletes the
+    /// item. macOS may ask for permission, which is fine: the user asked.
+    /// A second press, or a press while this runs or while a pasted token is
+    /// being checked, does nothing.
+    func bringTokenOver() async {
+        guard tokenMoveOffer.isShown, !isMovingToken, state != .connecting else { return }
+        isMovingToken = true
+        moveFailed = false
+        let startEpoch = epoch
+        let store = tokenStore
+        let move = tokenMove
+        let result = await Task.detached { Result { try move.bringOver(to: store) } }.value
+        isMovingToken = false
+
+        let outcome: NookTodoTokenMove.Outcome
+        switch result {
+        case .success(let done):
+            outcome = done
+        case .failure(let error):
+            guard isActive, epoch == startEpoch else { return }
+            if let fileError = error as? NookTodoTokenFileError {
+                tokenProblem = fileError
+                state = .keychainUnavailable
+            } else {
+                // The Keychain would not give the token up. The button stays.
+                moveFailed = true
+            }
+            return
+        }
+        // The Keychain is dealt with even when the user has moved on.
+        if outcome != .movedButItemRemains { settleKeychain() }
+        guard isActive, outcome != .nothingSaved else { return }
+        // A source switch during the prompt began an activation of its own,
+        // which may have read the file before the token was in it. Starting
+        // over on a new epoch voids that one.
+        cancelWork()
+        state = .connecting
+        await finishActivation(epoch: epoch)
+    }
+
+    func settleKeychain() {
+        isKeychainSettled = true
+        defaults.set(true, forKey: Keys.keychainSettled)
     }
 
     // MARK: Database
@@ -368,7 +446,20 @@ extension NookNotionTodoService: NookTodoSource {
         if state.allowsItems, state == .ready || !items.isEmpty {
             return .ready
         }
-        return .unavailable(message: lang.t(state.messageKey))
+        return .unavailable(message: cardMessage)
+    }
+
+    /// Why the token file cannot be used, while that is the state.
+    var tokenProblemText: String? {
+        guard state == .keychainUnavailable, let tokenProblem else { return nil }
+        return lang.t(tokenProblem.messageKey)
+    }
+
+    /// The card's line for the state. A token waiting to come over from an
+    /// older build points at Settings, where the button is.
+    private var cardMessage: String {
+        if state == .noToken, tokenMoveOffer.isShown { return lang.t("nook.todo.token.state.movePending") }
+        return [lang.t(state.messageKey), tokenProblemText].compactMap { $0 }.joined(separator: " ")
     }
 
     var errorMessage: String? {

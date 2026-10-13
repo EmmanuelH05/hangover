@@ -10,6 +10,7 @@ struct NookWidgetEditOverlay<Reorder: Gesture>: View {
     var reorder: Reorder
     var onResize: (NookWidgetSize) -> Void
     var onRemove: () -> Void
+    @Environment(\.hangoverAccent) private var accent
 
     /// Size when the grip drag began; the drag snaps relative to it.
     @State private var sizeAtDragStart: NookWidgetSize?
@@ -47,10 +48,10 @@ struct NookWidgetEditOverlay<Reorder: Gesture>: View {
 
     private var insertionHighlight: some View {
         RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-            .fill(Color.orange.opacity(0.14))
+            .fill(accent.highlight(.orange).opacity(0.14))
             .overlay(
                 RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-                    .strokeBorder(Color.orange, lineWidth: 2)
+                    .strokeBorder(accent.highlight(.orange), lineWidth: 2)
             )
             .allowsHitTesting(false)
     }
@@ -77,12 +78,12 @@ struct NookWidgetEditOverlay<Reorder: Gesture>: View {
                 } label: {
                     Text(size.shortTitle)
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(isCurrent ? Color.orange : Color.white.opacity(0.6))
+                        .foregroundStyle(isCurrent ? accent.pickedText(.orange) : Color.white.opacity(0.6))
                         .frame(width: Self.hitArea, height: Self.hitArea)
                         .background {
                             if isCurrent {
                                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .fill(Color.orange.opacity(0.2))
+                                    .fill(accent.pickedFill ?? Color.orange.opacity(0.2))
                                     .matchedGeometryEffect(id: "currentSize", in: sizeHighlight)
                             }
                         }
@@ -127,6 +128,8 @@ struct NookWidgetEditOverlay<Reorder: Gesture>: View {
 /// added, and Done. Click a chip to add it at the end, or drag it onto a
 /// tile to add it at that tile's place.
 struct NookWidgetShelf: View {
+    @Environment(\.hangoverAccent) private var accent
+
     var addable: [NookWidgetKind]
     /// Widgets on the page, in order.
     var order: [NookWidgetKind]
@@ -197,10 +200,10 @@ struct NookWidgetShelf: View {
         Button(action: onDone) {
             Text("Done")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color.white)
+                .foregroundStyle(accent.textOnHighlight(.white))
                 .padding(.horizontal, 14)
                 .frame(height: 24)
-                .background(Capsule().fill(Color.orange))
+                .background(Capsule().fill(accent.highlight(.orange)))
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)

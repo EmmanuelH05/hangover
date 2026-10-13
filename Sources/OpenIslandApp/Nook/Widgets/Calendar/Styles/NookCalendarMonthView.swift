@@ -192,10 +192,13 @@ struct NookCalendarMonthView: View {
             ZStack(alignment: .bottom) {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .fill(isPicked ? Color.white.opacity(0.12) : Color.clear)
-                Text("\(dayNumber)")
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(isToday ? Color.orange : Color.white.opacity(0.85))
-                    .frame(maxHeight: .infinity)
+                NookDayNumber(
+                    text: "\(dayNumber)",
+                    isToday: isToday,
+                    font: .system(size: 11.5, weight: .medium),
+                    diameter: 17
+                )
+                .frame(maxHeight: .infinity)
                 if let first = events.first {
                     Circle().fill(first.calendarColor).frame(width: 4, height: 4).padding(.bottom, 2)
                 } else if hasTask {

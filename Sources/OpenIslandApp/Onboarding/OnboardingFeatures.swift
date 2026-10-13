@@ -20,6 +20,10 @@ struct OnboardingFeatureWalk: Equatable, Sendable {
         self.current = current.flatMap { kinds.contains($0) ? $0 : nil } ?? kinds.first
     }
 
+    /// Every widget the list can hold: all of them, with the design kit and
+    /// Link to MP3, the two the walk always ends on, last.
+    static var everyKind: [NookWidgetKind] { NookWidgetKind.offered }
+
     var count: Int { kinds.count }
     private var index: Int? { current.flatMap { kinds.firstIndex(of: $0) } }
     /// Counted from one, for "2 of 6". Zero with no widgets.
@@ -57,8 +61,40 @@ enum OnboardingCameraAccess: Equatable, Sendable {
 /// What the music widget is playing, as the page reads it.
 struct OnboardingMusicReading: Equatable, Sendable {
     var isPlaying: Bool
-    /// The item's identity, or its title when the player gives none.
+    /// What tells this track from the next (`NowPlayingState.trackIdentity`).
     var track: String
+}
+
+extension OnboardingMusicReading {
+    /// What the tour reads from the player's report.
+    init(_ state: NowPlayingState) {
+        self.init(isPlaying: state.isPlaying, track: state.trackIdentity)
+    }
+}
+
+/// What the design kit's step reads from the app.
+struct OnboardingDesignReading: Equatable, Sendable {
+    /// The kit's widget is switched on and the kit is live.
+    var isOn = false
+    /// The kit has read its shelves and the loupe is not up: a pick can start
+    /// and its color will be kept.
+    var isReady = false
+    /// The kit's loupe is up (or a run of picks is going on). The tour window
+    /// takes no key while it is: Escape ends the loupe, and is Skip too.
+    var isSampling = false
+    /// When the newest recent color was picked. Nil with no recent color.
+    var lastPickAt: Date?
+}
+
+/// What the Link to MP3 step reads from the app (D59). No download runs in
+/// the tour: it only reads whether the widget is on and which program is
+/// missing.
+struct OnboardingLinkAudioReading: Equatable, Sendable {
+    /// The widget is switched on.
+    var isOn = false
+    /// The widget's own line naming what is missing and how to get it, from
+    /// the service's tool status. Nil when `yt-dlp` and `ffmpeg` were both found.
+    var missingNoteKey: String?
 }
 
 /// What the buttons read from the app, in plain values.
@@ -84,6 +120,8 @@ struct OnboardingFeatureReading: Equatable, Sendable {
     /// The clipboard list holds the sample line.
     var hasSampleLine = false
     var calendar: OnboardingCalendarAccess = .undecided
+    var design = OnboardingDesignReading()
+    var linkAudio = OnboardingLinkAudioReading()
 
     /// The active timer is the countdown this page starts: a one-off of its
     /// length. A timer the user started is anything else that is active.
@@ -107,6 +145,8 @@ enum OnboardingTry: String, CaseIterable, Identifiable, Sendable {
     case trayCopy
     case notesLine
     case calendarShow
+    case designOn, designPick
+    case linkAudioOn
 
     var id: String { rawValue }
 
@@ -118,6 +158,8 @@ enum OnboardingTry: String, CaseIterable, Identifiable, Sendable {
         case .trayCopy: .tray
         case .notesLine: .notes
         case .calendarShow: .calendar
+        case .designOn, .designPick: .design
+        case .linkAudioOn: .linkAudio
         }
     }
 
@@ -153,6 +195,8 @@ enum OnboardingTry: String, CaseIterable, Identifiable, Sendable {
         case .trayCopy: "copySampleLine"
         case .notesLine: "showNotes"
         case .calendarShow: "showCalendar"
+        case .designOn, .linkAudioOn: "setWidget"
+        case .designPick: "pickDesignColor"
         }
     }
 }
@@ -230,6 +274,19 @@ extension OnboardingTry {
             case .undecided: return make(note: titleKey + ".note")
             case .refused: return make(enabled: false, note: titleKey + ".refused")
             }
+        case .designOn:
+            // It stays on once the user turned it on here: a choice, like a
+            // widget picked on the widgets page. Settings switches it off.
+            return make(enabled: !reading.design.isOn)
+        case .designPick:
+            // The eyedropper is the macOS color loupe, which asks for nothing.
+            guard reading.design.isOn else { return make(enabled: false, note: "onboarding.features.needsDesign") }
+            return make(enabled: reading.design.isReady, note: titleKey + ".note")
+        case .linkAudioOn:
+            // The button switches the widget on and runs nothing. The note
+            // names what is missing before the user relies on it, in the
+            // widget's own words.
+            return make(enabled: !reading.linkAudio.isOn, note: reading.linkAudio.missingNoteKey)
         }
     }
 }
@@ -247,6 +304,10 @@ struct OnboardingFeatureProgress: Equatable, Sendable {
     /// True after the sample line could not be put on the pasteboard, until
     /// a copy works.
     var copyFailed = false
+    /// True once the kit's newest pick was read while it was ready, and when
+    /// that was. A color lands in the kit when a pick is newer than this.
+    private(set) var hasDesignBaseline = false
+    private(set) var designBaseline: Date?
 
     /// This progress with another's: what either has seen. A state handed
     /// in with ticks keeps them beside the ones the tour noted.
@@ -255,6 +316,10 @@ struct OnboardingFeatureProgress: Equatable, Sendable {
         merged.done.formUnion(other.done)
         merged.musicBaseline = musicBaseline ?? other.musicBaseline
         merged.copyFailed = copyFailed || other.copyFailed
+        if !hasDesignBaseline, other.hasDesignBaseline {
+            merged.hasDesignBaseline = true
+            merged.designBaseline = other.designBaseline
+        }
         return merged
     }
 
@@ -275,6 +340,19 @@ struct OnboardingFeatureProgress: Equatable, Sendable {
         if reading.isTourTimer { done.insert(.timerStart) }
         if reading.hasSampleLine { done.insert(.trayCopy) }
         if reading.calendar == .allowed { done.insert(.calendarShow) }
+        // The kit is on when its switch is. A pick counts when a color landed
+        // in the kit after the first time the page saw it ready: before that
+        // the shelves are still being read, and the newest color on them is
+        // an old one, not a pick.
+        if reading.design.isOn { done.insert(.designOn) }
+        if reading.linkAudio.isOn { done.insert(.linkAudioOn) }
+        guard reading.design.isReady else { return }
+        if !hasDesignBaseline {
+            hasDesignBaseline = true
+            designBaseline = reading.design.lastPickAt
+        } else if let picked = reading.design.lastPickAt, picked > (designBaseline ?? .distantPast) {
+            done.insert(.designPick)
+        }
     }
 
     /// The stop button was pressed: it ticks when it stopped this page's
@@ -404,6 +482,12 @@ extension OnboardingTry {
         case .trayCopy: _ = actions.copySampleLine(sample)
         case .notesLine: actions.showNotes()
         case .calendarShow: actions.showCalendar()
+        // The widgets page's switch, which also takes the kit off the display's
+        // hidden list. Nothing puts it back off.
+        case .designOn: actions.setWidget(.design, true)
+        case .designPick: actions.pickDesignColor()
+        // The same switch for Link to MP3. Nothing is downloaded from here.
+        case .linkAudioOn: actions.setWidget(.linkAudio, true)
         }
     }
 }

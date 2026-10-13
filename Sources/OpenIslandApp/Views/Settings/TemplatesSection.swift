@@ -234,6 +234,7 @@ private struct TemplateRow: View {
     let text: TemplateText
     let isApplied: Bool
     let appliedTitle: String
+    @Environment(\.hangoverAccent) private var accent
     /// Shown under the points while a widget of this template is off.
     var switchedOffNote: String?
     /// Keeps room under the thumbnail for the gallery's preview control,
@@ -267,7 +268,7 @@ private struct TemplateRow: View {
                     if isApplied {
                         Label(appliedTitle, systemImage: "checkmark.circle.fill")
                             .font(.system(size: 10.5, weight: .semibold))
-                            .foregroundStyle(V6Palette.paper.opacity(0.9))
+                            .foregroundStyle(accent.highlight(V6Palette.paper).opacity(0.9))
                             .fixedSize()
                             .transition(Motion.transition(.scale.combined(with: .opacity), reduceMotion: reduceMotion))
                     }

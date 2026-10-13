@@ -247,6 +247,8 @@ enum IslandScrollContent {
         under windowPoint: NSPoint,
         travel: IslandScrollTravel
     ) -> Bool {
+        // A hidden view hides what it holds. Nobody can scroll it.
+        guard !view.isHidden else { return false }
         if let scrollView = view as? NSScrollView,
            scrollView.convert(scrollView.bounds, to: nil).contains(windowPoint),
            canTravel(scrollView, travel) {

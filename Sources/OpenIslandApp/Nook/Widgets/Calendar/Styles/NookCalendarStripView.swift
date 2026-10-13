@@ -103,9 +103,12 @@ struct NookCalendarStripView: View {
                 Text(day.formatted(.dateTime.weekday(.abbreviated)))
                     .font(.system(size: 10))
                     .foregroundStyle(.white.opacity(0.35))
-                Text(day.formatted(.dateTime.day()))
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(isToday ? Color.orange : Color.white.opacity(0.85))
+                NookDayNumber(
+                    text: day.formatted(.dateTime.day()),
+                    isToday: isToday,
+                    font: .system(size: 15, weight: .semibold),
+                    diameter: 22
+                )
                 HStack(spacing: 3) {
                     ForEach(dots) { event in
                         Circle().fill(event.calendarColor).frame(width: 4, height: 4)

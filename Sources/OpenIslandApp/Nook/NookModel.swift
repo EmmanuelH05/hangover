@@ -23,6 +23,8 @@ enum NookWidgetKind: String, CaseIterable, Codable, Identifiable, Sendable {
     case timer
     case mirror
     case weather
+    case design
+    case linkAudio
 
     var id: String { rawValue }
 
@@ -36,6 +38,8 @@ enum NookWidgetKind: String, CaseIterable, Codable, Identifiable, Sendable {
         case .timer: "Focus timer"
         case .mirror: "Mirror"
         case .weather: LanguageManager.shared.t("nook.weather.title")
+        case .design: LanguageManager.shared.t("nook.design.title")
+        case .linkAudio: LanguageManager.shared.t("nook.linkAudio.title")
         }
     }
 
@@ -49,12 +53,16 @@ enum NookWidgetKind: String, CaseIterable, Codable, Identifiable, Sendable {
         case .timer: "timer"
         case .mirror: "camera"
         case .weather: "cloud.sun"
+        case .design: "paintpalette"
+        case .linkAudio: "arrow.down.circle"
         }
     }
 
     /// The mirror stays off until asked for; it turns the camera on while
     /// the island is open. Weather stays off too: it is the one widget
-    /// that asks a server for anything.
+    /// that asks a server for anything. The design kit stays off as a
+    /// tool for one kind of work, and it holds a global shortcut once on.
+    /// Link to MP3 stays off because it runs programs on the user's Mac.
     static let defaultEnabled: [NookWidgetKind] = [.media, .calendar, .todo, .notes, .tray, .timer]
 }
 
@@ -112,6 +120,12 @@ final class NookModel {
     /// Volume and brightness notices, and the optional key takeover.
     let volume: NookVolumeMonitor
     let weather: NookWeatherService
+    /// The designer kit: colors, the eyedropper and reference pictures.
+    let design: NookDesignKit
+    /// Link to MP3: saves the sound of a link with the user's own `yt-dlp`.
+    let linkAudio: NookLinkAudioService
+    /// Whether this build offers Link to MP3, read once when the model is made.
+    let offersLinkAudio: Bool
     /// Dominant album-art color for the music halo.
     let artworkTint = NookArtworkTintService()
 
@@ -274,6 +288,11 @@ final class NookModel {
 
     func forgetDrafts() {
         unsavedDrafts.removeAll()
+        // A name question of the design card is open before anything is typed
+        // in it, and goes where the lines go.
+        design.endNaming()
+        // The line under the Link to MP3 field is about what was typed.
+        linkAudio.clearProblem()
     }
 
     /// How many system windows the app has put up that open under the
@@ -313,6 +332,11 @@ final class NookModel {
             if enabledWidgets != oldValue { onDisplayPreferencesChanged?() }
             // Switching the Mirror widget off takes its tile off every page.
             if oldValue.contains(.mirror), !enabledWidgets.contains(.mirror) { isMirrorOn = false }
+            // The design kit reads its files, holds its shortcut and
+            // keeps its panels only while its widget is on.
+            design.widgetSwitched(enabledWidgets.contains(.design))
+            // Link to MP3 stops what it is doing once it is off.
+            linkAudio.widgetSwitched(enabledWidgets.contains(.linkAudio))
         }
     }
 
@@ -371,13 +395,20 @@ final class NookModel {
         notes: NookNotesService? = nil,
         tray: NookTrayStore? = nil,
         weather: NookWeatherService? = nil,
+        design: NookDesignKit? = nil,
+        linkAudio: NookLinkAudioService? = nil,
+        volume: NookVolumeMonitor? = nil,
         defaults: UserDefaults = .standard,
         looksForImportedGIF: Bool = true,
         asksMacOSForAccess: Bool = true
     ) {
         self.defaults = defaults
         self.asksMacOSForAccess = asksMacOSForAccess
-        self.media = media ?? MediaRemoteService()
+        // Spotify and Music are asked about shuffle and repeat by script. Only
+        // the app itself does that: a model on a store of its own, or one
+        // told not to ask macOS for anything, sends no Apple Event.
+        let asksPlayers = NookModeButtonsOffer.isOffered && asksMacOSForAccess && defaults === UserDefaults.standard
+        self.media = media ?? MediaRemoteService(playerScripts: asksPlayers ? NookPlayerScripts(defaults: defaults) : nil)
         power = NookPowerMonitor(defaults: defaults)
         self.calendar = calendar ?? NookCalendarService(defaults: defaults)
         self.reminders = reminders ?? NookRemindersService(defaults: defaults)
@@ -386,8 +417,26 @@ final class NookModel {
         self.tray = tray ?? NookTrayStore(defaults: defaults)
         timer = NookFocusTimer(defaults: defaults)
         photoBooth = NookPhotoBoothModel(defaults: defaults)
-        volume = NookVolumeMonitor(defaults: defaults)
+        self.volume = volume ?? NookVolumeMonitor(defaults: defaults)
         self.weather = weather ?? NookWeatherService(defaults: defaults)
+        // The kit keeps its colors and pictures in files. A model on a store
+        // of its own gets a folder of its own as well, which keeps a test
+        // from reading or writing the user's saved colors (D53).
+        self.design = design ?? NookDesignKit(
+            folder: defaults === UserDefaults.standard ? nil : NookDesignFiles.isolatedFolder(),
+            defaults: defaults
+        )
+        // Link to MP3 runs programs and writes a folder in the user's music.
+        // A model on a store of its own gets a service that does neither. A
+        // build that does not offer the widget gets one too, whatever was handed in:
+        // the service it gets never looks for the programs, and `start` never
+        // starts it (`NookLinkAudioOffer`).
+        offersLinkAudio = NookLinkAudioOffer.isOffered
+        self.linkAudio = !offersLinkAudio
+            ? NookLinkAudioService.isolated(defaults: defaults)
+            : linkAudio ?? (defaults === UserDefaults.standard
+                ? NookLinkAudioService(defaults: defaults)
+                : NookLinkAudioService.isolated(defaults: defaults))
         forcedPage = ProcessInfo.processInfo.environment["OPEN_ISLAND_NOOK_PAGE"].flatMap(NookOpenedPage.init(rawValue:))
         // OPEN_ISLAND_NOOK_EDITING=1 opens the page in edit mode for harness screenshots.
         isEditingLayout = ProcessInfo.processInfo.environment["OPEN_ISLAND_NOOK_EDITING"] == "1"
@@ -398,7 +447,9 @@ final class NookModel {
         focusSuppressesCompletions = defaults.object(forKey: Self.focusSuppressesCompletionsKey) as? Bool ?? true
         meetingSuppressesCompletions = defaults.object(forKey: Self.meetingSuppressesCompletionsKey) as? Bool ?? true
         if let raw = defaults.stringArray(forKey: Self.enabledWidgetsKey) {
-            enabledWidgets = raw.compactMap(NookWidgetKind.init(rawValue:))
+            // A saved list that has Link to MP3 on loads without it where the
+            // build does not offer it.
+            enabledWidgets = raw.compactMap(NookWidgetKind.init(rawValue:)).filter(\.isOffered)
         } else {
             enabledWidgets = NookWidgetKind.defaultEnabled
         }
@@ -428,11 +479,20 @@ final class NookModel {
         audioOutputs.start()
         volume.start(nook: self)
         weather.start(nook: self)
+        design.start(nook: self)
+        startLinkAudioIfOffered()
         artworkTint.start(nook: self)
         observeScreenGoingAway()
         // Nothing above asks macOS for the calendar or Reminders. From here
         // on a widget that is shown or turned on may (`NookAccessTiming`).
         allowsAccessRequests = asksMacOSForAccess
+    }
+
+    /// Link to MP3 starts, and looks for its two programs, only where the
+    /// build offers it.
+    func startLinkAudioIfOffered() {
+        guard offersLinkAudio else { return }
+        linkAudio.start(nook: self)
     }
 
     // MARK: - Calendar and Reminders access
@@ -549,7 +609,8 @@ final class NookModel {
 
     func setWidget(_ kind: NookWidgetKind, enabled: Bool) {
         if enabled {
-            guard !enabledWidgets.contains(kind) else { return }
+            // A widget the build does not offer cannot be switched on.
+            guard kind.isOffered, !enabledWidgets.contains(kind) else { return }
             // Keep the canonical order so toggling never reshuffles the page.
             enabledWidgets = NookWidgetKind.allCases.filter { $0 == kind || enabledWidgets.contains($0) }
         } else {
@@ -774,8 +835,7 @@ final class NookModel {
 
     /// Album art decoded once per track and reused until the track changes.
     var artwork: NSImage? {
-        guard let state = media.state, let data = state.artworkData else { return nil }
-        let key = "\(state.itemIdentifier ?? state.title)#\(data.count)"
+        guard let state = media.state, let data = state.artworkData, let key = state.artworkKey else { return nil }
         if let cached = cachedArtwork, cached.key == key {
             return cached.image
         }

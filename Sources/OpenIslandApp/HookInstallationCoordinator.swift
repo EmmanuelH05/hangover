@@ -111,6 +111,8 @@ final class HookInstallationCoordinator {
 
     @ObservationIgnored
     private var claudeUsageMonitorTask: Task<Void, Never>?
+    @ObservationIgnored
+    private var claudeUsageDebounceTask: Task<Void, Never>?
 
     @ObservationIgnored
     private var codexUsageMonitorTask: Task<Void, Never>?
@@ -1319,6 +1321,18 @@ final class HookInstallationCoordinator {
 
     // MARK: - Monitoring
 
+    /// The usage meter's own timer. The meter changes when Claude is used,
+    /// and while Claude is used its hooks arrive, which is when the meter is
+    /// read (`refreshClaudeUsageStateAfterHookEvent`). The timer only
+    /// catches a change the hooks did not announce, such as the status line
+    /// script being removed by hand (D55). It was five seconds, which read
+    /// settings.json and the script files twelve times a minute forever.
+    static let claudeUsageRefreshInterval: TimeInterval = 60
+    /// A session's hooks can arrive many times a second, and the status
+    /// line script writes the cache around the last of them. The meter is
+    /// read this long after the last Claude hook event, once.
+    static let claudeUsageRefreshDebounce: TimeInterval = 1.5
+
     func startClaudeUsageMonitoringIfNeeded() {
         guard claudeUsageMonitorTask == nil else { return }
 
@@ -1327,10 +1341,27 @@ final class HookInstallationCoordinator {
 
             while !Task.isCancelled {
                 self.refreshClaudeUsageState()
-                try? await Task.sleep(for: .seconds(5))
+                try? await Task.sleep(for: .seconds(Self.claudeUsageRefreshInterval))
             }
         }
     }
+
+    /// Reads the meter a moment after the last Claude hook event. Each event
+    /// restarts the wait, which makes one read per burst, after the burst.
+    /// Nothing while the meter is not being monitored.
+    func refreshClaudeUsageStateAfterHookEvent() {
+        guard claudeUsageMonitorTask != nil else { return }
+        claudeUsageDebounceTask?.cancel()
+        claudeUsageDebounceTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(Self.claudeUsageRefreshDebounce))
+            guard !Task.isCancelled, let self else { return }
+            self.claudeUsageDebounceTask = nil
+            self.refreshClaudeUsageState()
+        }
+    }
+
+    /// True while a read after a hook event is waiting, for tests.
+    var isClaudeUsageReadPending: Bool { claudeUsageDebounceTask != nil }
 
     func startCodexUsageMonitoringIfNeeded() {
         guard codexUsageMonitorTask == nil else { return }
@@ -1354,6 +1385,8 @@ final class HookInstallationCoordinator {
     func stopUsageMonitoring() {
         claudeUsageMonitorTask?.cancel()
         claudeUsageMonitorTask = nil
+        claudeUsageDebounceTask?.cancel()
+        claudeUsageDebounceTask = nil
         codexUsageMonitorTask?.cancel()
         codexUsageMonitorTask = nil
     }

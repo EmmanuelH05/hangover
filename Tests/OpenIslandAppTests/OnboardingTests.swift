@@ -33,7 +33,7 @@ struct OnboardingFlowTests {
         flow.next()
         flow.next()
         flow.back()
-        #expect(flow.page == .purpose)
+        #expect(flow.page == .length)
         #expect(flow.outcome == nil)
     }
 
@@ -86,21 +86,27 @@ struct OnboardingFlowTests {
         // The names sort in the order of the tour.
         #expect(names.sorted() == names)
         #expect(OnboardingPage.welcome.snapshotName == "01-welcome")
-        #expect(OnboardingPage.todos.snapshotName == "10-todos")
-        #expect(OnboardingPage.notes.snapshotName == "11-notes")
-        #expect(OnboardingPage.weather.snapshotName == "12-weather")
-        #expect(OnboardingPage.done.snapshotName == "18-done")
+        #expect(OnboardingPage.todos.snapshotName == "11-todos")
+        #expect(OnboardingPage.notes.snapshotName == "12-notes")
+        #expect(OnboardingPage.weather.snapshotName == "13-weather")
+        #expect(OnboardingPage.done.snapshotName == "34-done")
     }
 
     // MARK: The pages and their chapters (D43)
 
+    /// The main tour is the tour as it was before there were lengths, with
+    /// the question page right after the welcome page. The long tour adds the
+    /// pages of `OnboardingMore` and nothing else.
     @Test func theTourAsksOneThingAPageInThisOrder() {
-        #expect(OnboardingPage.allCases == [
-            .welcome, .purpose, .opening, .closed, .agents, .widgets, .features, .layout, .arrange,
+        let main: [OnboardingPage] = [
+            .welcome, .length, .purpose, .opening, .closed, .agents, .widgets, .features, .layout, .arrange,
             .todos, .notes, .weather, .opened, .look, .permissions, .integrations, .tips, .done,
-        ])
-        #expect(OnboardingPage.shown(agentsEnabled: true).count == 18)
-        #expect(OnboardingPage.shown(agentsEnabled: false).count == 17)
+        ]
+        #expect(OnboardingPage.shown(agentsEnabled: true) == main)
+        #expect(OnboardingPage.shown(length: .medium, agentsEnabled: true) == main)
+        #expect(OnboardingPage.shown(agentsEnabled: true).count == 19)
+        #expect(OnboardingPage.shown(agentsEnabled: false).count == 18)
+        #expect(OnboardingPage.allCases.filter { !$0.isLongOnly } == main)
     }
 
     /// The to-dos page is about the to-do widget and nothing else. With
@@ -109,11 +115,11 @@ struct OnboardingFlowTests {
         let with = OnboardingPage.shown(agentsEnabled: true, hasTodoWidget: true)
         let without = OnboardingPage.shown(agentsEnabled: true, hasTodoWidget: false)
 
-        #expect(with == OnboardingPage.allCases)
-        #expect(without == OnboardingPage.allCases.filter { $0 != .todos })
+        #expect(with == OnboardingPage.allCases.filter { !$0.isLongOnly })
+        #expect(without == with.filter { $0 != .todos })
         #expect(OnboardingPage.allCases.filter(\.needsTodoWidget) == [.todos])
         #expect(OnboardingPage.shown(agentsEnabled: false, hasTodoWidget: false) == [
-            .welcome, .purpose, .opening, .closed, .widgets, .features, .layout, .arrange, .notes, .weather, .opened, .look, .permissions, .integrations, .tips, .done,
+            .welcome, .length, .purpose, .opening, .closed, .widgets, .features, .layout, .arrange, .notes, .weather, .opened, .look, .permissions, .integrations, .tips, .done,
         ])
         // Asked for while it is left out, the page before it is shown.
         #expect(OnboardingPage.landing(.todos, in: without) == .arrange)
@@ -369,7 +375,8 @@ struct OnboardingTourTests {
         let counter = OnboardingCallCounter()
         let tour = OnboardingTour.recording(in: store, state: { OnboardingState() }) { counter.closes += 1 }
 
-        for _ in 1..<tour.pages.count { tour.next() }
+        tour.answerQuestion()
+        for _ in 2..<tour.pages.count { tour.next() }
         #expect(tour.page == .done)
         #expect(store.firstLaunchCompleted == false)
         #expect(counter.closes == 0)
@@ -422,6 +429,9 @@ struct OnboardingTourTests {
             actions: counter.actions,
             onEnd: { counter.ends.append($0) }
         )
+        // The long tour walks every page there is.
+        tour.answerQuestion(.long)
+        tour.go(to: .welcome)
         #expect(tour.pages == OnboardingPage.allCases)
 
         try draw(tour)

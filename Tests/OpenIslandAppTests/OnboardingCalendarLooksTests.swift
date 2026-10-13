@@ -52,9 +52,9 @@ struct OnboardingCalendarLooksListTests {
     }
 
     @Test func theRecapNamesTheLookOnlyWhileTheCalendarIsOnThePage() {
-        #expect(OnboardingRecapRow.shown(agentsEnabled: true, hasCalendarWidget: true) == OnboardingRecapRow.allCases)
+        #expect(OnboardingRecapRow.shown(agentsEnabled: true, hasCalendarWidget: true) == OnboardingRecapRow.standard)
         #expect(OnboardingRecapRow.shown(agentsEnabled: true, hasCalendarWidget: false)
-            == OnboardingRecapRow.allCases.filter { $0 != .calendar })
+            == OnboardingRecapRow.standard.filter { $0 != .calendar })
     }
 }
 

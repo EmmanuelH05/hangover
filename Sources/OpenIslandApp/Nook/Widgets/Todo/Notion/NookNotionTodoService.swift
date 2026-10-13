@@ -4,8 +4,9 @@ import Observation
 /// Notion as a task source for the todo card. Reads open tasks from one
 /// database the user picked, marks them done and adds new ones.
 ///
-/// Idle until `setActive(true)`: no Keychain, disk or network work happens
-/// while Reminders is the selected source.
+/// Idle until `setActive(true)`: no token file, disk or network work happens
+/// while Reminders is the selected source. The Keychain is never read here:
+/// an older build's token comes over only when the user asks for it.
 @MainActor
 @Observable
 final class NookNotionTodoService {
@@ -17,6 +18,9 @@ final class NookNotionTodoService {
         /// Set once the notes column was looked for, which lets a setup
         /// saved before notes existed pick one up without overriding "None".
         static let notesColumnChecked = "nook.todo.notion.notesColumnChecked"
+        /// Set once the token an older build kept in the Keychain was moved
+        /// to the file, found missing or deleted. Holds no token.
+        static let keychainSettled = "nook.todo.notion.keychainSettled"
     }
 
     /// Most tasks loaded for the card.
@@ -59,6 +63,17 @@ final class NookNotionTodoService {
     var lastRefreshed: Date?
     /// The offline copy could not be written or removed.
     var cacheFailed = false
+    /// Why the token file could not be used. Set with `.keychainUnavailable`.
+    var tokenProblem: NookTodoTokenFileError?
+    /// An offline copy of the tasks was found at launch. Only a connected
+    /// account leaves one.
+    var hasOfflineCopy = false
+    /// The token an older build kept in the Keychain is dealt with.
+    var isKeychainSettled = false
+    /// The user pressed "Bring my saved token over" and it is running.
+    var isMovingToken = false
+    /// The last try to bring the token over could not read it.
+    var moveFailed = false
 
     // MARK: Internals
 
@@ -87,6 +102,9 @@ final class NookNotionTodoService {
 
     @ObservationIgnored let defaults: UserDefaults
     @ObservationIgnored let tokenStore: any NookTodoTokenStoring
+    /// The way an older build's Keychain token comes over. Nothing in the
+    /// default reads the Keychain: the hub passes the real one.
+    @ObservationIgnored let tokenMove: NookTodoTokenMove
     @ObservationIgnored let cache: NotionTodoCache
     @ObservationIgnored let now: @Sendable () -> Date
     @ObservationIgnored private var transport: (any NookTodoTransport)?
@@ -94,13 +112,15 @@ final class NookNotionTodoService {
     init(
         defaults: UserDefaults = .standard,
         transport: (any NookTodoTransport)? = nil,
-        tokenStore: any NookTodoTokenStoring = NookTodoKeychain.notion,
+        tokenStore: any NookTodoTokenStoring = NookTodoTokenFile.notion,
+        tokenMove: NookTodoTokenMove = .none,
         cache: NotionTodoCache = NotionTodoCache(),
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.defaults = defaults
         self.transport = transport
         self.tokenStore = tokenStore
+        self.tokenMove = tokenMove
         self.cache = cache
         self.now = now
     }
@@ -124,22 +144,28 @@ final class NookNotionTodoService {
         }
     }
 
-    /// Reads the token and the offline copy, then refreshes.
-    private func finishActivation(epoch startEpoch: Int) async {
+    /// Reads the token file and the offline copy, then refreshes. Only the
+    /// file is read: a missing token shows the "not connected" state, and
+    /// whatever an older build left in the Keychain waits for the user.
+    func finishActivation(epoch startEpoch: Int) async {
         guard isActive, epoch == startEpoch else { return }
         let store = tokenStore
         let tokenResult = await Task.detached { Result { try store.read() } }.value
         let snapshot = await cache.load()
         guard isActive, epoch == startEpoch else { return }
+        hasOfflineCopy = snapshot != nil
 
         switch tokenResult {
-        case .failure:
+        case .failure(let error):
+            tokenProblem = .describing(error, fallback: .unreadable)
             state = .keychainUnavailable
             return
         case .success(nil):
+            tokenProblem = nil
             state = .noToken
             return
         case .success(let stored?):
+            tokenProblem = nil
             token = stored
             hasToken = true
         }
@@ -161,6 +187,8 @@ final class NookNotionTodoService {
         token = nil
         hasToken = false
         tokenRejected = false
+        tokenProblem = nil
+        moveFailed = false
         resetSession()
         databases = []
         hasLoadedDatabases = false
@@ -399,6 +427,7 @@ final class NookNotionTodoService {
         do {
             try await cache.clear()
             cacheFailed = false
+            hasOfflineCopy = false
         } catch {
             cacheFailed = true
         }
@@ -408,6 +437,7 @@ final class NookNotionTodoService {
         selectedDatabaseID = defaults.string(forKey: Keys.dataSourceID)
         databaseTitle = defaults.string(forKey: Keys.databaseTitle)
         accountName = defaults.string(forKey: Keys.account)
+        isKeychainSettled = defaults.bool(forKey: Keys.keychainSettled)
         if let data = defaults.data(forKey: Keys.mapping),
            let stored = try? JSONDecoder().decode(NotionTodoMapping.self, from: data) {
             mapping = stored

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct NookNotesCard: View {
     var nook: NookModel
+    @Environment(\.hangoverAccent) private var accent
 
     static let height: CGFloat = 120
 
@@ -45,6 +46,7 @@ struct NookNotesCard: View {
             .truncationMode(.middle)
             TextField(placeholder, text: $draft)
                 .textFieldStyle(.plain)
+                .tint(accent.controlTint)
                 .font(.system(size: 12))
                 .foregroundStyle(.white.opacity(0.85))
                 .padding(.horizontal, 8)

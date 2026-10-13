@@ -120,6 +120,12 @@ enum NookPomodoroLook {
         }
     }
 
+    /// A round's color, or `plain` for a countdown that is no pomodoro. The
+    /// accent color may take a plain countdown and never a round (D62).
+    static func tint(for state: NookPomodoroState?, plain: Color) -> Color {
+        state == nil ? plain : tint(for: state)
+    }
+
     static func tint(for state: NookPomodoroState?) -> Color {
         switch state?.phase {
         case nil, .work: workTint

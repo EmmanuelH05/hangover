@@ -141,7 +141,10 @@ struct OnboardingHoldTests {
     ) -> OnboardingTour {
         var actions = OnboardingActions()
         actions.holdIsland = { calls.holds.append($0) }
-        return OnboardingTour(startingAt: page, state: { OnboardingState() }, actions: actions, onEnd: onEnd)
+        let tour = OnboardingTour(startingAt: page, state: { OnboardingState() }, actions: actions, onEnd: onEnd)
+        // The pages after the welcome page wait on the answer to the question.
+        if page == .welcome { tour.answerQuestion() }
+        return tour
     }
 
     @Test func theHoldFollowsThePageThatIsUp() {

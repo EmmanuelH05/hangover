@@ -26,6 +26,7 @@ After NotchNook stopped working for me, I started looking for alternatives. I en
 - A focus timer with pomodoro rounds
 - Weather, with a 7 day view
 - A mirror
+- A design kit: palettes, a screen eyedropper, links and reference pictures
 
 ![The weather tile showing a week](docs/readme/weather.png)
 
@@ -41,7 +42,7 @@ Plug in your charger and the notch shows your battery as a ring.
 
 ![Photo booth strips in eight of the sixteen themes](docs/readme/photo-booth.png)
 
-**Your look.** You pick the colors the notch glows in, how wide it opens, and whether its corners are soft or square. A welcome tour walks you through the app the first time you open it.
+**Your look.** You pick the colors the notch glows in, the accent color of every highlight, how wide it opens, and whether its corners are soft or square. The glow can pulse with the beat of your music, as a glow or as lasers. A welcome tour walks you through the app the first time you open it, in three lengths for however much time you have.
 
 ![Picking a glow style and a color theme](docs/readme/glow.png)
 
@@ -64,7 +65,7 @@ One thing to know first. I'm not in the Apple Developer Program, which means App
 
 After that it opens like any other app. Only do this with a copy you downloaded from this repo, and leave Gatekeeper on. Apple explains these steps in [Open a Mac app from an unknown developer](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac).
 
-Hangover keeps itself up to date. It checks the first time you open it and once a day after that, downloads a new version by itself and installs it the next time the app starts. You can turn that off in Settings, About. Because the app isn't notarized, macOS may ask for your permissions again after an update.
+Hangover keeps itself up to date. It checks the first time you open it and once a day after that, downloads a new version by itself and installs it the next time the app starts. You can turn that off in Settings, About. Releases from 1.0.10 on are signed with one fixed certificate, which is what lets macOS keep your permissions across updates. The update to 1.0.10 itself asks for them one last time.
 
 ## Build it yourself
 
@@ -75,10 +76,10 @@ git clone --recurse-submodules https://github.com/EmmanuelH05/hangover.git
 cd hangover
 swift build
 swift test
-OPEN_ISLAND_SKIP_SMOKE_TEST=true zsh scripts/package-app.sh
+OPEN_ISLAND_ADHOC_SIGN=1 OPEN_ISLAND_SKIP_SMOKE_TEST=true zsh scripts/package-app.sh
 ```
 
-The last line writes `output/package/Hangover.app`. Move it to Applications and open it. If you change the code, `zsh scripts/harness.sh ci` runs the same checks GitHub runs on every push.
+The last line writes `output/package/Hangover.app`. Move it to Applications and open it. A build of your own is signed ad-hoc, and macOS asks for its permissions again each time you rebuild. To stop that, run `zsh scripts/setup-dev-signing.sh` once and pass your certificate's SHA-1 as `OPEN_ISLAND_LOCAL_SIGN_LEAF` in place of `OPEN_ISLAND_ADHOC_SIGN`. If you change the code, `zsh scripts/harness.sh ci` runs the same checks GitHub runs on every push.
 
 A few names inside the code still say `OpenIsland`. That's on purpose: the hooks Hangover installs for your agents point at those names.
 

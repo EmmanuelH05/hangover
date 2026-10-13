@@ -18,8 +18,57 @@ struct NowPlayingState: Equatable, Sendable {
     var timestamp: Date?
     var artworkData: Data?
     var artworkMimeType: String?
-    /// Stable identity for the current item, used to notice track changes.
-    var itemIdentifier: String?
+    /// Shuffle and repeat as the player reports them. Nil for a player that
+    /// reports none, which is most players in a browser.
+    var shuffle: NowPlayingShuffle?
+    var repeating: NowPlayingRepeat?
+
+    /// What tells one track from the next: its title, artist and album. A
+    /// player's own identifier is not it. Spotify hands out a new
+    /// `contentItemIdentifier` on every play, pause and seek of the same
+    /// song, which made a pause read as the next track.
+    var trackIdentity: String {
+        [title, artist ?? "", album ?? ""].joined(separator: "\u{1F}")
+    }
+
+    /// What the decoded album art and its color are kept under: the track
+    /// and the size of its picture. Nil while the player sent no picture.
+    var artworkKey: String? {
+        artworkData.map { "\(trackIdentity)#\($0.count)" }
+    }
+
+    /// The elapsed time and timestamp exactly as a report brought them.
+    struct Clock: Equatable, Sendable {
+        var elapsedTime: TimeInterval?
+        var timestamp: Date?
+    }
+
+    var clock: Clock { Clock(elapsedTime: elapsedTime, timestamp: timestamp) }
+
+    /// This report with its clock read from the state before it, for a
+    /// report that brought no clock of its own. A player can send the
+    /// playing flag by itself and the position a moment later (Spotify
+    /// does). Read as it comes, a pause would sit where the last position
+    /// report left the song and a resume would leap ahead by the length of
+    /// the pause.
+    func carryingClock(from previous: NowPlayingState?, now: Date) -> NowPlayingState {
+        guard let previous,
+              previous.bundleIdentifier == bundleIdentifier,
+              previous.trackIdentity == trackIdentity else {
+            return self
+        }
+        var carried = self
+        if previous.isPlaying == isPlaying {
+            // Still playing, or still paused: the clock in hand holds.
+            carried.elapsedTime = previous.elapsedTime
+            carried.timestamp = previous.timestamp
+        } else if let position = previous.position(at: now) {
+            // Paused or resumed just now: the song is where it had got to.
+            carried.elapsedTime = position
+            carried.timestamp = now
+        }
+        return carried
+    }
 
     /// Live playback position, extrapolated from the last reported
     /// elapsed time when the player is running.
@@ -60,8 +109,8 @@ struct NowPlayingState: Equatable, Sendable {
             artworkData = Data(base64Encoded: base64, options: [.ignoreUnknownCharacters])
         }
         artworkMimeType = payload["artworkMimeType"] as? String
-        itemIdentifier = (payload["contentItemIdentifier"] as? String)
-            ?? (payload["uniqueIdentifier"] as? String)
+        shuffle = (payload["shuffleMode"] as? Int).flatMap(NowPlayingShuffle.init(rawValue:))
+        repeating = (payload["repeatMode"] as? Int).flatMap(NowPlayingRepeat.init(rawValue:))
     }
 
     private static func parseTimestamp(_ stamp: String) -> Date? {

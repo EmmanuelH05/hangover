@@ -2,6 +2,7 @@ import SwiftUI
 
 struct NookTodoCard: View {
     var nook: NookModel
+    @Environment(\.hangoverAccent) private var accent
 
     static let height: CGFloat = 140
 
@@ -219,6 +220,7 @@ struct NookTodoCard: View {
     func addField(_ source: any NookTodoSource) -> some View {
         TextField(source.addPlaceholder, text: $draft)
             .textFieldStyle(.plain)
+            .tint(accent.controlTint)
             .font(.system(size: 12))
             .foregroundStyle(.white.opacity(0.85))
             .padding(.horizontal, 8)
@@ -293,9 +295,7 @@ struct NookTodoCard: View {
                     fading.remove(item.id)
                 }
             } label: {
-                Image(systemName: isFading ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.6))
+                NookTodoTick(isChecked: isFading)
             }
             .buttonStyle(.plain)
             .disabled(!source.canComplete)
@@ -330,5 +330,19 @@ struct NookTodoCard: View {
             .buttonStyle(.plain)
         }
         .opacity(isFading ? 0 : 1)
+    }
+}
+
+/// The circle at the front of a task. A task just checked off shows a tick,
+/// which takes the accent when one is set.
+struct NookTodoTick: View {
+    let isChecked: Bool
+
+    @Environment(\.hangoverAccent) private var accent
+
+    var body: some View {
+        Image(systemName: isChecked ? "checkmark.circle.fill" : "circle")
+            .font(.system(size: 12))
+            .foregroundStyle(isChecked ? accent.highlight(.white.opacity(0.6)) : .white.opacity(0.6))
     }
 }

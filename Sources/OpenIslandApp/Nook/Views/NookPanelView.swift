@@ -63,6 +63,8 @@ struct NookPanelView: View {
         case .timer: NookTimerCard.height(for: size)
         case .mirror: NookMirrorCard.height(for: size)
         case .weather: NookWeatherCard.height(for: size)
+        case .design: NookDesignCard.height(for: size)
+        case .linkAudio: NookLinkAudioCard.height(for: size)
         }
     }
 
@@ -235,6 +237,8 @@ struct NookPanelView: View {
         case .timer: NookTimerCard(nook: model.nook)
         case .mirror: NookMirrorCard(nook: model.nook)
         case .weather: NookWeatherCard(nook: model.nook)
+        case .design: NookDesignCard(nook: model.nook)
+        case .linkAudio: NookLinkAudioCard(nook: model.nook)
         }
     }
 

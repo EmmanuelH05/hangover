@@ -34,8 +34,15 @@ struct NookVolumeSettings: View {
             case .waitingForAccess:
                 LabeledContent(lang.t("nook.volume.settings.keys.waiting")) {
                     Button(lang.t("nook.volume.settings.keys.openSettings")) {
+                        keys.requestAccess()
                         if let url = Self.accessibilitySettingsURL { NSWorkspace.shared.open(url) }
                     }
+                }
+                if keys.accessWasMissingAtLaunch {
+                    Text(lang.t("nook.volume.settings.keys.stale"))
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             case .unavailable:
                 Text(lang.t("nook.volume.settings.keys.unavailable"))

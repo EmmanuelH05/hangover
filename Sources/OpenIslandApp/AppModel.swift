@@ -11,6 +11,9 @@ extension Notification.Name {
     /// into `AppModel`.
     static let openIslandSelectSetupTab = Notification.Name("openIslandSelectSetupTab")
     static let openIslandSelectNookTodo = Notification.Name("openIslandSelectNookTodo")
+    /// Posted by `AppModel.showSettings(tab:)`. Its `userInfo` holds the tab's
+    /// raw value under `SettingsTab.userInfoKey`.
+    static let openIslandSelectSettingsTab = Notification.Name("openIslandSelectSettingsTab")
 }
 
 @MainActor
@@ -73,6 +76,10 @@ final class AppModel {
     let overlay = OverlayUICoordinator()
     /// Completion flashes for the status halo.
     let halo = IslandHaloController()
+    /// Listens for the beat while the music glow pulses (D56).
+    let beat = IslandBeatController()
+    /// The beams of the Lasers look, in a window of their own.
+    let lasers = IslandLaserStage()
     let discovery = SessionDiscoveryCoordinator()
     let monitoring = ProcessMonitoringCoordinator()
     let codexAppServer = CodexAppServerCoordinator()
@@ -266,12 +273,17 @@ final class AppModel {
         get { overlay.overlayPlacementDiagnostics }
         set { overlay.overlayPlacementDiagnostics = newValue }
     }
-    var showDockIcon: Bool = false {
-        didSet {
-            guard hasFinishedInit, showDockIcon != oldValue else { return }
-            defaults.set(showDockIcon, forKey: Self.showDockIconDefaultsKey)
-            NSApp.setActivationPolicy(showDockIcon ? .regular : .accessory)
-            if !showDockIcon {
+    /// Opens a system address, such as a pane of System Settings. A test swaps
+    /// it for a recorder.
+    @ObservationIgnored var openSystemURL: (URL) -> Void = { NSWorkspace.shared.open($0) }
+
+    /// Puts the Dock icon in or out. A test swaps it for a recorder.
+    @ObservationIgnored var applyDockIcon: (Bool) -> Void = AppModel.applyDockIconToSystem
+
+    nonisolated static func applyDockIconToSystem(_ shows: Bool) {
+        MainActor.assumeIsolated {
+            NSApp.setActivationPolicy(shows ? .regular : .accessory)
+            if !shows {
                 // macOS does not immediately refresh the Dock when switching to
                 // .accessory at runtime. Briefly activating another app forces
                 // the Dock to drop the icon.
@@ -280,6 +292,14 @@ final class AppModel {
                     NSApp.unhide(nil)
                 }
             }
+        }
+    }
+
+    var showDockIcon: Bool = false {
+        didSet {
+            guard hasFinishedInit, showDockIcon != oldValue else { return }
+            defaults.set(showDockIcon, forKey: Self.showDockIconDefaultsKey)
+            applyDockIcon(showDockIcon)
         }
     }
     /// The agent half of the app (Settings, General). On by default. Off,
@@ -291,6 +311,8 @@ final class AppModel {
             agentsEnabledDidChange()
         }
     }
+    /// The accent color: the choice and what macOS is set to (D62).
+    @ObservationIgnored let accent: HangoverAccentModel
     /// Where the agents switch is saved. A test hands in its own store.
     @ObservationIgnored
     private let agentsDefaults: UserDefaults
@@ -385,11 +407,14 @@ final class AppModel {
             defaults.set(suppressFrontmostNotifications, forKey: Self.suppressFrontmostNotificationsDefaultsKey)
         }
     }
+    /// The login item. A test swaps it for a fake.
+    @ObservationIgnored var launchAtLogin: any LaunchAtLoginControlling = LaunchAtLoginService.shared
+
     var launchAtLoginEnabled: Bool = false {
         didSet {
             guard !isApplyingLaunchAtLogin, hasFinishedInit, launchAtLoginEnabled != oldValue else { return }
             do {
-                try LaunchAtLoginService.shared.setEnabled(launchAtLoginEnabled)
+                try launchAtLogin.setEnabled(launchAtLoginEnabled)
             } catch {
                 isApplyingLaunchAtLogin = true
                 launchAtLoginEnabled = oldValue
@@ -718,12 +743,14 @@ final class AppModel {
         },
         agentsDefaults: UserDefaults? = nil,
         defaults: UserDefaults = .standard,
-        nookModel: NookModel? = nil
+        nookModel: NookModel? = nil,
+        accent: HangoverAccentModel? = nil
     ) {
         self.terminalJumpAction = terminalJumpAction
         self.isNotificationSessionAlreadyFrontmost = isNotificationSessionAlreadyFrontmost
         self.defaults = defaults
         self.agentsDefaults = agentsDefaults ?? defaults
+        self.accent = accent ?? HangoverAccentModel(defaults: defaults)
         hooks = HookInstallationCoordinator(intentStore: AgentIntentStore(defaults: defaults))
         agentHotkeys = AgentHotkeyController(defaults: defaults)
         // A model built on a store of its own is a test or a preview. It
@@ -760,7 +787,7 @@ final class AppModel {
             )
         }
         completionReplyEnabled = defaults.bool(forKey: Self.completionReplyEnabledDefaultsKey)
-        launchAtLoginEnabled = LaunchAtLoginService.shared.isEnabled
+        launchAtLoginEnabled = launchAtLogin.isEnabled
         appearanceSettingsProfile = IslandAppearanceDisplayProfile(
             rawValue: defaults.string(forKey: Self.appearanceProfileSettingsDefaultsKey) ?? ""
         ) ?? .topBar
@@ -1280,8 +1307,12 @@ final class AppModel {
             guard let nook = self?.nook else { return }
             nook.presentRingLight(nook.isMirrorOn && nook.isRingLightOn)
         }
+        wireDesignKit()
         nook.start()
         SystemMotionMonitor.shared.start()
+        IslandScreenPresence.shared.start()
+        followBeatInputs()
+        accent.system.start()
         refreshOverlayDisplayConfiguration()
         ensureOverlayPanel()
         if shouldPerformBootAnimation {
@@ -1860,6 +1891,8 @@ final class AppModel {
         nook.isEditingLayout = false
         nook.isMirrorOn = false
         nook.closeEventEditor(keepingDraft: true)
+        // The widgets leave the screen with their page, and their lines too.
+        nook.forgetDrafts()
         nook.pageOverride = .agents
         refreshOverlayPlacementIfVisible()
     }
@@ -2219,7 +2252,11 @@ final class AppModel {
         guard agentsEnabled else { return }
 
         if case .sessionHeartbeat = event {
+            // A heartbeat can bring a Pi session back into the list. The
+            // monitor then works out its sleep again, to expire it in time.
+            let wasListed = monitoring.sessionID(for: event).map { state.session(id: $0) != nil } ?? true
             state.apply(event)
+            if !wasListed { monitoring.wakeWithoutPass() }
             return
         }
 
@@ -2251,6 +2288,14 @@ final class AppModel {
         if ingress == .bridge {
             monitoring.markSessionAttached(for: event)
             monitoring.markSessionProcessAlive(for: event)
+            // A new session is the moment its process and terminal are
+            // worth finding, instead of at the next timer (D55).
+            if case .sessionStarted = event { monitoring.requestReconcile() }
+            // Claude in use is the one time the usage meter can change.
+            if let sessionID = monitoring.sessionID(for: event),
+               state.session(id: sessionID)?.tool == .claudeCode {
+                hooks.refreshClaudeUsageStateAfterHookEvent()
+            }
         }
         synchronizeSelection()
         discovery.refreshCodexRolloutTracking()
@@ -2606,34 +2651,4 @@ final class AppModel {
         NSApplication.shared.terminate(nil)
     }
 
-}
-
-// MARK: - Hex color helpers
-
-extension String {
-    var normalizedHexColorString: String {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        let raw = trimmed.hasPrefix("#") ? String(trimmed.dropFirst()) : trimmed
-        guard raw.count == 6, raw.allSatisfy(\.isHexDigit) else { return "#6E9FFF" }
-        return "#\(raw.uppercased())"
-    }
-}
-
-extension Color {
-    init?(hex: String) {
-        let raw = String(hex.normalizedHexColorString.dropFirst())
-        guard let value = Int(raw, radix: 16) else { return nil }
-        let red = Double((value >> 16) & 0xFF) / 255
-        let green = Double((value >> 8) & 0xFF) / 255
-        let blue = Double(value & 0xFF) / 255
-        self = Color(red: red, green: green, blue: blue)
-    }
-
-    var opaqueHexString: String? {
-        guard let nsColor = NSColor(self).usingColorSpace(.deviceRGB) else { return nil }
-        let r = Int(round(nsColor.redComponent * 255))
-        let g = Int(round(nsColor.greenComponent * 255))
-        let b = Int(round(nsColor.blueComponent * 255))
-        return String(format: "#%02X%02X%02X", r, g, b)
-    }
 }

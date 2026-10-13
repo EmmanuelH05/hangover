@@ -61,11 +61,12 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         startingAt page: OnboardingPage,
         title: String,
         lang: LanguageManager,
+        accent: @escaping () -> HangoverAccentTint = { .standard },
         islandFootprint: @escaping () -> OnboardingIslandFootprint?,
         makeTour: (_ close: @escaping @MainActor () -> Void) -> OnboardingTour
     ) {
         if let window, let tour, window.isVisible {
-            if page != .welcome { tour.go(to: page) }
+            if page != .welcome { tour.show(page) }
             bringForward(window)
             return
         }
@@ -79,7 +80,8 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
                 tour: tour,
                 lang: lang,
                 onPageChange: { [weak self] in self?.pageDidChange() },
-                onFootprintChange: { [weak self] in self?.footprintDidChange() }
+                onFootprintChange: { [weak self] in self?.footprintDidChange() },
+                accent: accent
             )
         )
         // The window's size is the controller's to set, not the page's.

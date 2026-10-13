@@ -507,13 +507,15 @@ struct OnboardingKeyCaps: View {
 
 /// The filled button that moves the tour on.
 struct OnboardingPrimaryButtonStyle: ButtonStyle {
+    @Environment(\.hangoverAccent) private var accent
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(OnboardingStyle.ink)
+            .foregroundStyle(accent.textOnHighlight(OnboardingStyle.ink))
             .padding(.horizontal, 18)
             .frame(height: 34)
-            .background(Capsule().fill(OnboardingStyle.paper.opacity(configuration.isPressed ? 0.8 : 1)))
+            .background(Capsule().fill(accent.highlight(OnboardingStyle.paper).opacity(configuration.isPressed ? 0.8 : 1)))
             .contentShape(Capsule())
     }
 }
@@ -536,6 +538,8 @@ struct OnboardingSecondaryButtonStyle: ButtonStyle {
 /// A card the user picks one of. The picked one carries a ring and a tick,
 /// unless the card draws its own tick (`showsTick` false).
 struct OnboardingChoiceCard<Content: View>: View {
+    @Environment(\.hangoverAccent) private var accent
+
     let isSelected: Bool
     var showsTick = true
     let action: () -> Void
@@ -552,7 +556,7 @@ struct OnboardingChoiceCard<Content: View>: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: OnboardingStyle.cardCornerRadius, style: .continuous)
                         .strokeBorder(
-                            isSelected ? OnboardingStyle.paper.opacity(0.9) : OnboardingStyle.cardStroke,
+                            isSelected ? accent.highlight(OnboardingStyle.paper).opacity(0.9) : OnboardingStyle.cardStroke,
                             lineWidth: isSelected ? 1.5 : 1
                         )
                 )
@@ -560,7 +564,7 @@ struct OnboardingChoiceCard<Content: View>: View {
                     if isSelected, showsTick {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(OnboardingStyle.paper)
+                            .foregroundStyle(accent.highlight(OnboardingStyle.paper))
                             .padding(9)
                     }
                 }

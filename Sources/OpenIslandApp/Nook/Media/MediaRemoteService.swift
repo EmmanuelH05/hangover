@@ -30,6 +30,9 @@ final class MediaRemoteService {
     @ObservationIgnored private var terminationObserver: NSObjectProtocol?
     @ObservationIgnored private var hasReapedOrphans = false
     @ObservationIgnored private var seekCheck: Task<Void, Never>?
+    /// The clock of the last report as the adapter sent it. `state` can
+    /// hold a carried one (`NowPlayingState.carryingClock`).
+    @ObservationIgnored private var lastReportedClock: NowPlayingState.Clock?
     /// Starts one adapter command and says whether it could be started.
     /// Nil runs the real adapter; tests pass their own.
     @ObservationIgnored private let commandLauncher: (@MainActor ([String]) -> Bool)?
@@ -37,10 +40,18 @@ final class MediaRemoteService {
     /// starts the adapter: the sample track is the state, and a command
     /// moves the sample and nothing else.
     @ObservationIgnored private let sample: DemoPlayer?
+    /// Asks the players that report no shuffle and repeat (Spotify, Music).
+    /// Nil asks no player anything, which is what a test and the demo get.
+    let playerScripts: NookPlayerScripts?
 
-    init(commandLauncher: (@MainActor ([String]) -> Bool)? = nil, sample: DemoPlayer? = nil) {
+    init(
+        commandLauncher: (@MainActor ([String]) -> Bool)? = nil,
+        sample: DemoPlayer? = nil,
+        playerScripts: NookPlayerScripts? = nil
+    ) {
         self.commandLauncher = commandLauncher
         self.sample = sample
+        self.playerScripts = playerScripts
     }
 
     func start() {
@@ -131,6 +142,72 @@ final class MediaRemoteService {
     func nextTrack() { send(.nextTrack) }
     func previousTrack() { send(.previousTrack) }
 
+    // MARK: - Shuffle and repeat
+
+    /// The player on now, when it is one that is asked by script.
+    private var scriptedPlayer: NookScriptedPlayer? {
+        guard playerScripts != nil, let state, state.shuffle == nil, state.repeating == nil else { return nil }
+        return NookScriptedPlayer(rawValue: state.bundleIdentifier)
+    }
+
+    private var scriptedModes: NookPlayerModes? {
+        scriptedPlayer.flatMap { playerScripts?.modes[$0.rawValue] }
+    }
+
+    /// Shuffle as the player reports it, or as it last answered. Nil while
+    /// neither is known: the button stays plain and nothing is guessed.
+    var shuffle: NowPlayingShuffle? { state?.shuffle ?? scriptedModes?.shuffle }
+    var repeating: NowPlayingRepeat? { state?.repeating ?? scriptedModes?.repeating }
+
+    /// True for a player the two buttons can do something for: one that
+    /// reports a mode, or one that is asked by script. A player in a browser
+    /// is neither, and gets no buttons.
+    var offersModes: Bool {
+        guard let state else { return false }
+        return state.shuffle != nil || state.repeating != nil || scriptedPlayer != nil
+    }
+
+    /// True while the player on now has the two switched off itself for
+    /// what is playing. Its own buttons are greyed out then, and ours are.
+    var modesUnavailable: Bool { scriptedModes?.isAvailable == false }
+
+    /// True when macOS refused Hangover the player on now.
+    var modesRefused: Bool {
+        scriptedPlayer.map { playerScripts?.refused.contains($0.rawValue) == true } ?? false
+    }
+
+    /// Reads a scripted player's modes again: they can be switched in the
+    /// player itself, which reports nothing. The card asks when it shows.
+    func refreshModes() {
+        guard let player = scriptedPlayer else { return }
+        playerScripts?.refresh(player)
+    }
+
+    /// Shuffle on or off. A player that reports its mode is told the one to
+    /// go to, and one that is asked by script gets the script. Any other
+    /// gets the plain toggle, and nothing can say whether it took.
+    func toggleShuffle() {
+        if sample == nil, let mode = state?.shuffle {
+            runOneShot(arguments: ["shuffle", String(mode.toggled.rawValue)])
+        } else if let player = scriptedPlayer {
+            // Nothing to switch while the player says no: look again.
+            playerScripts?.press(modesUnavailable ? .read : .toggleShuffle, on: player)
+        } else {
+            send(.toggleShuffle)
+        }
+    }
+
+    /// Repeat: everything, this one song, off.
+    func cycleRepeat() {
+        if sample == nil, let mode = state?.repeating {
+            runOneShot(arguments: ["repeat", String(mode.next.rawValue)])
+        } else if let player = scriptedPlayer {
+            playerScripts?.press(modesUnavailable ? .read : .cycleRepeat, on: player)
+        } else {
+            send(.toggleRepeat)
+        }
+    }
+
     // MARK: - Stream process
 
     private func launchStream() {
@@ -205,6 +282,7 @@ final class MediaRemoteService {
         let delay = min(30, pow(2, Double(min(restartAttempts, 5))))
         mediaLog.warning("adapter exited (\(status)); restarting in \(delay)s")
         state = nil
+        lastReportedClock = nil
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             self?.launchStream()
@@ -212,17 +290,31 @@ final class MediaRemoteService {
     }
 
     /// Takes one state from the adapter stream.
-    func apply(_ next: NowPlayingState?) {
+    func apply(_ report: NowPlayingState?, now: Date = Date()) {
         restartAttempts = 0
         let previous = state
+        // A report with the clock of the one before it brought no position,
+        // only something else that changed: the playing flag, most often.
+        let broughtNoClock = report != nil && report?.clock == lastReportedClock
+        lastReportedClock = report?.clock
+        let next = broughtNoClock ? report?.carryingClock(from: previous, now: now) : report
         if next != state {
             state = next
         }
         // The tracker sees every report, not only those inside an answer
         // window: a late jump is what clears a track it blamed.
         var tracker = seekTracker
-        tracker.observe(next, previous: previous, now: Date())
+        tracker.observe(next, previous: previous, now: now)
         if tracker != seekTracker { seekTracker = tracker }
+        // Another track or another player: what a scripted player last said
+        // about shuffle and repeat may be old.
+        // The same goes for a play or a pause: the user was just in the player.
+        if let next, let player = scriptedPlayer,
+           previous?.bundleIdentifier != next.bundleIdentifier
+            || previous?.trackIdentity != next.trackIdentity
+            || previous?.isPlaying != next.isPlaying {
+            playerScripts?.refresh(player)
+        }
     }
 
     /// Starts one adapter command. False when it could not be started.

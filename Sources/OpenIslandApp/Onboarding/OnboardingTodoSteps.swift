@@ -10,6 +10,7 @@ struct OnboardingTokenField: View {
     let buttonTitle: String
     let isBusy: Bool
     let onConnect: (String) -> Void
+    @Environment(\.hangoverAccent) private var accent
 
     @State private var draft = ""
 
@@ -19,6 +20,7 @@ struct OnboardingTokenField: View {
         VStack(alignment: .leading, spacing: 7) {
             SecureField(placeholder, text: $draft)
                 .textFieldStyle(.plain)
+                .tint(accent.controlTint)
                 .font(.system(size: 12.5))
                 .foregroundStyle(OnboardingStyle.primaryText)
                 .padding(.horizontal, 10)
@@ -48,6 +50,7 @@ struct OnboardingTokenField: View {
 /// A database or a list as a plain button. The picked one carries a tick.
 struct OnboardingPickButtonStyle: ButtonStyle {
     let isChosen: Bool
+    @Environment(\.hangoverAccent) private var accent
 
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: 6) {
@@ -58,7 +61,7 @@ struct OnboardingPickButtonStyle: ButtonStyle {
             if isChosen {
                 Image(systemName: "checkmark")
                     .font(.system(size: 10.5, weight: .bold))
-                    .foregroundStyle(OnboardingStyle.paper)
+                    .foregroundStyle(accent.highlight(OnboardingStyle.paper))
             }
         }
         .font(.system(size: 12.5, weight: isChosen ? .semibold : .medium))

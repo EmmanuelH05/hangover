@@ -48,6 +48,19 @@ struct DemoScriptShapeTests {
         #expect(steps.first == .openTour)
         #expect(steps.filter { $0 == .tourNext }.count == DemoScripts.tourPages.count, "one Next for each page, the last one finishes")
         #expect(DemoScripts.tourPages.first == .welcome && DemoScripts.tourPages.last == .done)
+        // The recorded tour is the main tour: the script answers the question
+        // with the middle length, through the tour's own door, on the page
+        // after the welcome page and before the Next that leaves it.
+        let lengths = steps.compactMap { step -> OnboardingLength? in
+            if case .tourChooseLength(let length) = step { length } else { nil }
+        }
+        #expect(lengths == [.medium])
+        let choose = steps.firstIndex(of: .tourChooseLength(.medium)) ?? -1
+        let nexts = steps.indices.filter { steps[$0] == .tourNext }
+        #expect(choose > nexts[0] && choose < nexts[1], "the choice comes on the question page")
+        #expect(DemoScripts.tourPages == OnboardingPage.shown(length: .medium, agentsEnabled: false, hasWeatherWidget: false))
+        #expect(DemoScripts.tourPages.contains(.length))
+        #expect(DemoAction.tourChooseLength(.medium).name == "tour-length-medium")
         // The widgets page: one widget off and on.
         #expect(steps.contains(.tourSetWidget(.tray, isOn: false)))
         let off = steps.firstIndex(of: .tourSetWidget(.tray, isOn: false)) ?? 0
@@ -373,6 +386,7 @@ struct DemoTourScriptTests {
         func page(of action: DemoAction) -> OnboardingPage? {
             doors.moments.first { $0.action == action }?.page
         }
+        #expect(page(of: .tourChooseLength(.medium)) == .length)
         #expect(page(of: .tourSetWidget(.tray, isOn: false)) == .widgets)
         #expect(page(of: .tourSetWidget(.tray, isOn: true)) == .widgets)
         #expect(page(of: .tourTry(.musicPlay)) == .features)
@@ -385,6 +399,27 @@ struct DemoTourScriptTests {
         #expect(page(of: .tourPickWidget(.todo)) == .arrange)
         #expect(page(of: .tourMoveWidget(.todo, to: 1)) == .arrange)
         #expect(page(of: .tourPutBack) == .arrange)
+    }
+
+    /// The script finishes the tour on its last page, and the tour it walked
+    /// is the main one, which is what the store is told.
+    @Test func theTourScriptReachesTheLastPageAndRecordsTheMainTour() async throws {
+        let fixture = DemoFixture(script: "tour", now: Date())
+        defer { fixture.remove() }
+        let world = TourWorld()
+        let store = AgentIntentStore(defaults: MemoryDefaults())
+        let tour = OnboardingTour.recording(in: store, state: { world.state }, actions: world.actions)
+        let inner = AppDemoDoors(model: fixture.model, openTour: {}, currentTour: { tour })
+        let doors = ProbingDoors(inner: inner, tour: tour, world: world)
+
+        await InstantClock().runner.run(DemoScripts.tour, doors: doors, launchedAt: DemoFixture.now)
+
+        let nexts = doors.moments.filter { $0.action == .tourNext }.map(\.page)
+        #expect(nexts.dropLast().last == .done, "the page before the last Next is the last page")
+        #expect(tour.flow.outcome == .finished)
+        #expect(tour.length == .medium)
+        #expect(store.welcomeTourLength == "medium")
+        #expect(store.welcomeTourEnded)
     }
 
     @Test func theButtonsDidTheirWorkAndTheCalendarLookSurvivedBothTemplates() async throws {

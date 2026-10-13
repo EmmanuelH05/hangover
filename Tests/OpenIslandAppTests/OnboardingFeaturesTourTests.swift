@@ -112,7 +112,7 @@ struct OnboardingFeaturesTourTests {
         tour.actions.nextFeature()
         tour.actions.nextFeature()
         #expect(tour.state.featureKind == .timer)
-        #expect(tour.state.featureWalk.position == 3 && tour.state.featureWalk.count == 4)
+        #expect(tour.state.featureWalk.position == 3 && tour.state.featureWalk.count == 6, "four widgets, the kit and Link to MP3")
 
         tour.actions.previousFeature()
         #expect(tour.state.featureKind == .media)
@@ -150,11 +150,15 @@ struct OnboardingFeaturesTourTests {
         let world = World(kinds: [.media, .notes])
         let tour = Self.tour(world)
         tour.next()
-        #expect(tour.state.featureWalk.kinds == [.media, .notes])
+        #expect(tour.state.featureWalk.kinds == [.media, .notes, .design, .linkAudio])
         tour.actions.nextFeature()
         #expect(tour.state.featureKind == .notes)
         tour.actions.nextFeature()
-        #expect(tour.state.featureKind == .notes, "the last widget has no next")
+        #expect(tour.state.featureKind == .design, "the kit comes after the widgets on the page")
+        tour.actions.nextFeature()
+        #expect(tour.state.featureKind == .linkAudio, "Link to MP3 is the last step")
+        tour.actions.nextFeature()
+        #expect(tour.state.featureKind == .linkAudio, "the last step has no next")
     }
 
     // MARK: The clean-up
@@ -762,13 +766,15 @@ struct OnboardingFeaturesRenderTests {
 
     @Test(arguments: OnboardingTestSize.narrowWidths)
     func theFeaturesPageDrawsEachWidgetAtBothWidths(width: CGFloat) throws {
+        // Every widget the walk can hold: the ones the tour knows and the kit,
+        // which is the last step. Link to MP3 has no page of its own here.
         var pictures: [Data] = []
-        for kind in NookWidgetKind.allCases {
+        for kind in OnboardingFeatureWalk.everyKind {
             pictures.append(try render("07-features-\(kind.rawValue)-\(Int(width))") {
                 tourView(Self.state(kind), width: width)
             })
         }
-        #expect(Set(pictures).count == NookWidgetKind.allCases.count, "two widgets drew the same page")
+        #expect(Set(pictures).count == OnboardingFeatureWalk.everyKind.count, "two widgets drew the same page")
     }
 
     @Test func theMirrorPageDrawsItsStatesAtTheNarrowestWidth() throws {
@@ -788,20 +794,23 @@ struct OnboardingFeaturesRenderTests {
     }
 
     @Test func theLastWidgetSaysTheOthersCanBeSwitchedOnAndAllOnSaysNothingOfTheSort() throws {
-        let few = Self.state(.weather, kinds: [.media, .weather])
-        let all = Self.state(.weather)
-        let fewPicture = try render("07-features-weather-few-420") { tourView(few, width: 420) }
+        // Link to MP3 is the last step, which is where the note is.
+        let few = Self.state(.linkAudio, kinds: [.media, .weather])
+        let all = Self.state(.linkAudio)
+        let fewPicture = try render("07-features-design-few-420") { tourView(few, width: 420) }
         let allPicture = try render(nil) { tourView(all, width: 420) }
         #expect(fewPicture != allPicture)
         #expect(few.featureWalk.isAtEnd && all.featureWalk.isAtEnd)
-        #expect(few.featureWalk.kinds.count < NookWidgetKind.allCases.count)
+        #expect(few.featureWalk.kinds.count < OnboardingFeatureWalk.everyKind.count)
+        #expect(all.featureWalk.kinds.count == OnboardingFeatureWalk.everyKind.count)
     }
 
-    @Test func noWidgetsDrawsTheEmptyPage() throws {
+    @Test func noWidgetsLeavesTheKitAndLinkToMP3AsTheOnlySteps() throws {
         var none = Self.state(.media, kinds: [])
         none.nookPlacements = []
         _ = try render("07-features-none-320") { tourView(none, width: 320) }
-        #expect(none.featureWalk.current == nil)
+        #expect(none.featureWalk.kinds == [.design, .linkAudio])
+        #expect(none.featureWalk.current == .design && none.featureWalk.count == 2)
     }
 
     @Test func thePageIsTheNarrowWindowsSize() throws {

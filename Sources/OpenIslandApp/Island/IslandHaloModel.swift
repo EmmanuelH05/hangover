@@ -140,6 +140,35 @@ enum IslandHaloMotion: Equatable, Sendable {
     case flash(token: UInt64, peak: Double, duration: TimeInterval)
     /// A very slow, shallow opacity drift around `restOpacity`.
     case drift(period: TimeInterval)
+    /// Follows the song's bass and steps its color on the beat (D56).
+    case pulse(IslandHaloPulse)
+}
+
+/// What a pulsing glow moves between (D56).
+struct IslandHaloPulse: Equatable, Sendable {
+    /// The opacity with no bass at all.
+    var low: Double
+    /// The opacity at the top of a beat.
+    var high: Double
+    /// The colors the beat steps through, in order. Never empty.
+    var hues: [IslandHaloRGB]
+    /// How far the peak goes out, 0 to 1 (`IslandBeatReach`).
+    var reach = IslandBeatReach.standard
+    /// How the beat is drawn: the glow itself, or beams over a faint glow.
+    var look = IslandBeatLook.glow
+    /// How far the lasers reach, 0 to 1 (`IslandLaserReach`). The lasers
+    /// have their own: their range is far longer than the glow's.
+    var laserReach = IslandLaserReach.standard
+    /// How many beams the lasers have (`IslandLaserCount`).
+    var laserCount = IslandLaserCount.standard
+    /// How the lasers follow the song: each hit for itself, or a show.
+    var laserMode = IslandLaserMode.reactive
+    /// The number the song's show is made from. It is 0 unless the
+    /// lasers run a show: nothing else is to change with the track.
+    var laserSeed: UInt64 = 0
+    /// The music color the hues were spread around, nil for art with none.
+    /// The lasers spread their own colors around the same one.
+    var tint: IslandHaloRGB?
 }
 
 /// Everything the halo renderer needs. One color at a time.
@@ -180,6 +209,19 @@ struct IslandHaloInputs: Equatable, Sendable {
     /// The music glow is wanted even when the art gave no color: the
     /// palette's own music color can stand in for it.
     var isMusicPlaying = false
+    /// The listener is running, which makes the music glow a pulse (D56).
+    var pulsesWithBeat = false
+    /// How far the pulse goes out, 0 to 1.
+    var pulseReach = IslandBeatReach.standard
+    /// The look the user chose for the pulse.
+    var pulseLook = IslandBeatLook.glow
+    /// How far the lasers reach, 0 to 1.
+    var pulseLaserReach = IslandLaserReach.standard
+    /// How many beams the lasers have.
+    var pulseLaserCount = IslandLaserCount.standard
+    /// How the lasers follow the song, and the song's seed for a show.
+    var pulseLaserMode = IslandLaserMode.reactive
+    var pulseLaserSeed: UInt64 = 0
 }
 
 /// Sizes and opacities per style.
@@ -192,14 +234,20 @@ struct IslandHaloMetrics: Equatable, Sendable {
     var noticeOpacity: Double
     var musicOpacity: Double
     var runningOpacity: Double
+    /// What a pulsing music glow moves between (D56). Zero where it never
+    /// pulses.
+    var pulseLow: Double = 0
+    var pulseHigh: Double = 0
 
     static let subtle = IslandHaloMetrics(
         radius: 12, drop: 3, breathingLow: 0.5, breathingHigh: 0.95,
-        flashPeak: 1.0, noticeOpacity: 0.85, musicOpacity: 0.45, runningOpacity: 0.42
+        flashPeak: 1.0, noticeOpacity: 0.85, musicOpacity: 0.45, runningOpacity: 0.42,
+        pulseLow: 0.25, pulseHigh: 0.85
     )
     static let vivid = IslandHaloMetrics(
         radius: 18, drop: 5, breathingLow: 0.7, breathingHigh: 1.0,
-        flashPeak: 1.0, noticeOpacity: 1.0, musicOpacity: 0.65, runningOpacity: 0.6
+        flashPeak: 1.0, noticeOpacity: 1.0, musicOpacity: 0.65, runningOpacity: 0.6,
+        pulseLow: 0.35, pulseHigh: 1.0
     )
     /// While the island is open only a flash shows, sized to fit the
     /// window's transparent insets (18pt sides, 22pt bottom).
@@ -244,6 +292,18 @@ extension IslandHaloState {
         // Everything below is a long-running glow; Low Power and thermal
         // pressure turn it off.
         guard policy.allowsAmbient else { return .off }
+        if inputs.pulsesWithBeat, inputs.isMusicPlaying, policy.animates {
+            return pulseState(
+                around: palette.musicColor(artwork: inputs.musicTint),
+                reach: inputs.pulseReach,
+                look: inputs.pulseLook,
+                laserReach: inputs.pulseLaserReach,
+                laserCount: inputs.pulseLaserCount,
+                laserMode: inputs.pulseLaserMode,
+                laserSeed: inputs.pulseLaserSeed,
+                metrics: metrics
+            )
+        }
         if inputs.isMusicPlaying || inputs.musicTint != nil, let tint = palette.musicColor(artwork: inputs.musicTint) {
             return ambientState(source: .music, color: tint, restOpacity: metrics.musicOpacity, metrics: metrics, policy: policy)
         }
@@ -400,6 +460,37 @@ extension IslandHaloState {
             color: color,
             motion: .flash(token: token, peak: metrics.flashPeak, duration: Motion.Halo.flash),
             restOpacity: 0,
+            metrics: metrics
+        )
+    }
+
+    /// Music while the listener runs (D56): the glow rests low, follows the
+    /// bass up and steps through four colors around the art's own. Art
+    /// with no color still glows, in the fixed four.
+    private static func pulseState(
+        around tint: IslandHaloRGB?,
+        reach: Double,
+        look: IslandBeatLook,
+        laserReach: Double,
+        laserCount: Int,
+        laserMode: IslandLaserMode,
+        laserSeed: UInt64,
+        metrics: IslandHaloMetrics
+    ) -> IslandHaloState {
+        let hues = IslandBeatHues.hues(around: tint)
+        let pulse = IslandHaloPulse(
+            low: metrics.pulseLow, high: metrics.pulseHigh, hues: hues,
+            reach: IslandBeatReach.clamped(reach), look: look,
+            laserReach: IslandLaserReach.clamped(laserReach),
+            laserCount: IslandLaserCount.clamped(laserCount),
+            laserMode: look == .lasers ? laserMode : .reactive,
+            laserSeed: look == .lasers && laserMode == .show ? laserSeed : 0, tint: tint
+        )
+        return IslandHaloState(
+            source: .music,
+            color: hues[0],
+            motion: .pulse(pulse),
+            restOpacity: metrics.pulseLow,
             metrics: metrics
         )
     }

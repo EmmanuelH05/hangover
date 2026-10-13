@@ -10,13 +10,18 @@ fi
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 app_name="${OPEN_ISLAND_APP_NAME:-Hangover}"
 bundle_identifier="${OPEN_ISLAND_BUNDLE_ID:-com.emmanuelhernandez.hangover}"
-version="${OPEN_ISLAND_VERSION:-1.0.9}"
+version="${OPEN_ISLAND_VERSION:-1.0.10}"
 build_number="${OPEN_ISLAND_BUILD_NUMBER:-$(git -C "$repo_root" rev-list --count HEAD 2>/dev/null || echo 1)}"
 package_root="${OPEN_ISLAND_PACKAGE_ROOT:-$repo_root/output/package}"
 bundle_dir="${OPEN_ISLAND_BUNDLE_DIR:-$package_root/$app_name.app}"
 zip_path="${OPEN_ISLAND_ZIP_PATH:-$package_root/$app_name.zip}"
 dmg_path="${OPEN_ISLAND_DMG_PATH:-$package_root/$app_name.dmg}"
 signing_identity="${OPEN_ISLAND_SIGN_IDENTITY:-}"
+local_identity="${OPEN_ISLAND_LOCAL_SIGN_IDENTITY:-Open Island Dev Local}"
+# The certificate the releases are signed with, by its SHA-1. An identity of
+# the same name made on another Mac is a different certificate, and a
+# release signed with it would cost every user their permissions once more.
+release_leaf="${OPEN_ISLAND_LOCAL_SIGN_LEAF:-515cccddad0bac81c73a09fa96c07077110661d2}"
 notary_profile="${OPEN_ISLAND_NOTARY_PROFILE:-}"
 
 brand_script="$repo_root/scripts/generate_brand_icons.py"
@@ -24,6 +29,37 @@ dmg_bg_script="$repo_root/scripts/generate_dmg_background.py"
 entitlements_path="$repo_root/config/packaging/OpenIslandApp.entitlements"
 
 cd "$repo_root"
+
+# With no Developer ID, the package is signed with a fixed local identity
+# (self-signed, free, made once by scripts/setup-dev-signing.sh). macOS ties
+# a permission such as Accessibility to the app's code requirement. An
+# ad-hoc signature makes that requirement the hash of one build, which
+# means every update leaves the switch on in System Settings and the app
+# without the permission. A fixed identity keeps the requirement the same
+# from one release to the next. A missing identity stops the script, and
+# an identity that is not the releases' certificate does too: an ad-hoc
+# package is made only when OPEN_ISLAND_ADHOC_SIGN says to.
+local_sign="-"
+if [[ -z "$signing_identity" ]]; then
+    if [[ -n "${OPEN_ISLAND_ADHOC_SIGN:-}" ]]; then
+        echo "Ad-hoc signing (OPEN_ISLAND_ADHOC_SIGN set): users of this package grant their permissions again after every update."
+    elif identity_line="$(security find-identity -p codesigning -v 2>/dev/null | grep -F "\"$local_identity\"")"; then
+        found_leaf="$(print -r -- "$identity_line" | awk 'NR == 1 { print tolower($2) }')"
+        if [[ "$found_leaf" != "${release_leaf:l}" ]]; then
+            echo "The identity \"$local_identity\" on this Mac is not the certificate the releases are signed with." >&2
+            echo "Found $found_leaf, expected ${release_leaf:l}." >&2
+            echo "A release signed with another certificate makes every user grant their permissions again." >&2
+            echo "For a build of your own, set OPEN_ISLAND_LOCAL_SIGN_LEAF to your certificate's SHA-1, or OPEN_ISLAND_ADHOC_SIGN=1." >&2
+            exit 1
+        fi
+        local_sign="$local_identity"
+    else
+        echo "No code signing identity named \"$local_identity\" was found." >&2
+        echo "A package signed ad-hoc loses its users' macOS permissions at every update." >&2
+        echo "Run zsh scripts/setup-dev-signing.sh once, or set OPEN_ISLAND_ADHOC_SIGN=1 to package ad-hoc anyway." >&2
+        exit 1
+    fi
+fi
 
 arch_flags=()
 if [[ "${OPEN_ISLAND_UNIVERSAL:-false}" == "true" ]]; then
@@ -158,6 +194,8 @@ cat > "$bundle_dir/Contents/Info.plist" <<EOF
     <integer>86400</integer>
     <key>NSAppleEventsUsageDescription</key>
     <string>Hangover uses automation to find your agent's terminal window, jump back to it and send your reply there, and to add your quick notes to the Notes app when you pick that.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Hangover listens to the sound your Mac plays to make its glow pulse with the beat, only while you have that turned on. Nothing is recorded or sent anywhere.</string>
     <key>NSCameraUsageDescription</key>
     <string>The Nook mirror shows your camera inside the notch, and its photo booth takes pictures only when you start it.</string>
     <key>NSCalendarsFullAccessUsageDescription</key>
@@ -287,28 +325,37 @@ if [[ -n "$signing_identity" ]]; then
 
     codesign --verify --deep --strict --verbose=2 "$bundle_dir"
 else
-    # No identity: ad-hoc sign, which is how version 1.0 ships. Nested code
-    # is signed first, inside out, and a failure stops the script. No
-    # hardened runtime and no entitlements here, as before: those are for
-    # notarization, which an ad-hoc build cannot have.
+    # No Developer ID: sign with the local identity chosen above, or ad-hoc
+    # when asked to. Nested code is signed first, inside out, and a failure
+    # stops the script. No hardened runtime and no entitlements here: those
+    # are for notarization, which neither of these builds can have.
     if [[ -d "$sparkle_fw" ]]; then
         for xpc in "$sparkle_fw"/Versions/B/XPCServices/*.xpc; do
-            if [[ -d "$xpc" ]]; then codesign --force --sign - "$xpc"; fi
+            if [[ -d "$xpc" ]]; then codesign --force --sign "$local_sign" "$xpc"; fi
         done
         if [[ -f "$sparkle_fw/Versions/B/Autoupdate" ]]; then
-            codesign --force --sign - "$sparkle_fw/Versions/B/Autoupdate"
+            codesign --force --sign "$local_sign" "$sparkle_fw/Versions/B/Autoupdate"
         fi
         if [[ -d "$sparkle_fw/Versions/B/Updater.app" ]]; then
-            codesign --force --sign - "$sparkle_fw/Versions/B/Updater.app"
+            codesign --force --sign "$local_sign" "$sparkle_fw/Versions/B/Updater.app"
         fi
-        codesign --force --sign - "$sparkle_fw"
+        codesign --force --sign "$local_sign" "$sparkle_fw"
     fi
-    codesign --force --sign - "$adapter_fw"
-    codesign --force --sign - "$bundle_dir/Contents/Helpers/OpenIslandHooks"
-    codesign --force --sign - "$bundle_dir/Contents/Helpers/OpenIslandSetup"
-    codesign --force --sign - "$bundle_dir"
+    codesign --force --sign "$local_sign" "$adapter_fw"
+    codesign --force --sign "$local_sign" "$bundle_dir/Contents/Helpers/OpenIslandHooks"
+    codesign --force --sign "$local_sign" "$bundle_dir/Contents/Helpers/OpenIslandSetup"
+    codesign --force --sign "$local_sign" "$bundle_dir"
 
     codesign --verify --deep --strict --verbose=2 "$bundle_dir"
+
+    # The point of the identity: the requirement names the releases'
+    # certificate and not one build's hash.
+    if [[ "$local_sign" != "-" ]]; then
+        if ! codesign -dr - "$bundle_dir" 2>&1 | grep -Fqi "certificate leaf = H\"$release_leaf\""; then
+            echo "The bundle's code requirement does not name the releases' certificate ($release_leaf)." >&2
+            exit 1
+        fi
+    fi
 fi
 
 ditto -c -k --norsrc --noextattr --noqtn --keepParent "$bundle_dir" "$zip_path"
@@ -368,8 +415,11 @@ if [[ "$made_dmg" == "true" ]]; then
 fi
 if [[ -n "$signing_identity" ]]; then
     echo "Signed with identity: $signing_identity"
+elif [[ "$local_sign" != "-" ]]; then
+    echo "Signed with the local identity \"$local_sign\": permissions survive updates. Not notarized."
+    echo "macOS will refuse the first open of a downloaded copy. See README.md, Install."
 else
-    echo "No signing identity configured: the bundle is ad-hoc signed and not notarized."
+    echo "Ad-hoc signed and not notarized: permissions do not survive an update."
     echo "macOS will refuse the first open of a downloaded copy. See README.md, Install."
 fi
 

@@ -96,6 +96,45 @@ struct DemoSafetyTests {
         #expect(media.lastError == nil, "no adapter was looked for")
     }
 
+    @Test(.noNewWindows) func theDesignKitIsOffAndKeepsEveryFileInTheSessionsFolder() async throws {
+        let fixture = DemoFixture()
+        defer { fixture.remove() }
+        fixture.startSampleServices()
+        let design = fixture.nook.design
+        design.start(nook: fixture.nook)
+        try await Task.sleep(for: .milliseconds(30))
+
+        // Off in the mode, with nothing read: no saved color or picture is loaded.
+        #expect(!fixture.nook.isWidgetEnabled(.design))
+        #expect(!design.palettes.isLoaded)
+        #expect(!design.references.isLoaded)
+        // Its files, if it were ever switched on, are the session's own.
+        #expect(design.palettes.folderURL.path.hasPrefix(fixture.root.path))
+        #expect(design.references.folderURL.path.hasPrefix(fixture.root.path))
+        #expect(!design.palettes.folderURL.path.contains("Application Support"))
+        // No sampler, no panel, no editor and no clipboard read were handed over, and no shortcut is held.
+        #expect(!design.pickColor(from: .shortcut))
+        #expect(design.pasteReference().isEmpty)
+        #expect(design.openReference(UUID()) == nil)
+        design.showPaletteEditor()
+        #expect(design.hotkey.status == .none)
+
+        // The Links tab keeps its file in the same folder, reads no clipboard and opens nothing.
+        #expect(design.links.folderURL.path.hasPrefix(fixture.root.path))
+        #expect(!design.links.isLoaded)
+        #expect(design.pasteLink() == .unavailable)
+        #expect(design.addLink(text: "https://example.com/x") == .unavailable)
+        #expect(!design.openLink(UUID()))
+        #expect(!FileManager.default.fileExists(atPath: design.links.folderURL.appendingPathComponent(NookDesignLinkFile.fileName).path))
+
+        // A copy goes to the stand-in pasteboard, never the real one.
+        #expect(design.copy(NookDesignColor(red: 255, green: 136, blue: 0)))
+        #expect(fixture.session.pasteboard.changeCount == 1)
+        // What the kit saves of its own choices goes to the demo's memory store.
+        design.copyFormat = .rgb
+        #expect(fixture.session.defaults.all[NookDesignKit.formatKey] as? String == "rgb")
+    }
+
     @Test func theLinkOfTheJoinEventIsOneNoMeetingServiceOwnsAndOpensNothing() throws {
         let link = try #require(DemoCalendarSource.meetingURL)
         #expect(NookMeetingLink.safeURL(from: link) == nil, "the Join button refuses it")

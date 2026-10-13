@@ -172,12 +172,23 @@ public final class ClaudeTranscriptDiscovery: @unchecked Sendable {
             }
         }
 
+        // Each chunk the handle hands back and each line's JSON tree are
+        // autoreleased, and the launch parses every recent transcript in one
+        // job. Without a pool drained here the job holds all of them until
+        // the last file is done, about twice the bytes read (D54).
         var buffer = Data()
-        while let chunk = try? fileHandle.read(upToCount: Self.streamingChunkSize),
-              !chunk.isEmpty {
-            buffer.append(chunk)
-            for line in extractCompleteLines(from: &buffer) {
-                processLine(line)
+        var reachedEnd = false
+        while !reachedEnd {
+            autoreleasepool {
+                guard let chunk = try? fileHandle.read(upToCount: Self.streamingChunkSize),
+                      !chunk.isEmpty else {
+                    reachedEnd = true
+                    return
+                }
+                buffer.append(chunk)
+                for line in extractCompleteLines(from: &buffer) {
+                    processLine(line)
+                }
             }
         }
 

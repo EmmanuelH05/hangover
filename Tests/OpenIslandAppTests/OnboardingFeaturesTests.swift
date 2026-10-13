@@ -17,7 +17,7 @@ struct OnboardingFeaturesFlowTests {
         #expect(OnboardingPage.features.next == .layout)
         #expect(OnboardingPage.features.previous == .widgets)
         #expect(OnboardingPage.features.chapter == .yours)
-        #expect(OnboardingPage.features.snapshotName == "07-features")
+        #expect(OnboardingPage.features.snapshotName == "08-features")
     }
 
     @Test func itIsALivePageAndEveryOtherLivePageStaysLive() {
@@ -43,14 +43,14 @@ struct OnboardingFeatureWalkTests {
             enabledWidgets: Set(NookWidgetKind.allCases),
             nookPlacements: Self.kinds.map { NookWidgetPlacement(kind: $0, size: .medium) }
         )
-        #expect(state.featureWalk.kinds == Self.kinds)
+        #expect(state.featureWalk.kinds == Self.kinds + [.design, .linkAudio], "the kit and Link to MP3 end the walk")
         #expect(state.featureWalk.current == .timer)
     }
 
     @Test func aWidgetSwitchedOffIsNotWalked() {
         let placements = [NookWidgetKind.media, .notes].map { NookWidgetPlacement(kind: $0, size: .medium) }
         let walk = OnboardingState(nookPlacements: placements).featureWalk
-        #expect(walk.kinds == [.media, .notes])
+        #expect(walk.kinds == [.media, .notes, .design, .linkAudio])
         #expect(!walk.kinds.contains(.mirror))
     }
 
@@ -206,6 +206,8 @@ struct OnboardingTryTests {
         actions.copySampleLine = { calls.names.append("copySampleLine"); calls.text = $0; return true }
         actions.showNotes = { calls.names.append("showNotes") }
         actions.showCalendar = { calls.names.append("showCalendar") }
+        actions.setWidget = { _, isOn in calls.names.append("setWidget"); calls.flag = isOn }
+        actions.pickDesignColor = { calls.names.append("pickDesignColor") }
         return actions
     }
 
@@ -452,7 +454,7 @@ struct OnboardingTryTests {
 
     @Test func onlyTheseWidgetsHaveButtonsAndTheOthersAreExplainedOnly() {
         let withButtons = Set(OnboardingTry.allCases.map(\.widget))
-        #expect(withButtons == [.mirror, .media, .timer, .tray, .notes, .calendar])
+        #expect(withButtons == [.mirror, .media, .timer, .tray, .notes, .calendar, .design, .linkAudio])
         #expect(OnboardingTry.tries(for: .todo).isEmpty && OnboardingTry.tries(for: .weather).isEmpty)
         #expect(OnboardingTry.tries(for: .mirror) == [.mirrorOn, .ringLight, .photoBooth])
     }

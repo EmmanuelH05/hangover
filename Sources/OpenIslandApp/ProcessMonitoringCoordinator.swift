@@ -29,12 +29,36 @@ final class ProcessMonitoringCoordinator {
     @ObservationIgnored
     var onCodexAppRunningChanged: ((_ isRunning: Bool) -> Void)?
 
-    /// Fires on each monitor tick while Codex.app is running (every ~2s).
+    /// Fires on each monitor tick while Codex.app is running (every ten
+    /// seconds, D55).
     @ObservationIgnored
     var onCodexAppMaintenanceTick: (() -> Void)?
 
     @ObservationIgnored
-    let activeAgentProcessDiscovery = ActiveAgentProcessDiscovery()
+    let activeAgentProcessDiscovery: ActiveAgentProcessDiscovery
+
+    /// Wakes the monitor loop before its timer would (D55).
+    @ObservationIgnored
+    private let wake = ProcessMonitorWake()
+
+    /// True when something asked for a full pass: a session that came in
+    /// through a hook, a watched process that ended, Codex.app starting or
+    /// quitting.
+    @ObservationIgnored
+    private var isReconcileRequested = false
+
+    /// One watcher for each agent process the last pass found. The kernel
+    /// tells the monitor when one of them ends, and that is the one moment
+    /// a session's liveness can change with no hook announcing it.
+    @ObservationIgnored
+    private var processExitWatchers: [Int32: DispatchSourceProcess] = [:]
+
+    @ObservationIgnored
+    private var workspaceObservers: [NSObjectProtocol] = []
+
+    init(discovery: ActiveAgentProcessDiscovery = ActiveAgentProcessDiscovery()) {
+        activeAgentProcessDiscovery = discovery
+    }
 
     @ObservationIgnored
     private let terminalSessionAttachmentProbe = TerminalSessionAttachmentProbe()
@@ -48,38 +72,92 @@ final class ProcessMonitoringCoordinator {
     @ObservationIgnored
     private var wasCodexAppRunning = false
 
+    /// While the launch is still finding out which sessions are live.
     private static let startupPollInterval: TimeInterval = 2
-    private static let codexAppRunningProbeInterval: TimeInterval = 2
-    private static let activePollInterval: TimeInterval = 60
-    private static let idlePollInterval: TimeInterval = 300
+    /// The Codex.app maintenance tick, only while Codex.app is running. Its
+    /// work throttles itself inside the discovery (the rollout rescan to ten
+    /// seconds, the stalled check to fifteen), which is why waking faster
+    /// bought nothing.
+    private static let codexAppMaintenanceInterval: TimeInterval = 10
+    /// A session whose process a pass did not find ends only at the second
+    /// miss in a row, a guard against a flicker in `ps`. The pass after a
+    /// first miss comes this soon, which keeps the end within seconds of the
+    /// exit the watcher saw instead of at the safety net.
+    static let confirmationInterval: TimeInterval = 5
+    /// Requested passes run at most this often. Requests that come sooner
+    /// merge into one pass at the floor. A pass is ps, lsof for each agent
+    /// process and the terminal probes, and a burst of short-lived agent
+    /// processes must not turn into a pass each.
+    static let requestFloorInterval: TimeInterval = 5
+    /// The safety net: a full pass with ps and lsof this often, for an agent
+    /// with no hook installed, which nothing else would ever announce. With
+    /// live sessions ten minutes, with none thirty. Everything that has a
+    /// signal wakes the loop at once instead: a hook event, a watched
+    /// process ending, Codex.app starting or quitting (D55).
+    static let liveSafetyNetInterval: TimeInterval = 600
+    static let idleSafetyNetInterval: TimeInterval = 1_800
     private static let cursorStalenessTimeout: TimeInterval = 600  // 10 minutes
     private static let codexAppStalenessTimeout: TimeInterval = 600  // 10 minutes
     private static let claudeDesktopStalenessTimeout: TimeInterval = 600  // 10 minutes
     private static let conductorStalenessTimeout: TimeInterval = 600  // 10 minutes
     private static let piHeartbeatTimeout: TimeInterval = 45
 
+    /// How long until the next full pass on its own, with nothing asking
+    /// for one sooner.
     static func monitoringPollInterval(
         isResolvingInitialLiveSessions: Bool,
-        hasTrackedLiveSessions: Bool
+        hasTrackedLiveSessions: Bool,
+        needsConfirmation: Bool = false
     ) -> TimeInterval {
         if isResolvingInitialLiveSessions {
             return startupPollInterval
         }
+        if needsConfirmation {
+            return confirmationInterval
+        }
 
-        return hasTrackedLiveSessions ? activePollInterval : idlePollInterval
+        return hasTrackedLiveSessions ? liveSafetyNetInterval : idleSafetyNetInterval
     }
 
+    /// True when a session missed its process once and a second look is
+    /// owed soon.
+    static func needsConfirmationPass(_ sessions: [AgentSession]) -> Bool {
+        sessions.contains { $0.processNotSeenCount == 1 && !$0.isSessionEnded }
+    }
+
+    /// How long the loop sleeps: never past the next full pass, and never
+    /// nothing.
+    static func monitoringSleep(wakeInterval: TimeInterval, nextFullReconcileAt: Date, now: Date) -> TimeInterval {
+        max(0.05, min(wakeInterval, nextFullReconcileAt.timeIntervalSince(now)))
+    }
+
+    /// When a request made at `now` may run, given the last full pass: at
+    /// once after the floor, else at the floor's end.
+    static func requestedPassTime(now: Date, lastFullReconcileAt: Date) -> Date {
+        max(now, lastFullReconcileAt.addingTimeInterval(requestFloorInterval))
+    }
+
+    /// How long the loop sleeps unless something wakes it. Codex.app needs
+    /// its maintenance tick while it runs, and a Pi session's heartbeat has
+    /// to be seen to expire. Otherwise the loop sleeps until the safety net
+    /// or until a request.
     static func monitoringWakeInterval(
         isResolvingInitialLiveSessions: Bool,
-        hasTrackedLiveSessions: Bool
+        hasTrackedLiveSessions: Bool,
+        isCodexAppRunning: Bool,
+        hasPiHeartbeatSessions: Bool
     ) -> TimeInterval {
-        min(
-            codexAppRunningProbeInterval,
-            monitoringPollInterval(
-                isResolvingInitialLiveSessions: isResolvingInitialLiveSessions,
-                hasTrackedLiveSessions: hasTrackedLiveSessions
-            )
+        var interval = monitoringPollInterval(
+            isResolvingInitialLiveSessions: isResolvingInitialLiveSessions,
+            hasTrackedLiveSessions: hasTrackedLiveSessions
         )
+        if isCodexAppRunning {
+            interval = min(interval, codexAppMaintenanceInterval)
+        }
+        if hasPiHeartbeatSessions {
+            interval = min(interval, piHeartbeatTimeout)
+        }
+        return interval
     }
 
     static func shouldPerformFullMonitorReconcile(
@@ -87,9 +165,10 @@ final class ProcessMonitoringCoordinator {
         nextFullReconcileAt: Date,
         isResolvingInitialLiveSessions: Bool,
         hasTrackedLiveSessions: Bool,
-        hadTrackedLiveSessions: Bool
+        hadTrackedLiveSessions: Bool,
+        isRequested: Bool = false
     ) -> Bool {
-        if isResolvingInitialLiveSessions {
+        if isRequested || isResolvingInitialLiveSessions {
             return true
         }
         if hasTrackedLiveSessions, !hadTrackedLiveSessions {
@@ -113,32 +192,78 @@ final class ProcessMonitoringCoordinator {
     func stopMonitoring() {
         sessionAttachmentMonitorTask?.cancel()
         sessionAttachmentMonitorTask = nil
+        wake.fire()
+        isReconcileRequested = false
         wasCodexAppRunning = false
         isResolvingInitialLiveSessions = false
+        for watcher in processExitWatchers.values {
+            watcher.cancel()
+        }
+        processExitWatchers.removeAll()
+        for observer in workspaceObservers {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        }
+        workspaceObservers.removeAll()
     }
+
+    /// Asks for a full pass at the loop's next turn, now or at the request
+    /// floor. Called when a session comes in through a hook, when a watched
+    /// agent process ends and when Codex.app starts or quits (D55).
+    func requestReconcile() {
+        guard sessionAttachmentMonitorTask != nil else { return }
+        isReconcileRequested = true
+        wake.fire()
+    }
+
+    /// Wakes the loop to work out its sleep again, with no pass. Called
+    /// when a heartbeat brings a Pi session into the list, whose expiry the
+    /// loop must now watch.
+    func wakeWithoutPass() {
+        guard sessionAttachmentMonitorTask != nil else { return }
+        wake.fire()
+    }
+
+    /// The pids the monitor is watching for an exit, for tests.
+    var watchedProcessIDs: Set<Int32> { Set(processExitWatchers.keys) }
 
     func startMonitoringIfNeeded() {
         guard sessionAttachmentMonitorTask == nil else {
             return
         }
 
+        observeCodexAppLaunches()
         sessionAttachmentMonitorTask = Task { @MainActor [weak self] in
             guard let self else {
                 return
             }
 
             var nextFullReconcileAt = Date.distantPast
+            var lastFullReconcileAt = Date.distantPast
             var hadTrackedLiveSessions = false
 
             while !Task.isCancelled {
+                let now = Date()
+                var isRequested = false
+                if self.isReconcileRequested {
+                    let dueAt = Self.requestedPassTime(now: now, lastFullReconcileAt: lastFullReconcileAt)
+                    if dueAt <= now {
+                        isRequested = true
+                        self.isReconcileRequested = false
+                    } else {
+                        // Too soon after the last pass: the request stays
+                        // and the loop sleeps until the floor.
+                        nextFullReconcileAt = min(nextFullReconcileAt, dueAt)
+                    }
+                }
                 let liveSessions = self.state.sessions.filter(\.isTrackedLiveSession)
                 let hasTrackedLiveSessions = !liveSessions.isEmpty
                 let shouldRunFullReconcile = Self.shouldPerformFullMonitorReconcile(
-                    now: Date(),
+                    now: now,
                     nextFullReconcileAt: nextFullReconcileAt,
                     isResolvingInitialLiveSessions: self.isResolvingInitialLiveSessions,
                     hasTrackedLiveSessions: hasTrackedLiveSessions,
-                    hadTrackedLiveSessions: hadTrackedLiveSessions
+                    hadTrackedLiveSessions: hadTrackedLiveSessions,
+                    isRequested: isRequested
                 )
 
                 if shouldRunFullReconcile {
@@ -177,16 +302,20 @@ final class ProcessMonitoringCoordinator {
                     if isCodexAppRunning {
                         self.onCodexAppMaintenanceTick?()
                     }
+                    self.watchExits(of: snapshots)
 
                     let pollInterval = Self.monitoringPollInterval(
                         isResolvingInitialLiveSessions: self.isResolvingInitialLiveSessions,
-                        hasTrackedLiveSessions: self.state.sessions.contains(where: \.isTrackedLiveSession)
+                        hasTrackedLiveSessions: self.state.sessions.contains(where: \.isTrackedLiveSession),
+                        needsConfirmation: Self.needsConfirmationPass(self.state.sessions)
                     )
-                    nextFullReconcileAt = Date().addingTimeInterval(pollInterval)
+                    lastFullReconcileAt = Date()
+                    nextFullReconcileAt = lastFullReconcileAt.addingTimeInterval(pollInterval)
                     hadTrackedLiveSessions = self.state.sessions.contains(where: \.isTrackedLiveSession)
                 } else {
-                    let isCodexAppRunning = self.reconcileCodexAppRunningState()
-                    if isCodexAppRunning {
+                    // Between passes the Codex.app state comes from the
+                    // workspace notifications; this only runs its tick.
+                    if self.wasCodexAppRunning {
                         self.onCodexAppMaintenanceTick?()
                     }
                     hadTrackedLiveSessions = hasTrackedLiveSessions
@@ -196,10 +325,63 @@ final class ProcessMonitoringCoordinator {
 
                 let wakeInterval = Self.monitoringWakeInterval(
                     isResolvingInitialLiveSessions: self.isResolvingInitialLiveSessions,
-                    hasTrackedLiveSessions: self.state.sessions.contains(where: \.isTrackedLiveSession)
+                    hasTrackedLiveSessions: self.state.sessions.contains(where: \.isTrackedLiveSession),
+                    isCodexAppRunning: self.wasCodexAppRunning,
+                    hasPiHeartbeatSessions: self.state.sessions.contains(where: \.hasPiHeartbeat)
                 )
-                try? await Task.sleep(for: .milliseconds(Int(wakeInterval * 1_000)))
+                await self.wake.wait(for: Self.monitoringSleep(
+                    wakeInterval: wakeInterval,
+                    nextFullReconcileAt: nextFullReconcileAt,
+                    now: Date()
+                ))
             }
+        }
+    }
+
+    /// Codex.app starting or quitting is a workspace notification, which
+    /// replaced the check every two seconds (D55).
+    private func observeCodexAppLaunches() {
+        guard workspaceObservers.isEmpty else { return }
+        let center = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
+            let observer = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                      application.bundleIdentifier == Self.codexAppBundleIdentifier else { return }
+                MainActor.assumeIsolated {
+                    self?.reconcileCodexAppRunningState(name == NSWorkspace.didLaunchApplicationNotification)
+                    self?.requestReconcile()
+                }
+            }
+            workspaceObservers.append(observer)
+        }
+    }
+
+    /// Keeps one exit watcher for each agent process the pass found, and
+    /// drops the watchers of processes the pass no longer sees. A process
+    /// that is already gone when its watcher is made gets a pass asked for
+    /// instead, because the kernel would never report it.
+    func watchExits(of snapshots: [ActiveProcessSnapshot]) {
+        let pids = Set(snapshots.compactMap(\.pid))
+        for (pid, watcher) in processExitWatchers where !pids.contains(pid) {
+            watcher.cancel()
+            processExitWatchers[pid] = nil
+        }
+        for pid in pids where processExitWatchers[pid] == nil {
+            guard kill(pid, 0) == 0 || errno != ESRCH else {
+                requestReconcile()
+                continue
+            }
+            let watcher = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .main)
+            watcher.setEventHandler { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.processExitWatchers[pid]?.cancel()
+                    self.processExitWatchers[pid] = nil
+                    self.requestReconcile()
+                }
+            }
+            processExitWatchers[pid] = watcher
+            watcher.resume()
         }
     }
 
@@ -372,7 +554,7 @@ final class ProcessMonitoringCoordinator {
         state.markSingleSessionAlive(sessionID: sessionID)
     }
 
-    private func sessionID(for event: AgentEvent) -> String? {
+    func sessionID(for event: AgentEvent) -> String? {
         switch event {
         case let .sessionStarted(payload):
             payload.sessionID
@@ -1426,9 +1608,11 @@ final class ProcessMonitoringCoordinator {
     /// when the app is running (likely a brief indexing window after
     /// app launch / conversation switch), which would cause Open Island
     /// to incorrectly kill visible Codex sessions.
+    static let codexAppBundleIdentifier = "com.openai.codex"
+
     static func isCodexDesktopAppRunning() -> Bool {
         NSWorkspace.shared.runningApplications.contains { app in
-            app.bundleIdentifier == "com.openai.codex"
+            app.bundleIdentifier == codexAppBundleIdentifier
         }
     }
 
@@ -1610,5 +1794,57 @@ final class ProcessMonitoringCoordinator {
         case .ohMyPi:
             return "Oh My Pi \(session.id.prefix(8))"
         }
+    }
+}
+
+private extension AgentSession {
+    /// A Pi session kept alive by heartbeats, which the loop must wake to
+    /// expire when they stop.
+    var hasPiHeartbeat: Bool {
+        (tool == .pi || tool == .ohMyPi) && isHookManaged && !isSessionEnded
+    }
+}
+
+/// Lets the monitor loop sleep for a while and be woken sooner (D55). A
+/// fire with nobody waiting is kept for the next wait, which then returns
+/// at once; a fire while a wait is up ends it. Cancelling the waiting task
+/// ends the wait too.
+@MainActor
+final class ProcessMonitorWake {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var timeout: Task<Void, Never>?
+    private var isPending = false
+
+    func fire() {
+        isPending = true
+        resume()
+    }
+
+    func wait(for seconds: TimeInterval) async {
+        if isPending || Task.isCancelled {
+            isPending = false
+            return
+        }
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                self.continuation = continuation
+                timeout = Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .seconds(seconds))
+                    guard !Task.isCancelled else { return }
+                    self?.resume()
+                }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.resume() }
+        }
+        isPending = false
+    }
+
+    private func resume() {
+        timeout?.cancel()
+        timeout = nil
+        let waiting = continuation
+        continuation = nil
+        waiting?.resume()
     }
 }

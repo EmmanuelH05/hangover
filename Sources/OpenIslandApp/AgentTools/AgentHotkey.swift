@@ -147,11 +147,14 @@ enum AgentHotkeyProblem: Equatable, Sendable {
     case needsModifiers
     /// Its key is the other shortcut's key or sits next to it.
     case tooCloseToOther
+    /// The design kit's eyedropper has these keys.
+    case usedByEyedropper
 
     var messageKey: String {
         switch self {
         case .needsModifiers: "settings.general.agentHotkeys.problem.needsModifiers"
         case .tooCloseToOther: "settings.general.agentHotkeys.problem.tooClose"
+        case .usedByEyedropper: "settings.general.agentHotkeys.problem.eyedropper"
         }
     }
 }

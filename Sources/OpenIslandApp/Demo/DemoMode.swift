@@ -13,6 +13,10 @@ enum DemoMode {
     nonisolated static let backdropKey = "OPEN_ISLAND_DEMO_BACKDROP"
     /// The name of the script to run after launch.
     nonisolated static let scriptKey = "OPEN_ISLAND_DEMO_SCRIPT"
+    /// `OPEN_ISLAND_DEMO_DESIGN=1` puts the design kit on the page with its
+    /// real eyedropper, panels and clipboard, for a recording of somebody
+    /// using it by hand (D53). Its files stay the demo's own.
+    nonisolated static let designKey = "OPEN_ISLAND_DEMO_DESIGN"
 
     /// True once a demo model was built. Windows read it to raise their
     /// level. It is set in one place, `DemoLaunch`, and nowhere else.

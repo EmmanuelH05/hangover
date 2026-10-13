@@ -81,7 +81,7 @@ struct NookSeekTracker: Equatable, Sendable {
     /// One key per track: a browser tab that will not seek must not switch
     /// seeking off for every other page in that browser.
     static func trackKey(_ state: NowPlayingState) -> String {
-        "\(state.bundleIdentifier)|\(state.itemIdentifier ?? state.title)"
+        "\(state.bundleIdentifier)|\(state.trackIdentity)"
     }
 
     func refusesSeek(_ state: NowPlayingState) -> Bool {
@@ -111,9 +111,12 @@ struct NookSeekTracker: Equatable, Sendable {
     /// new report is more than the tolerance away from where the earlier
     /// one would have the track by now. Pausing, resuming and plain playing
     /// do not jump. A playing report with no timestamp cannot be carried
-    /// forward and proves nothing.
+    /// forward and proves nothing, and neither does a report with the very
+    /// clock of the one before it: it brought the playing flag and no
+    /// position.
     static func clockJumped(from old: NowPlayingState, to new: NowPlayingState, now: Date) -> Bool {
         guard trackKey(old) == trackKey(new) else { return false }
+        if old.elapsedTime == new.elapsedTime, old.timestamp == new.timestamp { return false }
         if old.isPlaying, old.timestamp == nil { return false }
         guard let before = old.position(at: now), let after = new.position(at: now) else { return false }
         return abs(after - before) > tolerance

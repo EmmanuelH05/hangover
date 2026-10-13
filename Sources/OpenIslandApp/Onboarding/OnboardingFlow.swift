@@ -19,6 +19,9 @@ enum OnboardingChapter: String, CaseIterable, Sendable {
 enum OnboardingPage: Int, CaseIterable, Identifiable, Sendable {
     /// What Hangover is. Nothing to choose.
     case welcome
+    /// How much time the user has, asked as a question. The pick sets the
+    /// tour's length (`OnboardingLength`) and with it the pages that follow.
+    case length
     /// With coding agents or without: the agents switch, asked as a question.
     case purpose
     case opening
@@ -47,6 +50,27 @@ enum OnboardingPage: Int, CaseIterable, Identifiable, Sendable {
     case opened
     /// The glow: its strength and its colors.
     case look
+    /// A page for each feature the main tour does not teach, walked by the
+    /// long tour only (`OnboardingMore`). They sit after the pages of the
+    /// choices and before the closing pages, in the order the island shows
+    /// them: the widgets that start off first (the mirror, its photo booth and
+    /// the weather), then its closed lights and notices, then the open island,
+    /// then the Mac.
+    case mirror
+    case booth
+    case weatherCard
+    case lights
+    case accent
+    case power
+    case volume
+    case usage
+    case quiet
+    case phone
+    case screens
+    case sounds
+    case links
+    case startup
+    case updates
     case permissions
     /// The outside things the app works with, and where each is set up.
     case integrations
@@ -61,8 +85,9 @@ enum OnboardingPage: Int, CaseIterable, Identifiable, Sendable {
 
     var chapter: OnboardingChapter {
         switch self {
-        case .welcome, .purpose, .opening: .basics
+        case .welcome, .length, .purpose, .opening: .basics
         case .closed, .agents, .widgets, .features, .layout, .arrange, .todos, .notes, .weather, .opened, .look: .yours
+        case .mirror, .booth, .weatherCard, .lights, .accent, .power, .volume, .usage, .quiet, .phone, .screens, .sounds, .links, .startup, .updates: .know
         case .permissions, .integrations, .tips, .done: .know
         }
     }
@@ -78,7 +103,7 @@ enum OnboardingPage: Int, CaseIterable, Identifiable, Sendable {
     }
 
     /// True for a page that is only about agents.
-    var isAgentsOnly: Bool { self == .agents }
+    var isAgentsOnly: Bool { self == .agents || more?.needsAgents == true }
 
     /// True for the page that carries the agents switch. No run of the tour
     /// leaves it out.
@@ -93,20 +118,37 @@ enum OnboardingPage: Int, CaseIterable, Identifiable, Sendable {
     /// True for the page that is only about the weather widget.
     var needsWeatherWidget: Bool { self == .weather }
 
-    /// The pages a tour walks, in order. With the agents switched off the
-    /// agents page is left out (D41), and with the to-do, the notes or the
-    /// weather widget off its page is.
+    /// True for the page that is only about the lights that follow the
+    /// beat, which this Mac has to be able to run (macOS 14.2).
+    var needsLights: Bool { self == .lights }
+
+    /// The pages a tour of `length` walks, in order. With the agents
+    /// switched off the agents page is left out (D41), and with the to-do,
+    /// the notes or the weather widget off its page is. A Mac that cannot
+    /// run the lights has no page about them (`hasLights`). The short tour walks
+    /// the permissions page while a widget that makes macOS ask is on the
+    /// page (`hasPermissionWidget`) and while the agents are on, which gives
+    /// the page its Automation row. A `length` of nil is a run that has
+    /// not been asked yet: it walks the welcome page and the question, the
+    /// only pages that are certain. The default is the main tour.
     static func shown(
+        length: OnboardingLength? = .medium,
         agentsEnabled: Bool,
         hasTodoWidget: Bool = true,
         hasNotesWidget: Bool = true,
-        hasWeatherWidget: Bool = true
+        hasWeatherWidget: Bool = true,
+        hasPermissionWidget: Bool = true,
+        hasLights: Bool = true
     ) -> [OnboardingPage] {
-        allCases.filter { page in
-            (agentsEnabled || !page.isAgentsOnly)
+        guard let length else { return [.welcome, .length] }
+        return allCases.filter { page in
+            page.shortestLength <= length
+                && (agentsEnabled || !page.isAgentsOnly)
                 && (hasTodoWidget || !page.needsTodoWidget)
                 && (hasNotesWidget || !page.needsNotesWidget)
                 && (hasWeatherWidget || !page.needsWeatherWidget)
+                && (hasLights || !page.needsLights)
+                && (hasPermissionWidget || agentsEnabled || length > .short || page != .permissions)
         }
     }
 
@@ -121,6 +163,7 @@ enum OnboardingPage: Int, CaseIterable, Identifiable, Sendable {
     var snapshotName: String {
         let name = switch self {
         case .welcome: "welcome"
+        case .length: "length"
         case .purpose: "purpose"
         case .opening: "opening"
         case .closed: "closed"
@@ -134,6 +177,21 @@ enum OnboardingPage: Int, CaseIterable, Identifiable, Sendable {
         case .arrange: "arrange"
         case .opened: "opened"
         case .look: "look"
+        case .mirror: "mirror"
+        case .booth: "booth"
+        case .weatherCard: "weather-card"
+        case .lights: "lights"
+        case .accent: "accent"
+        case .power: "power"
+        case .volume: "volume"
+        case .usage: "usage"
+        case .quiet: "quiet"
+        case .phone: "phone"
+        case .screens: "screens"
+        case .sounds: "sounds"
+        case .links: "links"
+        case .startup: "startup"
+        case .updates: "updates"
         case .permissions: "permissions"
         case .integrations: "integrations"
         case .tips: "tips"

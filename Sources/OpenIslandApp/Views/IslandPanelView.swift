@@ -227,6 +227,8 @@ struct IslandPanelView: View {
         }
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
+        // The accent color for every highlight under the island (D62).
+        .environment(\.hangoverAccent, model.accentTint)
         .alert(model.lang.t("island.quit.confirmTitle"), isPresented: $showingQuitConfirmation) {
             Button(model.lang.t("island.quit.confirmAction"), role: .destructive) {
                 model.quitApplication()
@@ -396,7 +398,12 @@ struct IslandPanelView: View {
             // flares or the strips beside it.
             .background {
                 Color.clear
-                    .islandHalo(model.islandHaloState, cornerRadius: haloCornerRadius)
+                    .islandHalo(
+                        model.islandHaloState,
+                        cornerRadius: haloCornerRadius,
+                        beatFeed: model.beat.feed,
+                        laserStage: model.lasers
+                    )
                     .padding(.horizontal, haloHorizontalInset)
             }
             // After the glow, so the fill and the glow resize in one
@@ -655,7 +662,7 @@ struct IslandPanelView: View {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(model.accentTint.highlight(Color.accentColor))
                 Text(model.lang.t("island.hint.installHooks"))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white.opacity(0.85))
@@ -670,10 +677,10 @@ struct IslandPanelView: View {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.accentColor.opacity(0.14))
+                    .fill(model.accentTint.highlight(Color.accentColor).opacity(0.14))
                     .overlay(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .stroke(Color.accentColor.opacity(0.35), lineWidth: 0.5)
+                            .stroke(model.accentTint.highlight(Color.accentColor).opacity(0.35), lineWidth: 0.5)
                     )
             )
         }
@@ -2445,6 +2452,8 @@ private struct IslandSessionRow: View {
 }
 
 private struct StructuredQuestionPromptView: View {
+    @Environment(\.hangoverAccent) private var accent
+
     let prompt: QuestionPrompt?
     var lang: LanguageManager = .shared
     /// Whether an answer given here reaches the agent at all.
@@ -2558,18 +2567,7 @@ private struct StructuredQuestionPromptView: View {
                 toggle(option: option.label, for: question)
             } label: {
                 HStack(spacing: 10) {
-                    Text("\(optionIndex + 1)")
-                        .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(isSelected ? .black.opacity(0.82) : V6Palette.paper.opacity(0.42))
-                        .frame(width: 22, height: 20)
-                        .background(
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .fill(isSelected ? V6Palette.paper.opacity(0.88) : Color.white.opacity(0.045))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .strokeBorder(.white.opacity(isSelected ? 0 : 0.08))
-                        )
+                    IslandQuestionOptionBadge(number: optionIndex + 1, isSelected: isSelected)
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text(option.label)
@@ -2606,11 +2604,11 @@ private struct StructuredQuestionPromptView: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(optionFillColor(isSelected: isSelected, isHovered: isHovered))
+                .fill(IslandQuestionOptionLook.fill(isSelected: isSelected, isHovered: isHovered, accent: accent).color)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(optionStrokeColor(isSelected: isSelected, isHovered: isHovered))
+                .strokeBorder(IslandQuestionOptionLook.stroke(isSelected: isSelected, isHovered: isHovered, accent: accent).color)
         )
         .onHover { hovering in
             withMotion(Motion.hover) {
@@ -2847,26 +2845,6 @@ private struct StructuredQuestionPromptView: View {
         "\(question.question)|\(option.label)"
     }
 
-    private func optionFillColor(isSelected: Bool, isHovered: Bool) -> Color {
-        if isSelected {
-            return V6Palette.paper.opacity(0.10)
-        }
-        if isHovered {
-            return Color.white.opacity(0.065)
-        }
-        return Color.white.opacity(0.028)
-    }
-
-    private func optionStrokeColor(isSelected: Bool, isHovered: Bool) -> Color {
-        if isSelected {
-            return V6Palette.paper.opacity(0.36)
-        }
-        if isHovered {
-            return .white.opacity(0.13)
-        }
-        return .white.opacity(0.045)
-    }
-
     private func trimmedFreeform(for question: QuestionPromptItem, option: QuestionOption) -> String {
         (freeformTexts[freeformKey(for: question, option: option)] ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3041,7 +3019,7 @@ private struct IslandCompactButtonStyle: ButtonStyle {
     }
 }
 
-private struct IslandActionButtonStyle: ButtonStyle {
+struct IslandActionButtonStyle: ButtonStyle {
     enum Kind {
         case primary
         case secondary
@@ -3052,6 +3030,7 @@ private struct IslandActionButtonStyle: ButtonStyle {
     var expands = false
 
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.hangoverAccent) private var accent
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -3076,7 +3055,7 @@ private struct IslandActionButtonStyle: ButtonStyle {
 
         switch kind {
         case .primary:
-            return .black.opacity(0.88)
+            return accent.textOnHighlight(.black.opacity(0.88))
         case .warning:
             return .white
         case .secondary:
@@ -3091,7 +3070,7 @@ private struct IslandActionButtonStyle: ButtonStyle {
 
         switch kind {
         case .primary:
-            return V6Palette.paper.opacity(0.86)
+            return accent.highlight(V6Palette.paper).opacity(0.86)
         case .warning:
             return Color(red: 0.85, green: 0.55, blue: 0.15).opacity(0.42)
         case .secondary:
@@ -3107,7 +3086,7 @@ private struct IslandActionButtonStyle: ButtonStyle {
         let pressedFactor: Double = isPressed ? 0.78 : 1
         switch kind {
         case .primary:
-            return V6Palette.paper.opacity(pressedFactor)
+            return accent.highlight(V6Palette.paper).opacity(pressedFactor)
         case .warning:
             return Color(red: 0.85, green: 0.55, blue: 0.15).opacity(pressedFactor)
         case .secondary:

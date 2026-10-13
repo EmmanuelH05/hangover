@@ -77,6 +77,21 @@ struct NookDisplayPreferences: Equatable, Sendable {
     var haloStyle: IslandHaloStyle = .subtle
     /// The glow takes the album art's color while music plays.
     var haloFollowsMusic = true
+    /// The music glow pulses with the song's bass and changes color on the
+    /// beat (D56). Off unless the user switches it on: it is the one thing
+    /// that makes Hangover listen to the Mac's sound.
+    var haloPulsesWithBeat = false
+    /// How far the pulse goes out, 0 to 1 (`IslandBeatReach`).
+    var haloPulseReach = IslandBeatReach.standard
+    /// How the beat is drawn: the glow, or beams that fan out (D56).
+    var haloBeatLook = IslandBeatLook.glow
+    /// How far the lasers reach, 0 to 1 (`IslandLaserReach`). Their own,
+    /// apart from the glow's reach.
+    var haloLaserReach = IslandLaserReach.standard
+    /// How many beams the lasers have, 8 to 24 (`IslandLaserCount`).
+    var haloLaserCount = IslandLaserCount.standard
+    /// How the lasers follow the song: each hit for itself, or a show.
+    var haloLaserMode = IslandLaserMode.reactive
     /// The glow's color for each moment, and the one color that can stand
     /// in for all of them (D31). A template leaves these alone.
     var haloColors = IslandHaloColors.standard
@@ -166,6 +181,18 @@ extension NookDisplayPreferences {
             preferences.haloStyle = style
         }
         preferences.haloFollowsMusic = bool("haloFollowsMusic") ?? preferences.haloFollowsMusic
+        preferences.haloPulsesWithBeat = bool("haloPulsesWithBeat") ?? preferences.haloPulsesWithBeat
+        if let reach = defaults.object(forKey: key(profile, "haloPulseReach")) as? Double {
+            preferences.haloPulseReach = IslandBeatReach.clamped(reach)
+        }
+        preferences.haloBeatLook = IslandBeatLook(storageValue: defaults.string(forKey: key(profile, "haloBeatLook")))
+        if let reach = defaults.object(forKey: key(profile, "haloLaserReach")) as? Double {
+            preferences.haloLaserReach = IslandLaserReach.clamped(reach)
+        }
+        if let count = IslandLaserCount.stored(defaults.object(forKey: key(profile, "haloLaserCount"))) {
+            preferences.haloLaserCount = count
+        }
+        preferences.haloLaserMode = IslandLaserMode(storageValue: defaults.string(forKey: key(profile, "haloLaserMode")))
         preferences.haloColors.palette = IslandHaloPalette(storageValue: defaults.dictionary(forKey: key(profile, "haloPalette")))
         preferences.haloColors.usesSingleColor = bool("haloSingleColorOn") ?? preferences.haloColors.usesSingleColor
         if let raw = defaults.string(forKey: key(profile, "haloSingleColor")), let color = IslandHaloRGB(hex: raw) {
@@ -272,6 +299,24 @@ extension NookDisplayPreferences {
         if changed(\.haloFollowsMusic) {
             defaults.set(haloFollowsMusic, forKey: Self.key(profile, "haloFollowsMusic"))
         }
+        if changed(\.haloPulsesWithBeat) {
+            defaults.set(haloPulsesWithBeat, forKey: Self.key(profile, "haloPulsesWithBeat"))
+        }
+        if changed(\.haloPulseReach) {
+            defaults.set(haloPulseReach, forKey: Self.key(profile, "haloPulseReach"))
+        }
+        if changed(\.haloBeatLook) {
+            defaults.set(haloBeatLook.rawValue, forKey: Self.key(profile, "haloBeatLook"))
+        }
+        if changed(\.haloLaserReach) {
+            defaults.set(haloLaserReach, forKey: Self.key(profile, "haloLaserReach"))
+        }
+        if changed(\.haloLaserCount) {
+            defaults.set(haloLaserCount, forKey: Self.key(profile, "haloLaserCount"))
+        }
+        if changed(\.haloLaserMode) {
+            defaults.set(haloLaserMode.rawValue, forKey: Self.key(profile, "haloLaserMode"))
+        }
         if changed(\.haloColors.palette) {
             defaults.set(haloColors.palette.storageValue, forKey: Self.key(profile, "haloPalette"))
         }
@@ -300,11 +345,17 @@ extension NookDisplayPreferences {
 }
 
 extension NookDisplayPreferences {
-    /// False when only the glow colors differ: they change nothing on the
-    /// Nook page, and a color drag writes many of them a second.
+    /// False when only the glow colors, the pulse's reach, its look or the
+    /// lasers' count differ: they change nothing on the Nook page, and a
+    /// drag writes many a second.
     func changesThePage(from old: NookDisplayPreferences) -> Bool {
         var oldWithNewGlow = old
         oldWithNewGlow.haloColors = haloColors
+        oldWithNewGlow.haloPulseReach = haloPulseReach
+        oldWithNewGlow.haloBeatLook = haloBeatLook
+        oldWithNewGlow.haloLaserReach = haloLaserReach
+        oldWithNewGlow.haloLaserCount = haloLaserCount
+        oldWithNewGlow.haloLaserMode = haloLaserMode
         return oldWithNewGlow != self
     }
 }

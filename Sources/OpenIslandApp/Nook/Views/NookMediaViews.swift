@@ -294,6 +294,7 @@ struct NookMediaCard: View {
     var nook: NookModel
 
     @Environment(\.nookWidgetSize) private var size
+    @Environment(\.hangoverAccent) private var accent
     /// True while the speaker list has the card.
     @State private var isPickingSpeaker = false
 
@@ -309,21 +310,24 @@ struct NookMediaCard: View {
     }
 
     var body: some View {
-        if isPickingSpeaker {
-            speakerBody
-        } else if let state = nook.nowPlaying {
-            switch size {
-            case .small: smallPlayingBody(state)
-            case .medium: playingBody(state)
-            case .large: largePlayingBody(state)
-            }
-        } else {
-            switch size {
-            case .small: smallEmptyBody
-            case .medium: emptyBody
-            case .large: largeEmptyBody
+        Group {
+            if isPickingSpeaker {
+                speakerBody
+            } else if let state = nook.nowPlaying {
+                switch size {
+                case .small: smallPlayingBody(state)
+                case .medium: playingBody(state)
+                case .large: largePlayingBody(state)
+                }
+            } else {
+                switch size {
+                case .small: smallEmptyBody
+                case .medium: emptyBody
+                case .large: largeEmptyBody
+                }
             }
         }
+        .onAppear { nook.media.refreshModes() }
     }
 
     // MARK: Medium
@@ -343,13 +347,17 @@ struct NookMediaCard: View {
                     .foregroundStyle(.white.opacity(0.6))
                     .lineLimit(1)
 
-                NookScrubBar(state: state, media: nook.media)
+                if let style = NookScrubBarLayout.style(for: size, duration: state.duration) {
+                    NookScrubBar(state: state, media: nook.media, style: style)
+                }
             }
 
             HStack(spacing: 4) {
+                shuffleButton(state)
                 transportButton("backward.fill") { nook.media.previousTrack() }
                 transportButton(state.isPlaying ? "pause.fill" : "play.fill", size: 16) { nook.media.togglePlayPause() }
                 transportButton("forward.fill") { nook.media.nextTrack() }
+                repeatButton(state)
                 speakerButton()
             }
         }
@@ -381,7 +389,10 @@ struct NookMediaCard: View {
 
     // MARK: Small
 
-    /// Art and text on top, transport along the bottom. No progress bar.
+    /// Art and text on top, transport along the bottom, and between them the
+    /// scrub bar as a bare line when the track has a length. The card's
+    /// height is the grid's shared one: the bar takes its room from the gap
+    /// the two ends already left, and the art stays as it was.
     private func smallPlayingBody(_ state: NowPlayingState) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
@@ -401,7 +412,11 @@ struct NookMediaCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             Spacer(minLength: 0)
-            transportRow(state, iconSize: 12, playSize: 14, hit: 28, spacing: 18)
+            if let style = NookScrubBarLayout.style(for: size, duration: state.duration) {
+                NookScrubBar(state: state, media: nook.media, style: style)
+                Spacer(minLength: 0)
+            }
+            transportRow(state, iconSize: 12, playSize: 14, hit: 28, spacing: 18, spread: showsModes)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -446,7 +461,9 @@ struct NookMediaCard: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 6)
-                NookScrubBar(state: state, media: nook.media)
+                if let style = NookScrubBarLayout.style(for: size, duration: state.duration) {
+                    NookScrubBar(state: state, media: nook.media, style: style)
+                }
                 transportRow(state, iconSize: 14, playSize: 18, hit: 36, spacing: 12)
                     .padding(.top, 4)
             }
@@ -495,16 +512,75 @@ struct NookMediaCard: View {
         [state.artist, state.album].compactMap { $0 }.first { !$0.isEmpty } ?? ""
     }
 
-    /// Previous, play or pause, next, centered in the space it is given,
-    /// with the speaker button at the trailing edge.
-    private func transportRow(_ state: NowPlayingState, iconSize: CGFloat, playSize: CGFloat, hit: CGFloat, spacing: CGFloat) -> some View {
-        HStack(spacing: spacing) {
+    /// Shuffle, previous, play or pause, next and repeat, centered in the
+    /// space it is given, with the speaker button at the trailing edge. A
+    /// one column card has no room for that: `spread` gives the six
+    /// buttons an equal share of the row.
+    @ViewBuilder
+    private func transportRow(_ state: NowPlayingState, iconSize: CGFloat, playSize: CGFloat, hit: CGFloat, spacing: CGFloat, spread: Bool = false) -> some View {
+        if spread {
+            HStack(spacing: 0) {
+                transportButtons(state, iconSize: iconSize, playSize: playSize, hit: hit, slot: .infinity)
+                speakerButton(hit: hit).frame(maxWidth: .infinity)
+            }
+        } else {
+            HStack(spacing: spacing) {
+                transportButtons(state, iconSize: iconSize, playSize: playSize, hit: hit, slot: nil)
+            }
+            .frame(maxWidth: .infinity)
+            .overlay(alignment: .trailing) { speakerButton(hit: hit) }
+        }
+    }
+
+    /// True when the two mode buttons are drawn: the build offers them and
+    /// the player on now can do something with them.
+    private var showsModes: Bool { NookModeButtonsOffer.isOffered && nook.media.offersModes }
+
+    /// The five buttons of a row, in a player's usual order.
+    private func transportButtons(_ state: NowPlayingState, iconSize: CGFloat, playSize: CGFloat, hit: CGFloat, slot: CGFloat?) -> some View {
+        Group {
+            shuffleButton(state, size: iconSize, hit: hit)
             transportButton("backward.fill", size: iconSize, hit: hit) { nook.media.previousTrack() }
             transportButton(state.isPlaying ? "pause.fill" : "play.fill", size: playSize, hit: hit) { nook.media.togglePlayPause() }
             transportButton("forward.fill", size: iconSize, hit: hit) { nook.media.nextTrack() }
+            repeatButton(state, size: iconSize, hit: hit)
         }
-        .frame(maxWidth: .infinity)
-        .overlay(alignment: .trailing) { speakerButton(hit: hit) }
+        .frame(maxWidth: slot)
+    }
+
+    /// Shuffle. It takes the accent while the player says shuffle is on. A
+    /// player that reports no mode leaves it plain: nothing is guessed.
+    @ViewBuilder
+    private func shuffleButton(_ state: NowPlayingState, size: CGFloat = 13, hit: CGFloat = 30) -> some View {
+        if showsModes {
+            let mode = nook.media.shuffle ?? .off
+            transportButton("shuffle", size: size - 1, hit: hit, isOn: mode.isOn) { nook.media.toggleShuffle() }
+                .modifier(modeButtonChrome(mode.labelKey))
+        }
+    }
+
+    /// Repeat: everything, then this one song (the symbol with a 1), then off.
+    @ViewBuilder
+    private func repeatButton(_ state: NowPlayingState, size: CGFloat = 13, hit: CGFloat = 30) -> some View {
+        if showsModes {
+            let mode = nook.media.repeating ?? .off
+            transportButton(mode.symbol, size: size - 1, hit: hit, isOn: mode.isOn) { nook.media.cycleRepeat() }
+                .modifier(modeButtonChrome(mode.labelKey))
+        }
+    }
+
+    /// What a mode button says about itself. One that macOS refused is
+    /// dimmed and says where to allow it, and one the player has switched
+    /// off for what is playing is dimmed and says that.
+    private func modeButtonChrome(_ labelKey: String) -> NookModeButtonChrome {
+        let lang = LanguageManager.shared
+        if nook.media.modesRefused {
+            return NookModeButtonChrome(label: lang.t("nook.media.modes.refused"), isDimmed: true)
+        }
+        if nook.media.modesUnavailable {
+            return NookModeButtonChrome(label: lang.t("nook.media.modes.unavailable"), isDimmed: true)
+        }
+        return NookModeButtonChrome(label: lang.t(labelKey), isDimmed: false)
     }
 
     private func speakerButton(hit: CGFloat = 26) -> some View {
@@ -529,14 +605,27 @@ struct NookMediaCard: View {
         .onDisappear { isPickingSpeaker = false }
     }
 
-    private func transportButton(_ systemName: String, size: CGFloat = 13, hit: CGFloat = 30, action: @escaping () -> Void) -> some View {
+    private func transportButton(_ systemName: String, size: CGFloat = 13, hit: CGFloat = 30, isOn: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: size, weight: .bold))
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(isOn ? accent.highlight(.orange) : Color.white.opacity(0.9))
                 .frame(width: hit, height: hit)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// The tooltip, the spoken name and the dimming of a shuffle or repeat button.
+private struct NookModeButtonChrome: ViewModifier {
+    var label: String
+    var isDimmed: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(isDimmed ? 0.4 : 1)
+            .help(label)
+            .accessibilityLabel(label)
     }
 }

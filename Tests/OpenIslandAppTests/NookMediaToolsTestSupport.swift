@@ -271,8 +271,10 @@ enum NookMediaSamples {
     /// A track as the MediaRemote adapter reports it.
     static func track(
         bundle: String = "com.spotify.client",
-        item: String? = "track-1",
+        identifier: String? = "track-1",
         title: String = "Song",
+        artist: String? = nil,
+        album: String? = nil,
         isPlaying: Bool = true,
         duration: Double? = 200,
         elapsed: Double? = 10,
@@ -284,7 +286,11 @@ enum NookMediaSamples {
             "playing": isPlaying,
             "timestamp": time.ISO8601Format(),
         ]
-        if let item { payload["contentItemIdentifier"] = item }
+        // The player's own identifier, which the app does not read (see
+        // `NowPlayingState.trackIdentity`). It is here to prove that.
+        if let identifier { payload["contentItemIdentifier"] = identifier }
+        if let artist { payload["artist"] = artist }
+        if let album { payload["album"] = album }
         if let duration { payload["duration"] = duration }
         if let elapsed { payload["elapsedTime"] = elapsed }
         return NowPlayingState(payload: payload)!

@@ -223,7 +223,7 @@ struct OnboardingTodoConnectorTests {
         #expect(setup.choices == [OnboardingTodoChoice(id: NotionFixtures.dataSourceID, title: "To-Do")])
         let list = OnboardingTodoChecklist.steps(source: .notion, setup: setup)
         #expect(list.map(\.isDone) == [true, true, true, false])
-        // The secret went to the Keychain's store and nowhere else.
+        // The secret went to the token file's store and nowhere else.
         #expect(harness.tokens.token == Self.secret)
     }
 
@@ -390,7 +390,7 @@ struct OnboardingTodoConnectorTests {
     // MARK: The secret
 
     /// The secret passes through the page's door and the service writes it
-    /// to the Keychain's store. Neither the setup the page reads nor the
+    /// to the token file's store. Neither the setup the page reads nor the
     /// state the tour keeps holds it, and nothing is saved in the settings.
     @Test func theSecretIsNotInTheToursStateOrTheSettingsAfterAConnect() async throws {
         let harness = try NotionTodoServiceTests.Harness(token: nil, configured: false)

@@ -11,12 +11,38 @@ enum NookScrubBarLayout {
     /// makes a thin line easy to grab, and it lays out as the line alone.
     static let hitHeight: CGFloat = 11
     static let labelSpacing: CGFloat = 4
+    /// The same band at the narrow size, where the bar is a bare line. It is
+    /// taller, which makes the line easy to grab, and it still lays out as
+    /// the line alone.
+    static let narrowHitHeight: CGFloat = 16
+
+    /// How the bar is drawn on a card of this size, or nil when the card
+    /// shows none: a track with no length (a live stream) gets no bar. The
+    /// narrow size is the one column wide card, which has no room for the
+    /// times under the line.
+    static func style(for size: NookWidgetSize, duration: TimeInterval?) -> NookScrubBarStyle? {
+        guard NookScrubRules.mode(duration: duration, refusesSeek: false) != .hidden else { return nil }
+        switch size {
+        case .small: return .narrow
+        case .medium, .large: return .standard
+        }
+    }
 
     /// Where the thumb's leading edge sits, kept inside the bar.
     static func thumbOffset(progress: Double, width: CGFloat) -> CGFloat {
         let center = width * CGFloat(min(max(progress, 0), 1))
         return min(max(center - thumbSize / 2, 0), max(0, width - thumbSize))
     }
+}
+
+/// The parts of the scrub bar that change with the size of the card.
+struct NookScrubBarStyle: Equatable, Sendable {
+    var hitHeight: CGFloat
+    /// The elapsed and the full time in a row under the line.
+    var showsTimes: Bool
+
+    static let standard = NookScrubBarStyle(hitHeight: NookScrubBarLayout.hitHeight, showsTimes: true)
+    static let narrow = NookScrubBarStyle(hitHeight: NookScrubBarLayout.narrowHitHeight, showsTimes: false)
 }
 
 /// The scrub bar on the now-playing card: elapsed time, the track's length
@@ -26,6 +52,8 @@ enum NookScrubBarLayout {
 struct NookScrubBar: View {
     let state: NowPlayingState
     var media: MediaRemoteService
+    var style = NookScrubBarStyle.standard
+    @Environment(\.hangoverAccent) private var accent
 
     @State private var dragFraction: Double?
     @State private var isHovering = false
@@ -59,7 +87,7 @@ struct NookScrubBar: View {
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.white.opacity(0.14))
                         .frame(height: thickness)
-                    Capsule().fill(Color.white.opacity(0.85))
+                    Capsule().fill(accent.highlight(.white).opacity(0.85))
                         .frame(width: max(0, width * progress), height: thickness)
                     if isActive {
                         Circle().fill(Color.white)
@@ -75,18 +103,20 @@ struct NookScrubBar: View {
                     withMotion(Motion.hover) { isHovering = hovering }
                 }
             }
-            .frame(height: NookScrubBarLayout.hitHeight)
-            .padding(.vertical, -(NookScrubBarLayout.hitHeight - NookScrubBarLayout.restThickness) / 2)
+            .frame(height: style.hitHeight)
+            .padding(.vertical, -(style.hitHeight - NookScrubBarLayout.restThickness) / 2)
 
-            HStack {
-                Text(NookScrubRules.clock(position))
-                Spacer()
-                Text(NookScrubRules.clock(duration))
+            if style.showsTimes {
+                HStack {
+                    Text(NookScrubRules.clock(position))
+                    Spacer()
+                    Text(NookScrubRules.clock(duration))
+                }
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .foregroundStyle(.white.opacity(dragFraction == nil ? 0.4 : 0.75))
+                // The band above reaches into this row's space.
+                .allowsHitTesting(false)
             }
-            .font(.system(size: 9, weight: .medium, design: .monospaced))
-            .foregroundStyle(.white.opacity(dragFraction == nil ? 0.4 : 0.75))
-            // The band above reaches into this row's space.
-            .allowsHitTesting(false)
         }
     }
 
@@ -135,6 +165,7 @@ struct NookSpeakerButton: View {
 struct NookSpeakerList: View {
     var outputs: NookAudioOutputs
     var onDone: () -> Void
+    @Environment(\.hangoverAccent) private var accent
 
     static let rowHeight: CGFloat = 24
     /// How long the list stays after a pick, which lets the check mark be
@@ -205,7 +236,7 @@ struct NookSpeakerList: View {
                 } else if isCurrent {
                     Image(systemName: "checkmark")
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.9))
+                        .foregroundStyle(accent.highlight(.white).opacity(0.9))
                 }
             }
             .padding(.horizontal, 8)

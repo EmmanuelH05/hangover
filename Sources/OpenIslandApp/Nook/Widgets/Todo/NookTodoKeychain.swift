@@ -1,14 +1,6 @@
 import Foundation
 import Security
 
-/// Where a task source's token lives. The app uses the Keychain; tests use
-/// an in-memory store.
-protocol NookTodoTokenStoring: Sendable {
-    func read() throws -> String?
-    func save(_ token: String) throws
-    func delete() throws
-}
-
 /// Carries only the Security status code, never the secret.
 struct NookTodoKeychainError: Error, Equatable, Sendable {
     let status: OSStatus
@@ -16,6 +8,11 @@ struct NookTodoKeychainError: Error, Equatable, Sendable {
 
 /// Generic-password Keychain item scoped to the app's bundle identifier.
 /// Each task source has its own item.
+///
+/// Older builds kept the token here. The app no longer reads it by itself:
+/// without a paid certificate the Keychain asks again after every update.
+/// `NookTodoTokenMove` is the one place that uses this type, and only when
+/// the user asks to bring a saved token over to its file.
 struct NookTodoKeychain: NookTodoTokenStoring {
     static let fallbackBundleID = "app.openisland.dev"
     static let notionServiceSuffix = ".nook.todo.notion"

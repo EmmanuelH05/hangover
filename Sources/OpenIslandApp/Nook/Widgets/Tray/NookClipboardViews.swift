@@ -263,15 +263,16 @@ private struct NookClipboardRow: View {
 /// The small capsule buttons of the clipboard tab.
 private struct NookTrayPillButtonStyle: ButtonStyle {
     let prominent: Bool
+    @Environment(\.hangoverAccent) private var accent
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 11, weight: .semibold))
             .lineLimit(1)
-            .foregroundStyle(prominent ? Color.black : Color.white.opacity(0.85))
+            .foregroundStyle(prominent ? accent.textOnHighlight(.black) : Color.white.opacity(0.85))
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(Capsule().fill(prominent ? Color.orange : Color.white.opacity(0.1)))
+            .background(Capsule().fill(prominent ? accent.highlight(.orange) : Color.white.opacity(0.1)))
             .contentShape(Capsule())
             .opacity(configuration.isPressed ? 0.7 : 1)
     }

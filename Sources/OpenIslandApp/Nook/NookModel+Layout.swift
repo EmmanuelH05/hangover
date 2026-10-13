@@ -13,7 +13,7 @@ extension NookModel {
     /// Nook tab or hidden on this display.
     func addableWidgets(for profile: IslandAppearanceDisplayProfile) -> [NookWidgetKind] {
         let shown = Set(widgetPlacements(for: profile).map(\.kind))
-        return NookWidgetKind.allCases.filter { !shown.contains($0) }
+        return NookWidgetKind.offered.filter { !shown.contains($0) }
     }
 
     /// Moves a widget to `index` among the widgets on the page. Widgets not

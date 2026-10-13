@@ -118,6 +118,7 @@ private struct NookRingLightLiveView: View {
 
 /// The ring light's color as a row of swatches, for the Mirror settings.
 struct NookRingLightTintRow: View {
+    @Environment(\.hangoverAccent) private var accent
     @AppStorage(NookRingLightTint.storageKey) private var tintRaw = NookRingLightTint.warmWhite.rawValue
 
     private static let swatch: CGFloat = 18
@@ -138,7 +139,7 @@ struct NookRingLightTintRow: View {
                             .overlay(Circle().strokeBorder(Color.primary.opacity(0.25), lineWidth: 1))
                             .padding(3)
                             .overlay(
-                                Circle().strokeBorder(Color.accentColor.opacity(tint == selected ? 1 : 0), lineWidth: 2)
+                                Circle().strokeBorder(accent.highlight(Color.accentColor).opacity(tint == selected ? 1 : 0), lineWidth: 2)
                             )
                             .contentShape(Circle())
                     }
