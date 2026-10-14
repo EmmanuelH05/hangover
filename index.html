@@ -57,6 +57,8 @@
   figure .panel { border-radius: 18px; padding: 26px; display: grid; place-items: center; }
   figure img { display: block; max-width: 100%; height: auto; }
   figcaption { font-size: 15px; color: var(--muted); margin-top: 10px; }
+  /* The recording carries its own backdrop, which is why it gets no panel. */
+  figure.demo video { display: block; width: 100%; height: auto; border-radius: 18px; background: #000; }
 
   dl { margin: 8px 0 0; border-top: 1px solid var(--rule); }
   dl div { display: grid; grid-template-columns: 132px 1fr; gap: 16px; padding: 13px 0; border-bottom: 1px solid var(--rule); }
@@ -95,9 +97,9 @@
   <span>Apple silicon, macOS 14 or later</span>
 </div>
 
-<figure>
-  <div class="panel" style="background:#000"><img src="nook.png" width="702" height="294" alt="Hangover open under the notch, with music, a focus timer and the file tray"></div>
-  <figcaption>Open, with music, a timer and the file tray. You pick what goes on this page and where.</figcaption>
+<figure class="demo">
+  <video src="demo.mp4" poster="demo-poster.jpg" width="1280" height="960" autoplay muted loop playsinline disablepictureinpicture preload="auto" aria-label="Hangover opening from the closed notch and playing music"></video>
+  <figcaption>A recording of the real app with sample content. A script inside the app drove it, which is why no pointer shows.</figcaption>
 </figure>
 
 <h2>What's in it</h2>
@@ -118,6 +120,11 @@
   <div><dt>Swipe</dt><dd>Swipe up with two fingers to close it. It stays off until you turn it on.</dd></div>
   <div><dt>Welcome tour</dt><dd>The first time you open it, a tour on the real notch sets everything up with you. It comes in three lengths, for however much time you have.</dd></div>
 </dl>
+
+<figure>
+  <div class="panel" style="background:#000"><img src="nook.png" width="702" height="294" alt="Hangover open under the notch, with music, a focus timer and the file tray"></div>
+  <figcaption>Open, with music, a timer and the file tray. You pick what goes on this page and where.</figcaption>
+</figure>
 
 <figure>
   <div class="panel" style="background:#404040"><img src="photo-booth.jpg" width="668" height="244" alt="Eight photo booth strips in different frames, each with four shots and a caption"></div>
