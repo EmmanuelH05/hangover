@@ -58,7 +58,17 @@
   figure img { display: block; max-width: 100%; height: auto; }
   figcaption { font-size: 15px; color: var(--muted); margin-top: 10px; }
   /* The recording carries its own backdrop, which is why it gets no panel. */
-  figure.demo video { display: block; width: 100%; height: auto; border-radius: 18px; background: #000; }
+  figure.demo video { display: block; width: 100%; height: auto; aspect-ratio: 1240 / 1080; object-fit: cover; border-radius: 18px; background: #000; }
+  /* One button per recording. They wrap on a wide screen; on a phone the row
+     scrolls sideways, never the page. */
+  .demo-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .demo-tabs::-webkit-scrollbar { display: none; }
+  .demo-tabs button {
+    flex: none; font: inherit; font-size: 14px; color: var(--muted); background: transparent;
+    border: 1px solid var(--rule); border-radius: 999px; padding: 6px 13px; cursor: pointer;
+  }
+  .demo-tabs button[aria-selected="true"] { background: var(--forest); border-color: var(--forest); color: var(--shell); }
+  .demo-tabs button:focus-visible { outline: 3px solid #2f6b4f; outline-offset: 2px; }
 
   dl { margin: 8px 0 0; border-top: 1px solid var(--rule); }
   dl div { display: grid; grid-template-columns: 132px 1fr; gap: 16px; padding: 13px 0; border-bottom: 1px solid var(--rule); }
@@ -78,6 +88,7 @@
     h2 { margin-top: 64px; }
     figure .panel { padding: 14px; }
     dl div { grid-template-columns: 1fr; gap: 2px; }
+    .demo-tabs { flex-wrap: nowrap; }
   }
 </style>
 </head>
@@ -98,8 +109,17 @@
 </div>
 
 <figure class="demo">
-  <video src="demo.mp4" poster="demo-poster.jpg" width="1280" height="960" autoplay muted loop playsinline disablepictureinpicture preload="auto" aria-label="Hangover opening from the closed notch and playing music"></video>
-  <figcaption>A recording of the real app with sample content. A script inside the app drove it, which is why no pointer shows.</figcaption>
+  <video id="demo-video" src="demo/hero.mp4" poster="demo/hero-poster.jpg" width="1240" height="1080" autoplay muted playsinline disablepictureinpicture preload="auto" aria-label="Hangover, recorded with sample content"></video>
+  <div class="demo-tabs" role="tablist" aria-label="Features">
+    <button type="button" role="tab" data-clip="hero" aria-selected="true">Music</button>
+    <button type="button" role="tab" data-clip="use-todos-timer" aria-selected="false">To-dos and timer</button>
+    <button type="button" role="tab" data-clip="calendar-looks" aria-selected="false">Calendar</button>
+    <button type="button" role="tab" data-clip="weather-layouts" aria-selected="false">Weather and layouts</button>
+    <button type="button" role="tab" data-clip="use-edit" aria-selected="false">Notes and editing</button>
+    <button type="button" role="tab" data-clip="closed-island" aria-selected="false">Closed notch</button>
+    <button type="button" role="tab" data-clip="sides-glow" aria-selected="false">Sides and glow</button>
+    <button type="button" role="tab" data-clip="welcome-tour" aria-selected="false">Welcome tour</button>
+  </div>
 </figure>
 
 <h2>What's in it</h2>
@@ -157,5 +177,30 @@
 </footer>
 
 </main>
+<script>
+  // The recordings play one after another. A button jumps to its own, and the
+  // list starts over after the last one.
+  (() => {
+    const video = document.getElementById('demo-video');
+    const tabs = Array.from(document.querySelectorAll('.demo-tabs button'));
+    if (!video || tabs.length === 0) return;
+    let index = 0;
+    const show = (next) => {
+      index = (next + tabs.length) % tabs.length;
+      const clip = tabs[index].dataset.clip;
+      tabs.forEach((tab, i) => tab.setAttribute('aria-selected', String(i === index)));
+      video.poster = 'demo/' + clip + '-poster.jpg';
+      video.src = 'demo/' + clip + '.mp4';
+      video.play().catch(() => {});
+    };
+    video.addEventListener('ended', () => show(index + 1));
+    tabs.forEach((tab, i) => tab.addEventListener('click', () => {
+      show(i);
+      tab.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    }));
+    video.muted = true;
+    video.play().catch(() => {});
+  })();
+</script>
 </body>
 </html>
