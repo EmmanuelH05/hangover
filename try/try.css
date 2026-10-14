@@ -1,0 +1,555 @@
+/* The "Try it" notch. The fake screen is drawn at 520 by 716 CSS pixels and
+   scaled to fit its column by try.js, which sets --s. Everything inside is in
+   those design pixels. */
+
+.try-stage {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  margin: 28px auto 0;
+  aspect-ratio: 520 / 716;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #5a7f70;
+  isolation: isolate;
+}
+
+.try-screen {
+  --accent: #db34f2;
+  --on-accent: #0d0d0f;
+  --ink: #0d0d0f;
+  --paper: #f1ead9;
+  --card: rgba(255, 255, 255, 0.06);
+  --card-line: rgba(255, 255, 255, 0.08);
+  --dim: rgba(255, 255, 255, 0.5);
+  --faint: rgba(255, 255, 255, 0.35);
+  --sf: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* The app's springs (Motion.swift) as CSS curves. islandOpen is
+     spring(0.42, 0.8); islandClose is a smooth 0.3 s. */
+  --d-open: 0.5s;
+  --e-open: cubic-bezier(0.3, 1.2, 0.5, 1);
+  --d-close: 0.3s;
+  --e-close: cubic-bezier(0.25, 0.8, 0.3, 1);
+  --d-fade: 0.2s;
+  --e-select: cubic-bezier(0.3, 0.9, 0.3, 1);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 520px;
+  height: 716px;
+  transform-origin: 0 0;
+  transform: scale(var(--s, 1));
+  visibility: hidden;
+  color: #fff;
+  font: 13px/1.3 var(--sf);
+  -webkit-font-smoothing: antialiased;
+  text-align: left;
+  user-select: none;
+  -webkit-user-select: none;
+}
+@supports (transition-timing-function: linear(0, 1)) {
+  .try-screen {
+    --e-open: linear(0, 0.034, 0.115, 0.223, 0.341, 0.457, 0.565, 0.662, 0.745, 0.813, 0.869, 0.913, 0.947, 0.971, 0.989, 1.001, 1.009, 1.013, 1.015, 1.015, 1.014, 1.013, 1.011, 1.01, 1.008, 1.006, 1);
+  }
+}
+.try-screen.is-ready { visibility: visible; }
+.try-screen *, .try-screen *::before, .try-screen *::after { box-sizing: border-box; }
+.try-screen button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.try-screen input[type="text"] {
+  font: inherit;
+  color: #fff;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.try-screen :focus-visible { outline: 2.5px solid var(--accent); outline-offset: 1px; }
+.try-screen ul { list-style: none; margin: 0; padding: 0; }
+
+/* Desktop: wallpaper, menu bar, dock. All of it is decoration. */
+.try-wall {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 3px),
+    radial-gradient(90% 38% at 80% 58%, rgba(206, 160, 208, 0.9) 0, transparent 70%),
+    radial-gradient(80% 30% at 10% 44%, rgba(196, 150, 200, 0.55) 0, transparent 70%),
+    linear-gradient(180deg, #46695a 0%, #6f9788 34%, #a99bb8 60%, #c2d0cb 100%);
+}
+.try-menubar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  background: rgba(20, 30, 26, 0.32);
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.92);
+}
+.try-menubar span { margin-right: 14px; }
+.try-menubar b { font-weight: 700; margin-right: 14px; }
+.try-menubar .mb-r { display: flex; align-items: center; gap: 8px; margin: 0; }
+.try-menubar .mb-r span { margin: 0; }
+.try-hint {
+  position: absolute;
+  top: 52px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: center;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.82);
+  text-shadow: 0 1px 8px rgba(20, 30, 26, 0.45);
+  transition: opacity var(--d-fade) ease;
+}
+.try-hint.is-hidden { opacity: 0; }
+.try-dock {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  display: flex;
+  gap: 8px;
+  padding: 7px 9px;
+  transform: translateX(-50%);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+.try-dock i {
+  display: block;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: linear-gradient(160deg, var(--a), var(--b));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+/* The island: one black shape that grows from the closed notch to the Nook.
+   The flat top, the flared top corners and the rounded bottom are the app's
+   NotchShape. */
+.try-island {
+  --r: 12px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: var(--w, 168px);
+  height: var(--h, 32px);
+  z-index: 5;
+  transition: width var(--d-close) var(--e-close), height var(--d-close) var(--e-close);
+}
+.try-island:not([data-state="closed"]) {
+  --r: 22px;
+  transition-duration: var(--d-open);
+  transition-timing-function: var(--e-open);
+}
+/* A little hit area around the shape. A pointer that drifts off the edge
+   does not close it at once, and the flared top corners count as the shape. */
+.try-island::before { content: ""; position: absolute; inset: -4px -12px -10px; }
+.try-island:not([data-state="closed"])::before { inset: 0 -24px -10px; }
+.try-shape {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  border-radius: 0 0 var(--r) var(--r);
+  transition: border-radius var(--d-close) var(--e-close);
+}
+.try-island:not([data-state="closed"]) .try-shape { transition: border-radius var(--d-open) var(--e-open); }
+.try-shape::before,
+.try-shape::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 0;
+  height: 0;
+  transition: width var(--d-close) var(--e-close), height var(--d-close) var(--e-close);
+}
+.try-shape::before { right: 100%; background: radial-gradient(circle at 0 100%, transparent 21.5px, #000 22px); }
+.try-shape::after { left: 100%; background: radial-gradient(circle at 100% 100%, transparent 21.5px, #000 22px); }
+.try-island:not([data-state="closed"]) .try-shape::before,
+.try-island:not([data-state="closed"]) .try-shape::after {
+  width: 22px;
+  height: 22px;
+  transition-duration: var(--d-open);
+  transition-timing-function: var(--e-open);
+}
+.try-clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 0 0 var(--r) var(--r);
+}
+
+/* The closed notch is a real button. */
+.try-notch {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 32px;
+  z-index: 2;
+}
+.try-notch:focus-visible { outline-offset: -3px; border-radius: 0 0 12px 12px; }
+.try-ear {
+  position: absolute;
+  top: 0;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.try-island[data-state="closed"][data-ears="music"] .try-ear,
+.try-island[data-state="closed"][data-ears="timer"] .try-ear.is-right { opacity: 1; transition-delay: 0.12s; }
+.try-island[data-state="closed"][data-ears="timer"] .try-ear.is-left { opacity: 0; }
+.try-ear.is-left { left: 14px; }
+.try-ear.is-right { right: 18px; }
+.try-ear .art { width: 22px; height: 22px; border-radius: 6px; }
+.try-bars { display: flex; align-items: center; gap: 2px; height: 16px; }
+.try-bars i {
+  display: block;
+  width: 3px;
+  height: 16px;
+  border-radius: 1.5px;
+  background: #fff;
+  transform: scaleY(0.25);
+  will-change: transform;
+}
+.try-eartime { font: 500 11.5px var(--mono); color: rgba(255, 255, 255, 0.85); font-variant-numeric: tabular-nums; }
+.try-ear.is-right .try-bars, .try-ear.is-right .try-eartime { display: none; }
+.try-island[data-ears="music"] .try-ear.is-right .try-bars { display: flex; }
+.try-island[data-ears="timer"] .try-ear.is-right .try-eartime { display: block; }
+
+/* Panels that live inside the island. Only one is on at a time. */
+.try-panel {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 456px;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.1s ease, visibility 0s 0.1s;
+}
+.try-island[data-state="open"] .try-nook,
+.try-island[data-state="request"] .try-req {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity var(--d-fade) ease-out 0.1s, visibility 0s;
+}
+.try-island[data-state="request"] .try-req { width: 380px; }
+.try-nook { padding: 38px 12px 14px; }
+
+.try-close {
+  position: absolute;
+  right: 14px;
+  top: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  z-index: 3;
+}
+.try-close:hover { background: rgba(255, 255, 255, 0.18); }
+
+/* Cards */
+.try-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.try-grid > .wide { grid-column: 1 / -1; }
+.tcard {
+  background: var(--card);
+  border: 1px solid var(--card-line);
+  border-radius: 16px;
+  padding: 12px;
+  min-width: 0;
+}
+.thd {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim);
+  white-space: nowrap;
+}
+.thd svg { flex: none; }
+.thd .tr {
+  margin-left: auto;
+  font: 500 10.5px var(--mono);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--faint);
+}
+.tinput {
+  display: block;
+  width: 100%;
+  height: 28px;
+  margin-top: 8px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.09);
+  font-size: 12.5px;
+  caret-color: var(--accent);
+}
+.tinput::placeholder { color: rgba(255, 255, 255, 0.45); }
+.tinput:focus-visible { outline-offset: 0; }
+/* iOS zooms the page into any field under 16 px. */
+@media (pointer: coarse) { .try-screen .tinput { font-size: 16px; } }
+
+/* Music */
+.tmusic { display: flex; align-items: center; gap: 12px; height: 88px; padding: 12px; }
+.art {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+}
+.tmusic .m-mid { flex: 1; min-width: 0; }
+.m-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-sub { font-size: 12px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.m-seek { margin-top: 6px; }
+.m-times { display: flex; justify-content: space-between; font: 500 10.5px var(--mono); color: var(--faint); margin-top: 1px; font-variant-numeric: tabular-nums; }
+.m-ctl { flex: none; display: flex; align-items: center; gap: 2px; }
+.tbtn {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  transition: transform 0.15s var(--e-select), background-color 0.15s ease;
+}
+.tbtn:hover { background: rgba(255, 255, 255, 0.1); }
+.tbtn:active { transform: scale(0.92); }
+.tbtn.big { width: 38px; height: 38px; }
+
+/* Scrubber: a real range input. */
+.try-range {
+  --p: 0%;
+  display: block;
+  width: 100%;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+.try-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--accent) var(--p), rgba(255, 255, 255, 0.2) var(--p));
+}
+.try-range::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.2); }
+.try-range::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--accent); }
+.try-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 11px;
+  height: 11px;
+  margin-top: -3.5px;
+  border-radius: 50%;
+  border: 0;
+  background: #fff;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.try-range::-moz-range-thumb { width: 11px; height: 11px; border-radius: 50%; border: 0; background: #fff; opacity: 0; }
+.try-range:hover::-webkit-slider-thumb, .try-range:focus-visible::-webkit-slider-thumb, .try-range:active::-webkit-slider-thumb { opacity: 1; }
+.try-range:hover::-moz-range-thumb, .try-range:focus-visible::-moz-range-thumb { opacity: 1; }
+.try-range:focus-visible { outline-offset: 2px; }
+
+/* Calendar */
+.tcal { padding: 12px 12px 10px; }
+.cal-nav { display: flex; align-items: center; gap: 2px; margin-left: auto; text-transform: none; letter-spacing: 0; }
+.cal-nav button { height: 22px; min-width: 22px; padding: 0 6px; border-radius: 7px; display: grid; place-items: center; color: rgba(255, 255, 255, 0.85); font-size: 12px; font-weight: 500; }
+.cal-nav button:hover { background: rgba(255, 255, 255, 0.1); }
+.tweek { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-top: 8px; }
+.tday {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 5px 0 4px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  transition: background-color 0.24s var(--e-select), border-color 0.24s var(--e-select);
+}
+.tday:hover { background: rgba(255, 255, 255, 0.05); }
+.tday[aria-pressed="true"] { background: rgba(255, 255, 255, 0.09); border-color: rgba(255, 255, 255, 0.3); }
+.tday .wd { font-size: 11px; color: var(--dim); }
+.tday .n { font-size: 16px; font-weight: 600; line-height: 1.25; }
+.tday.is-today .n { color: var(--accent); }
+.tday .dots { display: flex; gap: 3px; height: 5px; margin-top: 1px; }
+.tday .dots i { width: 4px; height: 4px; border-radius: 50%; }
+.cal-events { margin-top: 6px; }
+.ev { display: flex; align-items: center; gap: 8px; height: 22px; font-size: 13px; }
+.ev .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; }
+.ev .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ev .when { margin-left: auto; padding-left: 8px; flex: none; display: flex; align-items: center; gap: 5px; font: 500 11.5px var(--mono); color: var(--dim); white-space: nowrap; }
+.cal-more { margin-top: 1px; height: 20px; display: flex; align-items: center; gap: 3px; font-size: 12px; color: rgba(255, 255, 255, 0.7); border-radius: 6px; }
+.cal-more:hover { color: #fff; }
+.cal-none { height: 22px; font-size: 12.5px; color: var(--faint); display: flex; align-items: center; }
+
+/* To-do and notes */
+.tlist { height: 72px; margin-top: 6px; overflow-y: auto; scrollbar-width: none; overscroll-behavior: contain; }
+.tlist::-webkit-scrollbar { display: none; }
+.trow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 24px;
+  font-size: 13px;
+  text-align: left;
+}
+.trow .ring {
+  flex: none;
+  position: relative;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.5);
+  transition: background-color 0.24s var(--e-select), border-color 0.24s var(--e-select);
+}
+.trow .ring svg { position: absolute; inset: 0; margin: auto; opacity: 0; color: var(--on-accent); transition: opacity 0.2s ease; }
+.trow[aria-checked="true"] .ring { background: var(--accent); border-color: var(--accent); }
+.trow[aria-checked="true"] .ring svg { opacity: 1; }
+.trow .tt { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color 0.2s ease; }
+.trow[aria-checked="true"] .tt { color: var(--faint); text-decoration: line-through; }
+.trow:hover .ring { border-color: rgba(255, 255, 255, 0.8); }
+.nrow { display: flex; align-items: center; gap: 8px; height: 24px; font-size: 12.5px; }
+.nrow time { flex: none; width: 52px; font: 500 10.5px var(--mono); color: var(--faint); white-space: nowrap; }
+.nrow span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tlist .is-new { animation: try-in 0.3s var(--e-select); }
+@keyframes try-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+/* Timer */
+.ttimer { height: 158px; display: flex; flex-direction: column; }
+.tt-time { margin-top: 6px; font: 600 30px/1.1 var(--sf); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+.tt-bar { height: 4px; margin-top: 6px; border-radius: 2px; background: rgba(255, 255, 255, 0.16); overflow: hidden; }
+.tt-bar i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: 0 50%; transform: scaleX(var(--f, 1)); transition: transform 0.25s linear; }
+.tt-chips { display: flex; gap: 5px; margin-top: auto; }
+.tchip { height: 24px; min-width: 32px; padding: 0 8px; border-radius: 12px; background: rgba(255, 255, 255, 0.09); font: 600 12px var(--sf); color: rgba(255, 255, 255, 0.85); transition: background-color 0.24s var(--e-select), color 0.24s var(--e-select); }
+.tchip:hover { background: rgba(255, 255, 255, 0.15); }
+.tchip[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+.tchip:disabled { opacity: 0.45; cursor: default; }
+.tt-act { display: flex; gap: 6px; margin-top: 7px; }
+.tpill { flex: 1; height: 26px; border-radius: 13px; font-size: 12.5px; font-weight: 600; background: rgba(255, 255, 255, 0.12); transition: transform 0.15s var(--e-select), background-color 0.15s ease; }
+.tpill:hover { background: rgba(255, 255, 255, 0.2); }
+.tpill:active { transform: scale(0.96); }
+.tpill.go { background: var(--accent); color: var(--on-accent); }
+.tpill.go:hover { filter: brightness(1.08); background: var(--accent); }
+
+/* Weather */
+.twx { height: 158px; position: relative; cursor: pointer; }
+.twx .thd { height: 20px; margin-top: -3px; }
+.twx .seg { display: flex; margin-left: auto; padding: 2px; border-radius: 9px; background: rgba(255, 255, 255, 0.08); text-transform: none; letter-spacing: 0; }
+.twx .seg button { height: 17px; padding: 0 7px; border-radius: 7px; font-size: 10.5px; font-weight: 600; color: var(--dim); }
+.twx .seg button[aria-pressed="true"] { background: rgba(255, 255, 255, 0.18); color: #fff; }
+.wx-now { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+.wx-now .big { font-size: 32px; font-weight: 500; line-height: 1; letter-spacing: -0.01em; }
+.wx-now .what { margin-left: auto; text-align: right; font-size: 11px; line-height: 1.35; color: var(--dim); white-space: nowrap; }
+.wx-now .what b { display: block; color: #fff; font-weight: 600; font-size: 12.5px; }
+.wx-hours { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--card-line); text-align: center; font-size: 11.5px; }
+.wx-hours span { display: flex; flex-direction: column; align-items: center; gap: 1px; color: var(--dim); }
+.wx-hours b { color: #fff; font-weight: 600; }
+.wx-days { margin-top: 4px; }
+.wx-day { display: flex; align-items: center; gap: 6px; height: 16.5px; font-size: 12px; }
+.wx-day .d { width: 42px; font-weight: 600; }
+.wx-day .lo { color: var(--faint); width: 28px; text-align: right; }
+.wx-day .hi { width: 28px; text-align: right; }
+.wx-day .pc { margin-left: auto; color: #64b5ff; font-size: 11px; }
+.wx-day svg { flex: none; }
+
+/* The agent request card */
+.try-req { padding: 40px 14px 16px; }
+.req-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); }
+.req-head b { color: #fff; font-weight: 600; font-size: 14px; }
+.req-dot { width: 9px; height: 9px; border-radius: 50%; background: #ff9230; }
+.req-code { margin-top: 10px; padding: 9px 11px; border-radius: 10px; background: rgba(255, 255, 255, 0.08); font: 500 13px var(--mono); }
+.req-act { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.req-act button { height: 34px; border-radius: 10px; font-size: 13.5px; font-weight: 600; background: rgba(255, 255, 255, 0.1); transition: transform 0.15s var(--e-select), background-color 0.15s ease; }
+.req-act button:hover { background: rgba(255, 255, 255, 0.17); }
+.req-act button:active { transform: scale(0.97); }
+.req-act .allow { background: var(--paper); color: var(--ink); }
+.req-act .allow:hover { background: #fff6e2; }
+.req-done { display: none; align-items: center; gap: 9px; font-size: 13.5px; }
+.req-done .ok { flex: none; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; background: #30d158; color: #0d0d0f; }
+.req-done .ok.no { background: #ff4245; }
+.try-req[data-step="done"] .req-head,
+.try-req[data-step="done"] .req-code,
+.try-req[data-step="done"] .req-act { display: none; }
+.try-req[data-step="done"] .req-done { display: flex; }
+.try-req[data-step="done"] { padding-bottom: 16px; }
+
+/* Everything under the screen */
+.try-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 22px; max-width: 560px; margin: 16px auto 0; }
+.try-controls .tbtn-agent {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--forest);
+  background: transparent;
+  border: 1px solid var(--forest);
+  border-radius: 999px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+.try-controls .tbtn-agent:hover { background: var(--forest); color: var(--shell); }
+.try-controls .tbtn-agent:focus-visible, .try-swatches button:focus-visible { outline: 3px solid #2f6b4f; outline-offset: 3px; }
+.try-swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 14px; color: var(--muted); }
+.try-swatches [role="radiogroup"] { display: flex; flex-wrap: wrap; gap: 7px; }
+.try-swatches button {
+  width: 26px;
+  height: 26px;
+  padding: 3px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: var(--c);
+  background-clip: content-box;
+  cursor: pointer;
+}
+.try-swatches button[aria-checked="true"] { border-color: var(--forest); }
+.try-note { max-width: 560px; margin: 14px auto 0; font-size: 15px; color: var(--muted); }
+.try-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (max-width: 560px) {
+  /* The page keeps 22 px at the sides. The screen gets 16. */
+  .try-stage { max-width: none; width: calc(100% + 12px); margin-left: -6px; margin-right: -6px; }
+  .try-controls { flex-direction: column; align-items: flex-start; }
+}
+
+/* Reduce Motion: the app's own fallback, a plain 0.2 s ease in and out for
+   every move, no springs, no sliding and still bars. */
+@media (prefers-reduced-motion: reduce) {
+  .try-screen {
+    --d-open: 0.2s;
+    --e-open: ease-in-out;
+    --d-close: 0.2s;
+    --e-close: ease-in-out;
+    --e-select: ease-in-out;
+  }
+  .try-screen *, .try-screen *::before, .try-screen *::after { animation: none !important; }
+  .tbtn:active, .tpill:active, .req-act button:active { transform: none; }
+  .tt-bar i { transition-duration: 0.2s; }
+}
