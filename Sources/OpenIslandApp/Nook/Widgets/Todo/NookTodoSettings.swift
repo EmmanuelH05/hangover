@@ -25,6 +25,15 @@ struct NookTodoSettings: View {
             // Where the tab scrolls to when it is opened for the to-dos.
             .id(NookSettingsAnchor.todo)
 
+            Toggle(lang.t("nook.todo.due.remind"), isOn: Binding(
+                get: { hub.dueReminder.isEnabled },
+                set: { hub.dueReminder.isEnabled = $0 }
+            ))
+            Text(lang.t("nook.todo.due.remind.note"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             if hub.selectedKind == .reminders {
                 Picker("List", selection: Binding(
                     get: { service.selectedListID },

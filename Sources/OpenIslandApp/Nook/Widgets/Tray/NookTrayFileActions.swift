@@ -3,35 +3,17 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-/// A picture format the tray converts to.
-enum NookTrayImageFormat: String, Equatable, Sendable {
-    case jpeg
-    case png
-
-    var fileExtension: String {
-        switch self {
-        case .jpeg: "jpg"
-        case .png: "png"
-        }
-    }
-
-    var typeIdentifier: String {
-        switch self {
-        case .jpeg: UTType.jpeg.identifier
-        case .png: UTType.png.identifier
-        }
-    }
-
-    /// Localizable key for the menu item that converts to this format.
-    var actionTitleKey: String { "nook.tray.action.convert.\(rawValue)" }
-}
-
 enum NookTrayFileActionError: Error, Equatable {
     /// The file is gone, or is not a picture that can be read.
     case unreadable
     case writeFailed
     /// The picture has more pixels than the tray converts.
     case tooLarge
+    /// A video that has no sound track cannot become a sound file.
+    case noSound
+    /// A "smaller" copy that came out no smaller than the file it came from.
+    /// Nothing went wrong, and the copy is not kept.
+    case notSmaller
     /// `detail` is what the zip tool said on its error output, cut short.
     case zipFailed(status: Int32, detail: String)
 
@@ -40,6 +22,8 @@ enum NookTrayFileActionError: Error, Equatable {
     var noticeKey: String? {
         switch self {
         case .tooLarge: "nook.tray.notice.convertTooLarge"
+        case .noSound: "nook.tray.convert.notice.noSound"
+        case .notSmaller: "nook.tray.convert.notice.alreadySmall"
         case .unreadable, .writeFailed, .zipFailed: nil
         }
     }
@@ -50,6 +34,8 @@ enum NookTrayFileActionError: Error, Equatable {
         case .unreadable: "the file is gone or cannot be read"
         case .writeFailed: "the new file could not be written"
         case .tooLarge: "the picture is over the pixel limit"
+        case .noSound: "the video has no sound track"
+        case .notSmaller: "the smaller copy was not smaller than the file"
         case .zipFailed(let status, _): "the zip tool exited with status \(status)"
         }
     }
@@ -86,23 +72,6 @@ enum NookTrayFileActions {
         guard width > 0, height > 0 else { return false }
         let (pixels, overflowed) = width.multipliedReportingOverflow(by: height)
         return !overflowed && pixels <= limit
-    }
-
-    /// What a picture with this file name converts to, or nil when the
-    /// tray has no conversion for it.
-    static func conversionTarget(forFileNamed name: String) -> NookTrayImageFormat? {
-        switch (name as NSString).pathExtension.lowercased() {
-        case "png": .jpeg
-        case "jpg", "jpeg": .png
-        case "heic", "heif": .jpeg
-        default: nil
-        }
-    }
-
-    /// "photo.heic" becomes "photo.jpg".
-    static func convertedName(for name: String, to format: NookTrayImageFormat) -> String {
-        let base = (name as NSString).deletingPathExtension
-        return (base.isEmpty ? name : base) + "." + format.fileExtension
     }
 
     /// The extension stays, as it does when Finder compresses one file:
@@ -157,13 +126,19 @@ enum NookTrayFileActions {
 
     /// Writes the picture at `source` to `destination` in another format.
     /// The copy is turned upright and keeps the picture only, not the
-    /// camera data. A see-through picture going to JPEG gets a white
-    /// background, because JPEG has no transparency. A picture with more
-    /// than `maxPixels` pixels is refused before any of it is decoded.
+    /// camera data. A see-through picture going to JPEG or BMP gets a
+    /// white background, because those have no transparency. A picture
+    /// with more than `maxPixels` pixels is refused before any of it is
+    /// decoded. `quality` (0 to 1) applies to JPEG and HEIC. A
+    /// `maxLongSide` smaller than the picture shrinks it to that, and
+    /// never makes it bigger. Only the first picture of an animated file
+    /// is converted.
     static func convertImage(
         at source: URL,
         to destination: URL,
-        format: NookTrayImageFormat,
+        target: NookImageTarget,
+        quality: Double? = nil,
+        maxLongSide: Int? = nil,
         maxPixels: Int = maxConvertPixels
     ) throws {
         guard let imageSource = CGImageSourceCreateWithURL(source as CFURL, nil) else {
@@ -174,26 +149,24 @@ enum NookTrayFileActions {
            !isWithinConvertLimit(width: size.width, height: size.height, limit: maxPixels) {
             throw NookTrayFileActionError.tooLarge
         }
-        guard let image = uprightImage(from: imageSource) else {
-            throw NookTrayFileActionError.unreadable
-        }
+        let image = try uprightImage(from: imageSource, maxLongSide: maxLongSide)
         // A file with no stated size is measured once it is opened, which
         // still comes before its pixels are drawn.
         guard isWithinConvertLimit(width: image.width, height: image.height, limit: maxPixels) else {
             throw NookTrayFileActionError.tooLarge
         }
-        let output = format == .jpeg ? flattenedOnWhite(image) ?? image : image
+        let output = target.needsOpaquePixels ? flattenedOnWhite(image) ?? image : image
         guard let imageDestination = CGImageDestinationCreateWithURL(
             destination as CFURL,
-            format.typeIdentifier as CFString,
+            target.typeIdentifier as CFString,
             1,
             nil
         ) else {
             throw NookTrayFileActionError.writeFailed
         }
         var options: [CFString: Any] = [:]
-        if format == .jpeg {
-            options[kCGImageDestinationLossyCompressionQuality] = jpegQuality
+        if target.isLossy {
+            options[kCGImageDestinationLossyCompressionQuality] = min(1, max(0, quality ?? jpegQuality))
         }
         CGImageDestinationAddImage(imageDestination, output, options as CFDictionary)
         guard CGImageDestinationFinalize(imageDestination) else {
@@ -201,22 +174,73 @@ enum NookTrayFileActions {
         }
     }
 
-    // MARK: - Private
+    /// The size a picture file states for its first picture, read from its
+    /// header. Nil when the file is not a picture or states none.
+    static func pixelSize(ofFileAt url: URL) -> (width: Int, height: Int)? {
+        CGImageSourceCreateWithURL(url as CFURL, nil).flatMap { pixelSize(of: $0) }
+    }
+
+    /// The first picture of a file, turned upright, for work that puts
+    /// pictures somewhere other than another picture file. Throws
+    /// `unreadable` for a file that is not a picture and `tooLarge` for one
+    /// over the pixel limit.
+    static func uprightImage(at url: URL, maxPixels: Int = maxConvertPixels) throws -> CGImage {
+        guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+            throw NookTrayFileActionError.unreadable
+        }
+        if let size = pixelSize(of: imageSource),
+           !isWithinConvertLimit(width: size.width, height: size.height, limit: maxPixels) {
+            throw NookTrayFileActionError.tooLarge
+        }
+        let image = try uprightImage(from: imageSource, maxLongSide: nil)
+        guard isWithinConvertLimit(width: image.width, height: image.height, limit: maxPixels) else {
+            throw NookTrayFileActionError.tooLarge
+        }
+        return image
+    }
 
     /// The whole picture with its rotation tag applied to the pixels. PNG
     /// has no rotation tag most viewers read, which would leave a phone
-    /// photo on its side.
-    private static func uprightImage(from source: CGImageSource) -> CGImage? {
+    /// photo on its side. `maxLongSide` shrinks it while it is decoded,
+    /// which keeps a big photo from being held at full size first.
+    ///
+    /// When ImageIO makes no thumbnail, the only picture left is the full
+    /// one, unrotated. That is no answer to a `maxLongSide`, so it throws
+    /// `unreadable` instead. Without one it is returned, and either way the
+    /// log says it happened. `makeThumbnail` is ImageIO's call, which a test
+    /// replaces to make it fail.
+    static func uprightImage(
+        from source: CGImageSource,
+        maxLongSide: Int?,
+        makeThumbnail: (CGImageSource, CFDictionary) -> CGImage? = { CGImageSourceCreateThumbnailAtIndex($0, 0, $1) }
+    ) throws -> CGImage {
         guard let size = pixelSize(of: source) else {
-            return CGImageSourceCreateImageAtIndex(source, 0, nil)
+            return try unscaledImage(from: source, maxLongSide: maxLongSide, reason: "the file states no size")
         }
+        let longSide = max(size.width, size.height)
+        let limit = min(longSide, maxLongSide.map { max(1, $0) } ?? longSide)
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: max(size.width, size.height),
+            kCGImageSourceThumbnailMaxPixelSize: limit,
         ]
-        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
-            ?? CGImageSourceCreateImageAtIndex(source, 0, nil)
+        if let thumbnail = makeThumbnail(source, options as CFDictionary) { return thumbnail }
+        return try unscaledImage(from: source, maxLongSide: maxLongSide, reason: "ImageIO made no thumbnail")
+    }
+
+    // MARK: - Private
+
+    /// The picture as stored, which is neither turned upright nor shrunk.
+    private static func unscaledImage(from source: CGImageSource, maxLongSide: Int?, reason: String) throws -> CGImage {
+        let wasSizeAsked = maxLongSide != nil
+        NookTrayLog.logger.error(
+            "Picture: \(reason, privacy: .public), size asked for: \(wasSizeAsked, privacy: .public)"
+        )
+        if wasSizeAsked { throw NookTrayFileActionError.unreadable }
+        guard let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            throw NookTrayFileActionError.unreadable
+        }
+        return image
     }
 
     /// The size the file states for its first picture, read from its

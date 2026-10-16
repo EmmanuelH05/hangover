@@ -129,8 +129,10 @@ cat > "$plist_path" <<EOF
     <string>Hangover uses automation to find your agent's terminal window, jump back to it and send your reply there, and to add your quick notes to the Notes app when you pick that.</string>
     <key>NSAudioCaptureUsageDescription</key>
     <string>Hangover listens to the sound your Mac plays to make its glow pulse with the beat, only while you have that turned on. Nothing is recorded or sent anywhere.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Hangover records your voice into a screen recording, only when you turn Voice on. Nothing is sent anywhere.</string>
     <key>NSCameraUsageDescription</key>
-    <string>The Nook mirror shows your camera inside the notch, and its photo booth takes pictures only when you start it.</string>
+    <string>The Nook mirror shows your camera inside the notch, its photo booth takes pictures only when you start it, and the face cam puts you in a screen recording when you turn it on.</string>
     <key>NSCalendarsFullAccessUsageDescription</key>
     <string>The Nook shows your upcoming calendar events.</string>
     <key>NSRemindersFullAccessUsageDescription</key>

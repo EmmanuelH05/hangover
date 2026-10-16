@@ -20,7 +20,7 @@ struct OnboardingLinkAudioStepTests {
         for kinds in [[NookWidgetKind.media, .timer], [], [.media, .linkAudio]] {
             var state = OnboardingState(enabledWidgets: Set(kinds))
             state.nookPlacements = kinds.map { NookWidgetPlacement(kind: $0, size: .medium) }
-            let expected = kinds.filter { $0 != .linkAudio } + [.design, .linkAudio]
+            let expected = kinds.filter { $0 != .linkAudio } + [.record, .design, .linkAudio]
             #expect(state.featureWalk.kinds == expected, "\(kinds)")
             #expect(state.featureWalk.kinds.filter { $0 == .linkAudio }.count == 1)
         }

@@ -1,38 +1,39 @@
 import SwiftUI
 
-/// What the notes page says about each place a quick note can go (D40,
-/// D44). The line beside a case says where it comes from.
+/// What the notes page says about each place a note can go (D40, D44, D70).
+/// The line beside a case says where it comes from.
 enum OnboardingNotesGuide {
-    /// The place's name, as Settings words it ("Markdown file", "Apple
-    /// Notes").
-    static func titleKey(for destination: NookNotesDestination) -> String {
-        "onboarding.notes.\(destination.rawValue).title"
+    /// The place's name, as Settings words it ("Obsidian folder", "Apple
+    /// Notes", "Both").
+    static func titleKey(for choice: NookNotesSaveTo) -> String {
+        "onboarding.notes.\(choice.rawValue).title"
     }
 
     /// The one line on a place's card.
-    static func textKey(for destination: NookNotesDestination) -> String {
-        "onboarding.notes.\(destination.rawValue).text"
+    static func textKey(for choice: NookNotesSaveTo) -> String {
+        "onboarding.notes.\(choice.rawValue).text"
     }
 
-    static func symbol(for destination: NookNotesDestination) -> String {
-        switch destination {
-        case .file: "doc.text"
+    static func symbol(for choice: NookNotesSaveTo) -> String {
+        switch choice {
+        case .folder: "folder"
         case .appleNotes: "note.text"
+        case .both: "square.on.square"
         }
     }
 
-    /// The label of the button under the try-it step: the file in Finder,
-    /// or the Notes app.
-    static func showKey(for destination: NookNotesDestination) -> String {
-        destination == .file ? "onboarding.notes.show.file" : "onboarding.notes.show.appleNotes"
+    /// The label of the button under the try-it step: the folder in
+    /// Finder, or the Notes app.
+    static func showKey(for choice: NookNotesSaveTo) -> String {
+        choice == .appleNotes ? "onboarding.notes.show.appleNotes" : "onboarding.notes.show.folder"
     }
 }
 
-/// The tour's page for where quick notes go, shown only while the notes
-/// widget is on the page: a card for each place, what the pick means, and
-/// one step that ticks when a note is saved on the real island (D44). A
-/// pick writes the preference Settings writes; the folder is chosen in the
-/// system panel the app opens, never in this page.
+/// The tour's page for where notes go, shown only while the notes widget is
+/// on the page: a card for each place, what the pick means, and one step
+/// that ticks when a note is saved on the real island (D44). A pick writes
+/// the preference Settings writes; the folder is chosen in the system panel
+/// the app opens, never in this page.
 struct OnboardingNotesPage: View {
     let context: OnboardingPageContext
 
@@ -51,7 +52,7 @@ struct OnboardingNotesPage: View {
                 OnboardingLiveLine(text: context.t("onboarding.live.line"))
 
                 VStack(spacing: 8) {
-                    ForEach(NookNotesDestination.allCases) { destination in card(destination) }
+                    ForEach(NookNotesSaveTo.allCases) { choice in card(choice) }
                 }
 
                 detail
@@ -60,18 +61,18 @@ struct OnboardingNotesPage: View {
         }
     }
 
-    private func card(_ destination: NookNotesDestination) -> some View {
-        let name = context.t(OnboardingNotesGuide.titleKey(for: destination))
-        return OnboardingChoiceCard(isSelected: state.notesDestination == destination) {
-            context.actions.setNotesDestination(destination)
+    private func card(_ choice: NookNotesSaveTo) -> some View {
+        let name = context.t(OnboardingNotesGuide.titleKey(for: choice))
+        return OnboardingChoiceCard(isSelected: state.notesSaveTo == choice) {
+            context.actions.setNotesSaveTo(choice)
         } content: {
             HStack(spacing: 11) {
-                OnboardingSymbolPlate(symbol: OnboardingNotesGuide.symbol(for: destination), size: 32)
+                OnboardingSymbolPlate(symbol: OnboardingNotesGuide.symbol(for: choice), size: 32)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(name)
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(OnboardingStyle.primaryText)
-                    Text(context.t(OnboardingNotesGuide.textKey(for: destination)))
+                    Text(context.t(OnboardingNotesGuide.textKey(for: choice)))
                         .font(.system(size: 11.5))
                         .foregroundStyle(OnboardingStyle.secondaryText)
                         .multilineTextAlignment(.leading)
@@ -93,18 +94,23 @@ struct OnboardingNotesPage: View {
 
     @ViewBuilder
     private var detail: some View {
-        switch state.notesDestination {
-        case .file: fileDetail
+        switch state.notesSaveTo {
+        case .folder: folderDetail
         case .appleNotes: appleNotesDetail
+        case .both:
+            VStack(alignment: .leading, spacing: 12) {
+                folderDetail
+                appleNotesAsk
+            }
         }
     }
 
-    private var fileDetail: some View {
+    private var folderDetail: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(context.t("onboarding.notes.file.where"))
+            Text(context.t("onboarding.notes.folder.where"))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(OnboardingStyle.primaryText)
-            Text(state.notesFilePath)
+            Text(state.notesFolderPath)
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(OnboardingStyle.secondaryText)
                 .lineLimit(2)
@@ -115,10 +121,10 @@ struct OnboardingNotesPage: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
                 .background(OnboardingCardBackground())
-                .accessibilityLabel(state.notesFilePath)
-            Button(context.t("onboarding.notes.file.choose")) { context.actions.chooseNotesFolder() }
+                .accessibilityLabel(state.notesFolderPath)
+            Button(context.t("onboarding.notes.folder.choose")) { context.actions.chooseNotesFolder() }
                 .buttonStyle(OnboardingSecondaryButtonStyle(height: 28))
-            Text(context.t("onboarding.notes.file.any"))
+            Text(context.t("onboarding.notes.folder.any"))
                 .font(.system(size: 11.5))
                 .foregroundStyle(OnboardingStyle.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -127,22 +133,26 @@ struct OnboardingNotesPage: View {
 
     private var appleNotesDetail: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(context.lang.t("onboarding.notes.appleNotes.where", NookAppleNotesLine.noteTitle))
+            Text(context.lang.t("onboarding.notes.appleNotes.where", NookAppleNotesBody.folderName))
                 .font(.system(size: 12.5))
                 .foregroundStyle(OnboardingStyle.primaryText.opacity(0.88))
                 .lineSpacing(1.5)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(context.t("onboarding.notes.appleNotes.ask"))
-                .font(.system(size: 11.5))
-                .foregroundStyle(OnboardingStyle.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
+            appleNotesAsk
         }
+    }
+
+    private var appleNotesAsk: some View {
+        Text(context.t("onboarding.notes.appleNotes.ask"))
+            .font(.system(size: 11.5))
+            .foregroundStyle(OnboardingStyle.secondaryText)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
-/// The step that ticks when a note is saved on the real island: type a line
-/// in the notes card and press Return (D44). The notes page and the features
-/// page (D47) both show it, and it ticks from `state.hasSavedNote`.
+/// The step that ticks when a note is saved on the real island: open a new
+/// note, type a few words and pause (D44, D70). The notes page and the
+/// features page (D47) both show it, and it ticks from `state.hasSavedNote`.
 struct OnboardingNotesTryStep: View {
     let context: OnboardingPageContext
 
@@ -166,7 +176,7 @@ struct OnboardingNotesTryStep: View {
             .accessibilityElement(children: .combine)
             .accessibilityValue(context.t(isDone ? "onboarding.arrange.done" : "onboarding.arrange.todo"))
 
-            Button(context.t(OnboardingNotesGuide.showKey(for: state.notesDestination))) {
+            Button(context.t(OnboardingNotesGuide.showKey(for: state.notesSaveTo))) {
                 context.actions.showNotes()
             }
             .buttonStyle(OnboardingSecondaryButtonStyle(height: 28))

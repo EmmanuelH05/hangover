@@ -36,7 +36,13 @@ final class NookTickTickTodoService {
     var rows: [TickTickRow] = []
     var state: TickTickTodoState = .inactive
     var isShowingCachedItems = false
-    var actionError: TickTickTodoActionError?
+    var actionError: TickTickTodoActionError? {
+        // The next write, and a refresh that clears the line, clear this too.
+        didSet { if actionError == nil { notesSaveFailed = false } }
+    }
+    /// A notes save failed and the row went back to the notes TickTick
+    /// holds, whatever the reason: the card keeps the person's draft.
+    var notesSaveFailed = false
     /// The selected list is shared with the user as read or comment only.
     var isListReadOnly = false
     /// False after TickTick answered 403 to a write.
@@ -301,8 +307,9 @@ final class NookTickTickTodoService {
             return kept
         }
         isShowingCachedItems = false
-        // A note that did not save stays reported until the next write.
-        if actionError?.concernsNotes != true { actionError = nil }
+        // A note that did not save, and a task added with no date, stay
+        // reported until the next write.
+        if actionError?.survivesRefresh != true { actionError = nil }
         lastRefreshed = now()
         gate.recordSuccess()
         state = .ready

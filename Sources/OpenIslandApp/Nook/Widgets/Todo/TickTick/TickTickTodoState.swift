@@ -64,15 +64,23 @@ enum TickTickTodoState: Equatable, Sendable {
 /// A write that failed for a reason that may not repeat.
 enum TickTickTodoActionError: Equatable, Sendable {
     case addFailed
+    /// The task was added, and TickTick did not keep the day sent with it (D4).
+    case addedWithoutDate
     case completeFailed
     case notesFailed
     case rateLimited
 
+    /// A note that did not save.
     var concernsNotes: Bool { self == .notesFailed }
+
+    /// Stays reported through the reload a write starts, and until the next
+    /// write: a note that did not save, and a task added with no date.
+    var survivesRefresh: Bool { concernsNotes || self == .addedWithoutDate }
 
     var messageKey: String {
         switch self {
         case .addFailed: "nook.todo.ticktick.error.addFailed"
+        case .addedWithoutDate: "nook.todo.ticktick.error.addedWithoutDate"
         case .completeFailed: "nook.todo.ticktick.error.completeFailed"
         case .notesFailed: "nook.todo.ticktick.error.notesFailed"
         case .rateLimited: "nook.todo.ticktick.state.rateLimited"

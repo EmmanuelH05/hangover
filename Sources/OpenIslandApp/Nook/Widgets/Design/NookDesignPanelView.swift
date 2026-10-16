@@ -6,8 +6,9 @@ import SwiftUI
 final class NookDesignPanelState {
     let reference: NookDesignReference
     let image: CGImage
-    /// The part of the picture area the fitted picture covers.
-    let fitted: CGSize
+    /// The size of the whole panel: the picture area and the strip of
+    /// controls under it. It follows the window as the user drags it.
+    private(set) var panelSize: CGSize
     /// True for a picture that can have see-through parts. It is drawn
     /// over a checkerboard, which shows where they are.
     let hasAlpha: Bool
@@ -20,11 +21,29 @@ final class NookDesignPanelState {
     /// True while the panel has the keyboard.
     var isFocused = false
 
-    init(reference: NookDesignReference, image: CGImage) {
+    /// A panel with no size given is in the shape of its picture, the way
+    /// a new one opens.
+    init(reference: NookDesignReference, image: CGImage, panelSize: CGSize? = nil) {
         self.reference = reference
         self.image = image
-        fitted = NookDesignPanelRules.fittedFraction(pictureAspect: reference.aspectRatio)
+        self.panelSize = panelSize ?? NookDesignPanelRules.panelSize(
+            width: NookDesignPanelRules.initialLongSide, pictureAspect: reference.aspectRatio
+        )
         hasAlpha = NookDesignPictures.carriesAlpha(image.alphaInfo)
+    }
+
+    /// The part of the picture area the fitted picture covers on each
+    /// axis, for the area the panel has now.
+    var fitted: CGSize {
+        NookDesignPanelRules.fittedFraction(pictureAspect: reference.aspectRatio, panelSize: panelSize)
+    }
+
+    /// The panel was resized. The picture keeps its zoom, and is pulled back
+    /// where the new area leaves it room to be.
+    func resize(to size: CGSize) {
+        guard size != panelSize else { return }
+        panelSize = size
+        zoom = zoom.clamped(fitted: fitted)
     }
 
     func zoomIn() { zoom = zoom.zoomed(by: NookDesignZoom.step, fitted: fitted) }
@@ -43,6 +62,8 @@ struct NookDesignPanelActions {
     /// A drag on the picture at the fit moves the whole panel.
     var beginMove: () -> Void = {}
     var move: () -> Void = {}
+    /// Sends the panel back to the picture's shape at its width.
+    var matchShape: () -> Void = {}
 }
 
 /// A reference picture in its floating panel: the picture, whole and in
@@ -93,8 +114,12 @@ struct NookDesignPanelView: View {
                 if state.hasAlpha {
                     // Pulled in a point: a scaled picture's edge is soft,
                     // and the squares would show along it.
+                    // Clipped to the picture: the last squares of the board
+                    // are drawn whole and would show outside it, on the
+                    // black, wherever the area is not in the picture's shape.
                     NookDesignCheckerboard(square: 8)
                         .padding(1)
+                        .clipped()
                 }
             }
             .scaleEffect(state.zoom.scale)
@@ -111,6 +136,7 @@ struct NookDesignPanelView: View {
         .accessibilityElement()
         .accessibilityLabel(name)
         .accessibilityHint(lang.t("nook.design.panel.hint"))
+        .accessibilityAction(named: Text(lang.t("nook.design.panel.matchShape"))) { actions.matchShape() }
     }
 
     /// Zoomed in, a drag moves the picture inside the panel. At the fit
@@ -159,7 +185,14 @@ struct NookDesignPanelView: View {
                 .disabled(state.zoom.scale >= NookDesignZoom.range.upperBound)
             barButton("arrow.up.left.and.arrow.down.right", lang.t("nook.design.panel.fit")) { state.fit() }
                 .disabled(state.zoom.isFit)
-            Spacer(minLength: 2)
+            // The empty part of the strip: a double click sends the panel back
+            // to the picture's shape. A button for it would not fit beside
+            // the others at the narrowest panel.
+            Color.clear
+                .frame(minWidth: 2, maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { actions.matchShape() }
+                .help(lang.t("nook.design.panel.matchShape.help"))
             opacitySlider
                 .frame(width: 48)
             barButton(

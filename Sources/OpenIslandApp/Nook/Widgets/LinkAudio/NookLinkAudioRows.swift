@@ -60,7 +60,23 @@ struct NookLinkAudioRow: View {
                 Image(systemName: "checkmark")
                     .font(.system(size: 8.5, weight: .bold))
                     .foregroundStyle(.green)
-                note(lang.t("nook.linkAudio.job.done"))
+                // The small card has no room for both words and the findings:
+                // the tick says it is saved.
+                if job.findings?.shownText == nil || !isCompact {
+                    note(lang.t("nook.linkAudio.job.done"))
+                }
+                if let found = job.findings?.shownText {
+                    if !isCompact {
+                        note("·")
+                            .accessibilityHidden(true)
+                    }
+                    Text(found)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.65))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .accessibilityLabel(job.findings?.spokenText ?? found)
+                }
             }
         case let .failed(failure):
             Text(lang.t(failure.messageKey))

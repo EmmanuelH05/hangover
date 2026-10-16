@@ -2,7 +2,7 @@ import SwiftUI
 
 struct NookTodoCard: View {
     var nook: NookModel
-    @Environment(\.hangoverAccent) private var accent
+    @Environment(\.hangoverAccent) var accent
 
     static let height: CGFloat = 140
 
@@ -29,6 +29,12 @@ struct NookTodoCard: View {
     @Environment(\.nookWidgetSize) private var size
 
     @State var draft = ""
+    /// Medium and large: the day picked for the next task, if any (D69).
+    @State var dueDraft: DateComponents?
+    /// The date picker's popover is up.
+    @State var isPickingDate = false
+    /// A typed task was handed to the source, which has not answered yet.
+    @State var isSending = false
     @State var fading: Set<String> = []
     /// Small size only: the add field has taken the list's place.
     @State var isAdding = false
@@ -68,10 +74,16 @@ struct NookTodoCard: View {
         .onDisappear {
             leaveNotesPage()
             isAdding = false
+            // A popover that went with the card must not keep the island from closing (D7).
+            nook.todo.isPickingDate = false
         }
         .onChange(of: size) { _, _ in isAdding = false }
         .task(id: nook.todo.selectedKind) { await autoRefresh() }
-        .onChange(of: nook.todo.selectedKind) { _, _ in leaveNotesPage() }
+        .onChange(of: nook.todo.selectedKind) { old, new in
+            leaveNotesPage()
+            // A day picked for one source is not carried to another (D3).
+            dueDraft = NookTodoAdding.pickedDay(dueDraft, afterSourceChangedFrom: old, to: new)
+        }
         .onChange(of: openItem?.notes) { old, new in
             followRemoteNotes(from: old, to: new, source: source)
         }
@@ -154,20 +166,35 @@ struct NookTodoCard: View {
     /// Notes changed at the source while the page is open.
     private func followRemoteNotes(from old: String?, to new: String?, source: any NookTodoSource) {
         guard Self.openItem(openItemID, in: source) != nil else { return }
-        if (new ?? "") == notesDraft {
+        let followed = Self.followingRemoteNotes(
+            from: old, to: new, draft: notesDraft, base: notesBase, source: source
+        )
+        notesDraft = followed.draft
+        notesBase = followed.base
+    }
+
+    /// The draft and the base the notes page holds once the source's notes
+    /// moved from `old` to `new` while the page is open.
+    static func followingRemoteNotes(
+        from old: String?, to new: String?, draft: String, base: String?, source: any NookTodoSource
+    ) -> (draft: String, base: String?) {
+        if (new ?? "") == draft {
             // The draft was saved, or the other edit matches it.
-            notesBase = new
-        } else if source.errorMessage != nil {
+            return (draft, new)
+        }
+        if source.notesSaveFailed {
             // A failed save put the old notes back. The draft stays for
-            // another try.
-            notesBase = new
-        } else if notesDraft == (old ?? "") {
+            // another try. Any other problem on the source says nothing
+            // about the notes, and the page follows as it would with none.
+            return (draft, new)
+        }
+        if draft == (old ?? "") {
             // An untouched draft follows the source.
-            notesDraft = new ?? ""
-            notesBase = new
+            return (new ?? "", new)
         }
         // Otherwise the draft is being edited and the task changed
         // elsewhere: the base stays behind, which marks the conflict.
+        return (draft, base)
     }
 
     // MARK: List
@@ -191,12 +218,12 @@ struct NookTodoCard: View {
     @ViewBuilder
     private func content(_ source: any NookTodoSource) -> some View {
         let notice = source.errorMessage
-        addField(source)
-            .onSubmit {
-                guard source.canAdd else { return }
-                source.add(draft)
-                draft = ""
-            }
+        HStack(spacing: 6) {
+            addField(source)
+                .onSubmit { addTyped(source) }
+                .demoTyping(.todo, text: $draft) { addTyped(source) }
+            dueControl(source)
+        }
         if source.items.isEmpty {
             allClear
         } else {
@@ -210,6 +237,40 @@ struct NookTodoCard: View {
         }
         if let notice {
             noticeLabel(notice)
+        }
+    }
+
+    /// Return in the add field of the medium and large cards.
+    private func addTyped(_ source: any NookTodoSource) {
+        guard source.canAdd else { return }
+        sendTyped(source, whenAdded: {})
+    }
+
+    /// Hands the typed task and the picked day to the source. The title and
+    /// the day stay in the field until the source says it took the task. A
+    /// failed add loses neither, and the source's error line says why
+    /// (D2). Only then is the field cleared and the button back to no date.
+    /// A blank line adds nothing and is cleared. Return again while the
+    /// source is still answering does nothing, which keeps a task from being
+    /// added twice.
+    func sendTyped(_ source: any NookTodoSource, whenAdded: @escaping () -> Void) {
+        guard !isSending else { return }
+        let sent = draft
+        let sentDue = NookTodoAdding.dayToSend(picked: dueDraft, isSmall: size == .small, canSetDue: source.canSetDue)
+        guard NookDraft.isUnsaved(sent) else {
+            draft = ""
+            return
+        }
+        isSending = true
+        Task { @MainActor in
+            let added = await NookTodoAdding.submit(draft: sent, due: sentDue, to: source)
+            isSending = false
+            let fields = NookTodoAdding.fields(
+                afterAdding: added, sent: sent, sentDue: sentDue, draft: draft, dueDraft: dueDraft
+            )
+            draft = fields.draft
+            dueDraft = fields.dueDraft
+            if added { whenAdded() }
         }
     }
 
@@ -227,8 +288,9 @@ struct NookTodoCard: View {
             .padding(.vertical, 4)
             .background(RoundedRectangle(cornerRadius: 6).fill(.white.opacity(0.08)))
             .disabled(!source.canAdd)
-            .onChange(of: draft) { _, text in nook.setDraft(.todo, isUnsaved: NookDraft.isUnsaved(text)) }
+            .onChange(of: draft) { _, text in nook.setDraft(.todo, isUnsaved: NookDraft.isUnsaved(text) || isPickingDate) }
             .onDisappear { nook.setDraft(.todo, isUnsaved: false) }
+            .demoTarget(.todoField)
     }
 
     @ViewBuilder
@@ -299,6 +361,7 @@ struct NookTodoCard: View {
             }
             .buttonStyle(.plain)
             .disabled(!source.canComplete)
+            .demoTarget(.todoCheck(position: source.items.firstIndex { $0.id == item.id } ?? -1))
             // Everything right of the circle opens the task's notes page.
             Button {
                 open(item)
@@ -322,7 +385,8 @@ struct NookTodoCard: View {
                     if showsDue, let due = item.dueDate {
                         Text(Self.dueLabel(due))
                             .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(Self.isOverdue(due) ? Color.red : .white.opacity(0.35))
+                            // A date range is red once its end has passed (D9).
+                            .foregroundStyle(Self.isOverdue(item.overdueDate ?? due) ? Color.red : .white.opacity(0.35))
                     }
                 }
                 .contentShape(Rectangle())
@@ -333,12 +397,58 @@ struct NookTodoCard: View {
     }
 }
 
+/// What Return does with the add field of the medium and large cards (D69).
+@MainActor
+enum NookTodoAdding {
+    /// Hands the typed task to the source, with the picked day when the
+    /// source can keep one, and waits for its answer. A blank title adds
+    /// nothing and does not use up a picked day. True when the source
+    /// took the task; false leaves the title and the day with the caller.
+    static func submit(draft: String, due: DateComponents?, to source: any NookTodoSource) async -> Bool {
+        guard source.canAdd, NookDraft.isUnsaved(draft) else { return false }
+        let day = source.canSetDue ? NookTodoDay.normalized(due) : nil
+        return await source.addConfirmed(draft, due: day)
+    }
+
+    /// The day that goes with the task: the picked one, while the card has a
+    /// date button (not the small size) and the source can keep a day right
+    /// now. A day the source cannot take is not sent, and it is not used up
+    /// either: it stays picked for when the source can (D3).
+    static func dayToSend(picked: DateComponents?, isSmall: Bool, canSetDue: Bool) -> DateComponents? {
+        isSmall || !canSetDue ? nil : picked
+    }
+
+    /// The picked day after the source in use changed. A day picked for one
+    /// source is dropped when another takes its place. The same source going
+    /// offline or rate limited for a while, and coming back, keeps it (D3).
+    static func pickedDay(
+        _ picked: DateComponents?, afterSourceChangedFrom old: NookTodoSourceKind, to new: NookTodoSourceKind
+    ) -> DateComponents? {
+        old == new ? picked : nil
+    }
+
+    /// The add field and the date button once the source answered. A task the
+    /// source refused leaves both as they are. One it took clears the title
+    /// and the day that were sent, but not text typed since Return: that is
+    /// the next task's.
+    static func fields(
+        afterAdding added: Bool,
+        sent: String,
+        sentDue: DateComponents?,
+        draft: String,
+        dueDraft: DateComponents?
+    ) -> (draft: String, dueDraft: DateComponents?) {
+        guard added else { return (draft, dueDraft) }
+        return (draft == sent ? "" : draft, dueDraft == sentDue ? nil : dueDraft)
+    }
+}
+
 /// The circle at the front of a task. A task just checked off shows a tick,
 /// which takes the accent when one is set.
 struct NookTodoTick: View {
     let isChecked: Bool
 
-    @Environment(\.hangoverAccent) private var accent
+    @Environment(\.hangoverAccent) var accent
 
     var body: some View {
         Image(systemName: isChecked ? "checkmark.circle.fill" : "circle")

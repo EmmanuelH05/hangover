@@ -8,6 +8,8 @@ struct NotionTodoSnapshot: Codable, Equatable, Sendable {
         let dueDate: Date?
         /// Absent in files written before notes existed.
         var notes: String? = nil
+        /// Absent in files written before date ranges were read (D9).
+        var endDate: Date? = nil
     }
 
     let dataSourceID: String
@@ -19,14 +21,16 @@ struct NotionTodoSnapshot: Codable, Equatable, Sendable {
         self.dataSourceID = dataSourceID
         self.databaseTitle = databaseTitle
         self.savedAt = savedAt
-        tasks = items.map { Task(id: $0.id, title: $0.title, dueDate: $0.dueDate, notes: $0.notes) }
+        tasks = items.map {
+            Task(id: $0.id, title: $0.title, dueDate: $0.dueDate, notes: $0.notes, endDate: $0.endDate)
+        }
     }
 
     var items: [NookTodoItem] {
         tasks.map {
             NookTodoItem(
                 id: $0.id, title: $0.title, dueDate: $0.dueDate, isCompleted: false,
-                listName: databaseTitle, notes: $0.notes
+                listName: databaseTitle, notes: $0.notes, endDate: $0.endDate
             )
         }
     }

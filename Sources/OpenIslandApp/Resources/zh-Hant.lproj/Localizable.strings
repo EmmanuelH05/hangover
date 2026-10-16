@@ -1058,6 +1058,11 @@
 "nook.linkAudio.settings.folderDollar" = "沒有使用這個檔案夾。它的路徑裡有美元符號，yt-dlp 會把它當作變數。請選擇另一個檔案夾。";
 "nook.linkAudio.settings.notFound" = "未找到";
 "nook.linkAudio.settings.caption" = "Hangover 把連結交給你 Mac 上的 yt-dlp，由它從網站取回內容。只儲存你有權儲存的內容。";
+"nook.linkAudio.key.major" = "%@大調";
+"nook.linkAudio.key.minor" = "%@小調";
+"nook.linkAudio.found.guess" = "可能是%@";
+"nook.linkAudio.settings.findKey" = "尋找調性與速度";
+"nook.linkAudio.settings.findKeyCaption" = "下載完成後，Hangover 會從標題與說明中讀取調性與速度。沒有寫明速度時，會依聲音推算，推算的結果前面會加上 ~。兩者也會寫進檔案名稱。沒有把握時，它不會給出結果。";
 
 /* Personalization: templates */
 "settings.appearance.templates.title" = "範本";
@@ -1251,13 +1256,13 @@
 "onboarding.agents.all" = "全部 Agent…";
 "onboarding.widgets.title" = "你想要哪些？";
 "onboarding.widgets.body" = "小工具就是島開啟後顯示的卡片。放它們的那一頁叫 Nook。把你會用的開啟。下一頁會讓你看到每一個怎麼用。";
-"onboarding.widgets.note" = "鏡子、天氣、設計工具和連結轉 MP3 一開始是關閉的。同樣的開關在設定的 Nook 裡。";
-"onboarding.widgets.note.release" = "鏡子、天氣和設計工具一開始是關閉的。同樣的開關在設定的 Nook 裡。";
+"onboarding.widgets.note" = "鏡子、天氣、錄影、設計工具和連結轉 MP3 一開始是關閉的。同樣的開關在設定的 Nook 裡。";
+"onboarding.widgets.note.release" = "鏡子、天氣、錄影和設計工具一開始是關閉的。同樣的開關在設定的 Nook 裡。";
 "onboarding.widgets.empty" = "沒有開啟任何小工具";
 "onboarding.widgets.media" = "正在播放的內容，可以播放、暫停和切歌。";
 "onboarding.widgets.calendar" = "接下來的行程，一眼看清。";
 "onboarding.widgets.todo" = "來自提醒事項、Notion 或 TickTick 的任務。";
-"onboarding.widgets.notes" = "不用離開手邊的事，隨手記一行。";
+"onboarding.widgets.notes" = "不用離開手邊的事，隨手記下一則筆記。";
 "onboarding.widgets.tray" = "把檔案拖到瀏海上，隨用隨取。";
 "onboarding.widgets.timer" = "專注計時器，附番茄鐘。";
 "onboarding.widgets.mirror" = "快速照一下自己。只在開著時使用相機。";
@@ -1295,22 +1300,24 @@
 "onboarding.todos.loaded.zero" = "還沒有未完成的任務。在你島上的待辦卡片裡加入一個。";
 "onboarding.todos.loaded.one" = "你的島上現在有 1 個任務。";
 "onboarding.todos.loaded.other" = "你的島上現在有 %d 個任務。";
-"onboarding.notes.title" = "你的快速筆記放在哪裡？";
-"onboarding.notes.body" = "你在島上輸入的筆記會放在同一個地方。選你的那一個，然後試一試。";
-"onboarding.notes.note" = "隨時可以在設定的 Nook 裡更改。";
-"onboarding.notes.file.title" = "Markdown 檔案";
-"onboarding.notes.file.text" = "一個純文字檔，任何編輯器都能打開。";
+"onboarding.notes.title" = "你的筆記放在哪裡？";
+"onboarding.notes.body" = "你在島上寫的筆記會自動儲存。選好存放的地方，然後試一試。";
+"onboarding.notes.note" = "隨時可以在設定的 Nook 裡更改。已經儲存的筆記會留在原處。";
+"onboarding.notes.folder.title" = "Obsidian 資料夾";
+"onboarding.notes.folder.text" = "每則筆記是你所選資料夾裡的一個 Markdown 檔案，通常在 Obsidian 資料庫裡。";
 "onboarding.notes.appleNotes.title" = "Apple 備忘錄";
-"onboarding.notes.appleNotes.text" = "「備忘錄」App 裡的一則備忘錄。";
-"onboarding.notes.file.where" = "你的筆記儲存在這個檔案裡";
-"onboarding.notes.file.choose" = "選擇資料夾…";
-"onboarding.notes.file.panelPrompt" = "使用此資料夾";
-"onboarding.notes.file.any" = "任何資料夾都可以，例如 Obsidian 資料庫裡的一個資料夾。檔名是 Quick Notes.md。";
-"onboarding.notes.appleNotes.where" = "每則筆記都會作為一行，加入「備忘錄」預設資料夾裡標題為 %@ 的備忘錄中。";
+"onboarding.notes.appleNotes.text" = "每則筆記都是「備忘錄」App 裡 Hangover 資料夾中的一則備忘錄。";
+"onboarding.notes.both.title" = "兩者都用";
+"onboarding.notes.both.text" = "檔案就是筆記，每次儲存也會更新它在 Apple 備忘錄裡的那一則。";
+"onboarding.notes.folder.where" = "你的筆記儲存在這個資料夾裡";
+"onboarding.notes.folder.choose" = "選擇資料夾…";
+"onboarding.notes.folder.panelPrompt" = "使用此資料夾";
+"onboarding.notes.folder.any" = "任何資料夾都可以。如果有 Obsidian 的 iCloud 資料夾，選擇器會從那裡打開；在 Obsidian 裡改過的筆記會顯示在這裡。";
+"onboarding.notes.appleNotes.where" = "每則筆記都是「備忘錄」裡名為 %@ 的資料夾中的一則備忘錄。在「備忘錄」裡做的修改不會回到 Hangover，並且會在你下次於 Hangover 中編輯那則筆記時被覆蓋。";
 "onboarding.notes.appleNotes.ask" = "儲存第一則筆記時，macOS 會問一次 Hangover 能否使用「備忘錄」。";
-"onboarding.notes.try" = "試一試。在你島上的筆記卡片裡輸入一行，然後按 Return。";
+"onboarding.notes.try" = "試一試。按一下你島上的「新增筆記」，輸入幾個字，然後停一下。它會自動儲存。";
 "onboarding.notes.try.done" = "已儲存。你的筆記已經存好。";
-"onboarding.notes.show.file" = "在 Finder 中顯示檔案";
+"onboarding.notes.show.folder" = "在 Finder 中顯示資料夾";
 "onboarding.notes.show.appleNotes" = "打開備忘錄";
 "onboarding.weather.title" = "你在哪裡？";
 "onboarding.weather.body" = "天氣卡片和收起島上的溫度都需要一個地點。輸入你所在的城市並搜尋。";
@@ -1384,8 +1391,8 @@
 "onboarding.permissions.body" = "Hangover 啟動時不需要任何權限。第一次用到下面某一項時，macOS 才會問你，你可以拒絕。";
 "onboarding.permissions.note" = "之後可以在系統設定的「隱私權與安全性」裡更改你的回答。";
 "onboarding.permissions.camera.title" = "相機";
-"onboarding.permissions.camera.when" = "只在你使用鏡子時";
-"onboarding.permissions.camera.note" = "第一次開啟鏡子時才會詢問。在那之前相機一直關閉。";
+"onboarding.permissions.camera.when" = "只在你使用鏡子或鏡頭小圓窗時";
+"onboarding.permissions.camera.note" = "第一次開啟鏡子，或用鏡頭小圓窗錄製時才會詢問。在那之前相機一直關閉。";
 "onboarding.permissions.accessibility.title" = "輔助使用";
 "onboarding.permissions.accessibility.when" = "只在你取代 macOS 音量彈出視窗時";
 "onboarding.permissions.accessibility.note" = "當你在設定的 Nook 裡開啟取代 macOS 音量與亮度彈出視窗的選項時會詢問。";
@@ -1407,6 +1414,8 @@
 "onboarding.tips.swipeAway.text" = "在已打開的島上用兩指向上輕掃即可收合。在收合的島上向左或向右輕掃，會隱藏它顯示的內容，再掃一次就會回來。";
 "onboarding.tips.dropFiles.title" = "把檔案拖到瀏海上";
 "onboarding.tips.dropFiles.text" = "把檔案拖到島上再放開。它會留在檔案托盤裡，等你要用。";
+"onboarding.tips.convertFiles.title" = "在托盤裡轉換";
+"onboarding.tips.convertFiles.text" = "打開托盤裡檔案的「轉換」選單。對 %@，它會給出：%@。";
 "onboarding.tips.rearrange.title" = "重新排列小工具";
 "onboarding.tips.rearrange.text" = "按住一個小工具，或者按右鍵點它並選擇 Edit Widgets。然後拖移來排序，拉它的角來調整大小。";
 "onboarding.tips.switchPages.title" = "兩個頁面，一個按鈕";
@@ -1416,7 +1425,7 @@
 "onboarding.tips.todoNotes.title" = "替待辦寫備註";
 "onboarding.tips.todoNotes.text" = "點任務的名字可以打開它，查看它的備註。點它的圓圈就勾掉它。";
 "onboarding.tips.quickNotes.title" = "隨手記";
-"onboarding.tips.quickNotes.text" = "在備忘小工具裡輸入，再按 Return。這一行立刻儲存。";
+"onboarding.tips.quickNotes.text" = "在備忘小工具裡按「新增筆記」並輸入。停下來片刻後會自動儲存。";
 "onboarding.tips.speaker.title" = "選擇揚聲器";
 "onboarding.tips.speaker.text" = "音樂小工具裡的揚聲器按鈕，可以把聲音送到別的揚聲器或耳機。";
 "onboarding.tips.volume.title" = "在瀏海裡顯示音量";
@@ -1441,7 +1450,7 @@
 "onboarding.done.recap.calendar" = "行事曆樣式";
 "onboarding.done.recap.widgets.none" = "沒有開啟";
 "onboarding.done.recap.todos" = "待辦來自";
-"onboarding.done.recap.notes" = "快速筆記存到";
+"onboarding.done.recap.notes" = "筆記儲存到";
 "onboarding.done.recap.weather" = "天氣地點";
 "onboarding.done.recap.weather.none" = "未設定";
 "onboarding.done.recap.layout" = "版面";
@@ -1485,8 +1494,8 @@
 "onboarding.features.title" = "看看每一個能做什麼";
 "onboarding.features.body" = "你開啟的每個小工具在這裡出場時，都會在你的島上被圈出來。按它的按鈕，讓它動起來。";
 "onboarding.features.none" = "沒有開啟任何小工具。回到上一頁，開啟幾個。";
-"onboarding.features.note" = "繼續往下時，按鈕開啟的鏡子、環形燈、拍貼機和計時器會自動關掉。音樂會保持你離開時的樣子。你打開的設計工具和連結轉 MP3 會保持開啟。";
-"onboarding.features.note.release" = "繼續往下時，按鈕開啟的鏡子、環形燈、拍貼機和計時器會自動關掉。音樂會保持你離開時的樣子。你打開的設計工具會保持開啟。";
+"onboarding.features.note" = "繼續往下時，按鈕開啟的鏡子、環形燈、拍貼機、計時器和錄影會自動關掉。本導覽不會開始任何錄製。音樂會保持你離開時的樣子。你打開的設計工具和連結轉 MP3 會保持開啟。";
+"onboarding.features.note.release" = "繼續往下時，按鈕開啟的鏡子、環形燈、拍貼機、計時器和錄影會自動關掉。本導覽不會開始任何錄製。音樂會保持你離開時的樣子。你打開的設計工具會保持開啟。";
 "onboarding.features.count" = "第 %lld 個，共 %lld 個";
 "onboarding.features.previous" = "上一個小工具";
 "onboarding.features.next" = "下一個小工具";
@@ -1546,17 +1555,17 @@
 "onboarding.feature.calendarNext" = "提前 10 分鐘和 2 分鐘提醒，還有加入按鈕。";
 "onboarding.feature.todoCheck" = "在島上勾掉任務，也可以新增新的。";
 "onboarding.feature.todoNotes" = "開啟一個任務，就能查看和編寫它的備註。";
-"onboarding.feature.todoDue" = "任務旁邊會顯示到期日，過期後變成紅色。";
+"onboarding.feature.todoDue" = "用日曆按鈕為任務加日期，日期顯示在任務旁邊，過期後變成紅色。到期當天，收起的島會提醒你。";
 "onboarding.feature.todoSources" = "任務可以來自提醒事項、Notion 或 TickTick。";
-"onboarding.feature.notesAdd" = "輸入一行，按 Return，就儲存好了。";
-"onboarding.feature.notesRecent" = "最新的幾行顯示在輸入框下面。";
-"onboarding.feature.notesDelete" = "使用 Markdown 檔案時，可以在卡片上刪除某一行。";
-"onboarding.feature.notesWhere" = "儲存到你選的 Markdown 檔案，或儲存到 Apple 備忘錄。";
+"onboarding.feature.notesAdd" = "筆記想寫多長都行，停止輸入一秒後自動儲存。";
+"onboarding.feature.notesRecent" = "筆記按最近編輯排在前面，按一下即可打開。";
+"onboarding.feature.notesDelete" = "在筆記上按右鍵即可刪除。檔案會放進垃圾桶。";
+"onboarding.feature.notesWhere" = "儲存到 Obsidian 資料夾、Apple 備忘錄，或兩者都用。";
 "onboarding.feature.trayDrag" = "把檔案拖到島上暫存，也可以再拖出來。";
 "onboarding.feature.trayActions" = "按右鍵點一個檔案，可以分享、AirDrop、壓縮或複製路徑。";
 "onboarding.feature.trayClipboard" = "開啟剪貼板標籤。點一筆複製記錄，就能再複製一次。";
 "onboarding.feature.trayPrivate" = "剪貼板列表會跳過 App 標為私密的內容，例如密碼，而且不會存到磁碟上。";
-"onboarding.feature.timerSet" = "輸入你自己的時長，例如 45 或 1:30，也可以點 15、25 或 50。";
+"onboarding.feature.timerSet" = "輸入 45 就是 45 分鐘，輸入 1:30 就是 1 分 30 秒，也可以點 15、25 或 50。";
 "onboarding.feature.timerPomodoro" = "開始一輪工作與休息交替的番茄鐘。";
 "onboarding.feature.timerPause" = "隨時可以在卡片上暫停或重置。";
 "onboarding.feature.timerClosed" = "剩餘時間會顯示在收起的島上，還可以加提示音。";
@@ -1571,7 +1580,7 @@
 "onboarding.integrations.calendar.text" = "顯示你的行程並可新增。提醒事項可以替待辦小工具提供任務。";
 "onboarding.integrations.calendar.where" = "設定，Nook 標籤";
 "onboarding.integrations.appleNotes.name" = "備忘錄";
-"onboarding.integrations.appleNotes.text" = "快速記下的內容可以存成「備忘錄」裡一則筆記中的一行。";
+"onboarding.integrations.appleNotes.text" = "筆記可以存成「備忘錄」裡 Hangover 資料夾中的備忘錄。";
 "onboarding.integrations.appleNotes.where" = "設定，Nook 標籤，備忘";
 "onboarding.integrations.notion.name" = "Notion";
 "onboarding.integrations.notion.text" = "你的 Notion 任務會顯示在待辦小工具裡，需要貼上一個權杖。";
@@ -1753,3 +1762,264 @@
 "onboarding.feature.linkAudioQueue" = "一次只存一個連結，最多五個在後面排隊。";
 "onboarding.feature.linkAudioFolder" = "檔案會存到「音樂」裡的 Hangover 資料夾，也可以在設定裡選另一個資料夾。";
 "onboarding.feature.linkAudioRights" = "只儲存你有權儲存的內容。";
+
+/* Tour: Record in the widget walk, converting in the tray, and the long tour's pages for both (D67, D68) */
+"onboarding.nook.widget.record" = "錄影";
+"onboarding.widgets.record" = "錄製整個螢幕、一個視窗或一個區域，可以加鏡頭小圓窗和聲音。";
+"onboarding.features.try.recordOn" = "開啟錄影";
+"onboarding.features.try.recordOn.note" = "這只會開啟錄影小工具，並顯示在島上。你自己按下「錄製」之前不會錄任何內容，本導覽也不會開始錄製。";
+"onboarding.feature.recordTargets" = "錄製整個螢幕、一個視窗，或拖曳出來的一個區域。";
+"onboarding.feature.recordFaceCam" = "加上鏡頭小圓窗，它會懸浮在螢幕上。拖曳可以移動它，拖曳它的邊緣可以調整大小。";
+"onboarding.feature.recordSound" = "可以加入麥克風的人聲和 Mac 播放的聲音，各有一個開關。";
+"onboarding.feature.recordNotch" = "瀏海連同它的紅點和計時會出現在影片裡。想去掉的話，在設定裡關掉即可。";
+"onboarding.feature.recordShortcut" = "在任何 App 裡按 Control Option R 就能開始和停止。你可以在設定裡更改這個快速鍵。";
+"onboarding.feature.recordSaved" = "每段錄製都會儲存到 Movies/Hangover，並放進檔案托盤。";
+"onboarding.feature.trayConvert" = "在檔案的「轉換」選單裡轉換圖片、影片或 PDF。結果是原檔案旁邊的一個新檔案。";
+"onboarding.permissions.record.title" = "螢幕錄製和麥克風";
+"onboarding.permissions.record.when" = "只在你使用錄影時";
+"onboarding.permissions.record.note" = "第一次錄製整個螢幕或一個區域時詢問螢幕錄製權限，第一次錄製你的聲音時詢問麥克風權限。按下「錄製」之前不會錄任何內容。";
+"onboarding.more.record.title" = "錄製你的螢幕";
+"onboarding.more.record.text" = "錄製整個螢幕、一個視窗或一個區域，可以加鏡頭小圓窗，以及你的聲音或 Mac 播放的聲音。每段錄製都會儲存到 Movies，並放進你的檔案托盤。";
+"onboarding.more.record.where" = "設定，Nook 標籤，錄影";
+"onboarding.more.record.note" = "按下「錄製」之前不會錄任何內容。第一次錄製整個螢幕或一個區域時，macOS 會詢問螢幕錄製權限；錄製你的聲音時會詢問麥克風權限。";
+"onboarding.more.convert.title" = "在托盤裡轉換檔案";
+"onboarding.more.convert.text" = "按下「檔案」旁的「轉換」，再點一個檔案，就能看到它能變成什麼：圖片可改格式或大小，影片可變小、做成循環播放的 GIF 或只留聲音，PDF 頁面可變成圖片。按住 Command 點選多張圖片或多個 PDF，可以合併成一個 PDF。";
+"onboarding.more.convert.where" = "設定，Nook 標籤，檔案托盤";
+
+/* GIF maker (D68) */
+"nook.gif.title" = "製作 GIF";
+"nook.gif.titleFrom" = "用 %@ 製作 GIF";
+"nook.gif.explain" = "循環播放、沒有聲音的動圖，會出現在托盤裡影片的旁邊。";
+"nook.gif.width.small" = "小";
+"nook.gif.width.medium" = "中";
+"nook.gif.width.large" = "大";
+"nook.gif.width.help" = "寬 %d 像素";
+"nook.gif.fps" = "%d 幀/秒";
+"nook.gif.estimate" = "約 %@";
+"nook.gif.estimate.loading" = "正在讀取影片…";
+"nook.gif.unreadable" = "Hangover 無法讀取這個影片。";
+"nook.gif.tooLong" = "GIF 最長 2 分鐘。請先裁剪影片。";
+"nook.gif.cancel" = "取消";
+"nook.gif.make" = "製作 GIF";
+
+/* Tray converter (D68) */
+"nook.tray.convert.menu" = "轉換";
+"nook.tray.convert.group.format" = "格式";
+"nook.tray.convert.group.size" = "大小";
+"nook.tray.convert.group.other" = "其他";
+"nook.tray.convert.firstFrameOnly" = "只使用第一個影格";
+"nook.tray.convert.image.png" = "轉換為 PNG";
+"nook.tray.convert.image.jpeg" = "轉換為 JPEG";
+"nook.tray.convert.image.heic" = "轉換為 HEIC";
+"nook.tray.convert.image.tiff" = "轉換為 TIFF";
+"nook.tray.convert.image.gif" = "轉換為 GIF";
+"nook.tray.convert.image.bmp" = "轉換為 BMP";
+"nook.tray.convert.resize.half" = "50% 大小";
+"nook.tray.convert.resize.quarter" = "25% 大小";
+"nook.tray.convert.resize.longSide" = "最長邊 %d 像素";
+"nook.tray.convert.smallerImage" = "較小的檔案";
+"nook.tray.convert.video.mp4" = "轉換為 MP4";
+"nook.tray.convert.video.mov" = "轉換為 MOV";
+"nook.tray.convert.smallerVideo.p1080" = "縮小（1080p）";
+"nook.tray.convert.smallerVideo.p720" = "縮小（720p）";
+"nook.tray.convert.makeGIF" = "製作 GIF⋯";
+"nook.tray.convert.soundOnly" = "僅聲音";
+"nook.tray.convert.pdfPages.png" = "頁面轉為 PNG";
+"nook.tray.convert.pdfPages.jpeg" = "頁面轉為 JPEG";
+"nook.tray.convert.combine.picturesToPDF" = "合成一個 PDF";
+"nook.tray.convert.combine.joinPDFs" = "合併 PDF";
+"nook.tray.convert.combine.clear" = "取消選取";
+"nook.tray.convert.cancel" = "取消";
+"nook.tray.convert.notice.done" = "已儲存在原檔案旁邊";
+"nook.tray.convert.notice.videoFailed" = "無法轉換該影片";
+"nook.tray.convert.notice.gifFailed" = "無法製作 GIF";
+"nook.tray.convert.notice.gifTooLong" = "只有 2 分鐘以內的影片可以製作成 GIF";
+"nook.tray.convert.notice.pdfFailed" = "無法拆分該 PDF";
+"nook.tray.convert.notice.tooManyPages" = "只能拆分 200 頁以內的 PDF";
+"nook.tray.convert.notice.combineFailed" = "無法製作該 PDF";
+"nook.tray.convert.notice.noSound" = "該影片沒有聲音";
+
+/* Record widget (D67) */
+"nook.record.title" = "錄影";
+"nook.record.capture.fullScreen" = "整個螢幕";
+"nook.record.capture.window" = "視窗";
+"nook.record.capture.area" = "區域";
+"nook.record.quality.standard" = "標準";
+"nook.record.quality.high" = "高畫質";
+"nook.record.toggle.faceCam" = "鏡頭";
+"nook.record.toggle.voice" = "人聲";
+"nook.record.toggle.macSound" = "Mac 聲音";
+"nook.record.button.record" = "錄製";
+"nook.record.button.stop" = "停止";
+"nook.record.button.pause" = "暫停";
+"nook.record.button.resume" = "繼續";
+"nook.record.button.cancel" = "取消";
+"nook.record.state.starting" = "正在開始";
+"nook.record.state.saving" = "正在儲存";
+"nook.record.area.hint" = "拖移選擇要錄製的區域，按 Esc 取消。";
+"nook.record.facecam.size.small" = "小";
+"nook.record.facecam.size.medium" = "中";
+"nook.record.facecam.size.large" = "大";
+"nook.record.failure.screenPermission" = "Hangover 需要「螢幕錄製」權限。請在「系統設定」的「隱私權與安全性」中開啟。";
+"nook.record.failure.micPermission" = "請在「系統設定」中為 Hangover 開啟麥克風，才能錄下你的聲音。";
+"nook.record.failure.pickerCancelled" = "沒有選擇視窗。";
+"nook.record.failure.noDisplay" = "那個螢幕已經中斷連線。";
+"nook.record.failure.lowDisk" = "剩餘空間不足 1 GB。請先釋放空間，再開始錄製。";
+"nook.record.failure.writeFailed" = "無法儲存這段錄製。";
+"nook.record.notice.saved" = "錄製已儲存到 Movies/Hangover";
+"nook.record.notice.lowDisk" = "錄製已停止：剩餘空間不足 1 GB。已錄製的內容已儲存。";
+"nook.record.mirror.cameraInUse" = "鏡頭正被錄製使用";
+"nook.record.settings.section" = "錄影";
+"nook.record.settings.off" = "錄影小工具已關閉。在「Widgets」下開啟它，才能使用下面的功能。";
+"nook.record.settings.includeIsland" = "在錄製中顯示瀏海";
+"nook.record.settings.includeIsland.note" = "瀏海裡的紅點和計時會出現在影片裡。關閉後，影片裡不會有瀏海。";
+"nook.record.settings.hotkey" = "開始和停止快速鍵";
+"nook.record.settings.hotkey.note" = "錄影小工具開啟時，在任何 App 裡都能使用。按一次開始，再按一次停止。";
+"nook.record.settings.hotkey.reset" = "重置";
+"nook.record.settings.hotkey.problem.taken" = "這些按鍵已被 Hangover 的另一個快速鍵佔用。";
+"nook.record.settings.openFolder" = "開啟錄製檔案夾";
+"nook.record.settings.folder.note" = "錄製會儲存到 Movies/Hangover，並自動加入托盤。";
+
+/* Tray fixes (D68) */
+"nook.tray.convert.notice.alreadySmall" = "該檔案已經盡可能小了。";
+"nook.tray.convert.notice.gifDecodeFailed" = "影片的一部分無法讀取，沒有產生 GIF。";
+"nook.tray.notice.recordingNotAdded" = "錄製已儲存到 Movies/Hangover，但無法加入托盤。";
+"nook.tray.convert.wait" = "請等待 %@ 的轉換完成";
+"nook.tray.recording.smaller" = "縮小（1080p）";
+"nook.tray.recording.showInFinder" = "在 Finder 中顯示";
+
+/* To-do due dates (D69) */
+"nook.todo.due.today" = "今天";
+"nook.todo.due.tomorrow" = "明天";
+"nook.todo.due.pick" = "選擇日期…";
+"nook.todo.due.none" = "無日期";
+"nook.todo.due.button" = "新增日期";
+"nook.todo.due.clear" = "移除日期";
+"nook.todo.due.pickColumn" = "請在設定中選擇截止日期欄位，才能新增日期。";
+"nook.todo.due.unavailable" = "暫時無法設定日期。";
+"nook.todo.due.notice.one" = "%@ 今天到期";
+"nook.todo.due.notice.many" = "%d 項待辦今天到期";
+"nook.todo.due.notice.overdue.one" = "1 項待辦已逾期";
+"nook.todo.due.notice.overdue.many" = "%d 項待辦已逾期";
+"nook.todo.due.remind" = "在到期當天提醒我";
+"nook.todo.due.remind.note" = "每天上午 9 點，或之後 Hangover 首次執行時，收起的島會說出今天到期和已逾期的待辦。每則通知一天只顯示一次，並遵循各顯示器的通知設定。";
+
+/* Record fixes (D67) */
+"nook.record.failure.noPicture" = "螢幕沒有傳來畫面，沒有錄下任何內容。";
+"nook.record.failure.couldNotStart" = "無法開始錄製。";
+"nook.record.failure.writerFailed" = "錄製在 %@ 停止：檔案無法寫入。";
+"nook.record.failure.noMicrophone" = "沒有連接麥克風。";
+"nook.record.failure.pickerFailed" = "視窗選擇器沒有開啟。";
+"nook.record.notice.system" = "錄製已被 macOS 停止。已錄製的內容已儲存。";
+"nook.record.warning.voiceLost" = "人聲已停止：麥克風已中斷連線。";
+"nook.record.warning.voiceDidNotStart" = "人聲已關閉：麥克風無法啟動。";
+"nook.record.notice.noVoice" = "沒有錄到人聲。";
+"nook.record.notice.droppedFrames" = "有些畫面被捨棄。在這台 Mac 上，標準畫質可能更流暢。";
+"nook.record.facecam.problem.noAccess" = "鏡頭已關閉：Hangover 沒有鏡頭權限。請在「系統設定」的「隱私權與安全性」的「相機」中開啟。";
+"nook.record.facecam.problem.noCamera" = "鏡頭已關閉：沒有連接相機。";
+"nook.record.facecam.problem.failed" = "鏡頭已關閉：相機無法啟動。";
+"nook.record.facecam.problem.stopped" = "鏡頭已停止：相機已中斷連線。";
+"nook.record.notice.keptPartial" = "已錄製的內容在 Movies/Hangover 裡。";
+"nook.record.facecam.windowHelp" = "鏡頭畫面只會出現在「整個螢幕」和「區域」錄製中。";
+"nook.record.hotkey.refused" = "錄製快速鍵已被其他 App 或 macOS 佔用。請在設定中選擇其他按鍵。";
+
+/* Recorder and tray fixes, round 2 */
+"nook.record.notice.droppedFramesPlain" = "有些畫面被捨棄。";
+"nook.design.standing.record" = "錄影正在使用這些按鍵。請打開設定。";
+
+/* To-do and tour fixes */
+"nook.todo.reminders.error.noList" = "沒有可加入提醒事項的清單。";
+"nook.todo.reminders.error.addFailed" = "無法加入提醒事項。";
+"nook.todo.reminders.error.completeFailed" = "無法將提醒事項標記為完成。";
+"nook.todo.reminders.error.notesFailed" = "無法儲存備註。";
+"nook.todo.ticktick.error.addedWithoutDate" = "已加入，但沒有儲存日期。";
+
+/* Eyedropper keys held by Record or Notes */
+"nook.design.hotkey.problem.record" = "這已經是錄影的快捷鍵，請換一個。";
+"nook.design.hotkey.problem.notes" = "這已經是新增筆記的快捷鍵，請換一個。";
+"nook.design.standing.notes" = "筆記正在使用這些按鍵。請打開設定。";
+
+/* Reference panel resize */
+"nook.design.panel.matchShape" = "符合圖片的形狀";
+"nook.design.panel.matchShape.help" = "按兩下以符合圖片的形狀";
+
+/* Tray Convert mode */
+"nook.tray.convert.chip" = "轉換";
+"nook.tray.convert.chip.picking" = "選擇檔案";
+"nook.tray.convert.strip.title" = "轉換 %@";
+"nook.tray.convert.strip.explain" = "選擇要把它變成什麼。新檔案會出現在托盤裡它的旁邊。";
+
+/* Notes redesign (D70) */
+"nook.notes.title" = "筆記";
+"nook.notes.new" = "新增筆記";
+"nook.notes.new.help" = "開始一則新筆記";
+"nook.notes.done" = "完成";
+"nook.notes.done.help" = "關閉這則筆記。它已經儲存好了。";
+"nook.notes.delete" = "刪除";
+"nook.notes.untitled" = "無標題";
+"nook.notes.empty" = "還沒有筆記。按「新增筆記」，或在任何 App 裡按 %@。";
+"nook.notes.row.hint" = "打開這則筆記";
+"nook.notes.editor.placeholder" = "開始寫吧。第一行就是標題。";
+"nook.notes.editor.label" = "筆記";
+"nook.notes.age.now" = "剛剛";
+"nook.notes.age.minutes" = "%lld 分鐘前";
+"nook.notes.age.hours" = "%lld 小時前";
+"nook.notes.savesTo.folder" = "儲存到 %@";
+"nook.notes.savesTo.appleNotes" = "儲存到 Apple 備忘錄的 Hangover 資料夾";
+"nook.notes.savesTo.both" = "儲存到 %@ 和 Apple 備忘錄";
+"nook.notes.notice.notSaved" = "筆記未儲存";
+"nook.notes.notice.notDeleted" = "筆記未刪除";
+"nook.notes.notice.notImported" = "匯入失敗";
+"nook.notes.notice.appleOff.folder" = "備忘錄存取已關閉";
+"nook.notes.notice.appleOff.hangover" = "備忘錄存取已關閉";
+"nook.notes.notice.appleFailed.folder" = "備忘錄出錯";
+"nook.notes.notice.appleFailed.hangover" = "備忘錄出錯";
+"nook.notes.settings.section" = "筆記";
+"nook.notes.settings.saveTo" = "筆記儲存到";
+"nook.notes.saveTo.folder" = "Obsidian 資料夾";
+"nook.notes.saveTo.appleNotes" = "Apple 備忘錄";
+"nook.notes.saveTo.both" = "兩者都用";
+"nook.notes.settings.folder" = "資料夾";
+"nook.notes.settings.chooseFolder" = "選擇資料夾…";
+"nook.notes.settings.chooseFolder.prompt" = "使用此資料夾";
+"nook.notes.settings.reveal" = "在 Finder 中顯示";
+"nook.notes.settings.openNotes" = "打開備忘錄";
+"nook.notes.settings.folder.note" = "每則筆記是一個單獨的 Markdown 檔案，以第一行命名，帶有建立和更新日期。選一個 Obsidian 資料庫裡的資料夾，你在 Obsidian 裡編輯、新增或刪除的筆記會顯示在這裡。換到別處儲存後，已經儲存的筆記會留在原處。";
+"nook.notes.settings.appleNotes.note" = "每則筆記都是「備忘錄」App 裡 Hangover 資料夾中的一則備忘錄。在「備忘錄」裡做的修改不會回到 Hangover，並且會在你下次於 Hangover 中編輯那則筆記時被覆蓋。macOS 會問一次 Hangover 能否控制「備忘錄」。";
+"nook.notes.settings.both.note" = "Markdown 檔案就是筆記，每次儲存也會更新它在 Apple 備忘錄裡的那一則。在 Apple 備忘錄裡做的修改不會回來，並且會在你下次於 Hangover 中編輯那則筆記時被覆蓋。如果「備忘錄」拒絕，檔案仍會儲存。";
+"nook.notes.settings.hotkey" = "新增筆記快速鍵";
+"nook.notes.settings.hotkey.note" = "在任何 App 裡都能使用，不論備忘小工具是否在頁面上。它會打開島，顯示一則空白的新筆記，游標已在其中。";
+"nook.notes.settings.hotkey.reset" = "重置";
+"nook.notes.settings.hotkey.problem.taken" = "這些按鍵已被 Hangover 的另一個快速鍵佔用。";
+"onboarding.feature.notesShortcut" = "在任何 App 裡按下 Control Option J，即可開始一則新筆記。";
+
+/* Notes fixes (D70) */
+"nook.notes.action.chooseFolder" = "選擇資料夾";
+"nook.notes.notice.restored" = "筆記已找回";
+"nook.notes.problem.notSaved" = "這則筆記還沒有儲存。Hangover 保留了你輸入內容的副本。";
+"nook.notes.problem.notSavedInFolder" = "Hangover 無法儲存到「%@」。它保留了這則筆記的副本。請選擇另一個資料夾。";
+"nook.notes.problem.notDeleted" = "這則筆記無法刪除。";
+"nook.notes.problem.notImported" = "Hangover 無法匯入你原來的快速筆記。下次啟動時會再試一次。";
+"nook.notes.problem.restored" = "Hangover 找回了一則退出前未能儲存的筆記。";
+"nook.notes.problem.appleOff.folder" = "Hangover 沒有存取 Apple 備忘錄的權限。筆記已儲存在資料夾裡。請在「隱私權與安全性」的「自動化」中允許 Hangover 控制「備忘錄」。";
+"nook.notes.problem.appleOff.hangover" = "Hangover 沒有存取 Apple 備忘錄的權限。筆記只儲存在 Hangover 裡。請在「隱私權與安全性」的「自動化」中允許 Hangover 控制「備忘錄」。";
+"nook.notes.problem.appleFailed.folder" = "Apple 備忘錄沒有接收一則筆記。它已儲存在資料夾裡，Hangover 會再傳送一次。";
+"nook.notes.problem.appleFailed.hangover" = "Apple 備忘錄沒有接收一則筆記。它只儲存在 Hangover 裡，Hangover 會再傳送一次。";
+"nook.notes.notice.listUnreadable" = "列表無法讀取";
+"nook.notes.problem.listSetAside" = "Hangover 無法讀取它的 Apple 備忘錄列表。舊檔案已另存為 %@，並開始了新的列表。";
+"nook.notes.problem.listUnreadable" = "Hangover 無法讀取它的 Apple 備忘錄列表，也無法把該檔案移開。它不會在那裡儲存，並保留了這則筆記的副本。";
+"nook.notes.notice.savedCopy" = "已另存副本";
+"nook.notes.problem.savedCopy" = "你輸入時，另一個 App 修改了這則筆記。Hangover 把你的版本另存為「%@」，沒有改動對方的版本。";
+"nook.notes.notice.noteUnreadable" = "無法讀取筆記";
+"nook.notes.problem.noteUnreadable" = "Hangover 無法讀取「%@」。";
+"nook.notes.action.createFolder" = "重新建立";
+"nook.notes.notice.cantReadFolder" = "無法讀取資料夾";
+"nook.notes.problem.cantReadFolder" = "Hangover 無法讀取資料夾「%@」。請選擇一個資料夾來查看你的筆記。";
+"nook.notes.notice.folderGone" = "資料夾已不存在";
+"nook.notes.problem.folderGone" = "資料夾「%@」已不存在。請選擇另一個資料夾，或重新建立它。";
+"nook.notes.row.unreadable" = "無法讀取";
+"nook.notes.action.openAutomation" = "打開設定";
+"nook.notes.empty.settings" = "還沒有筆記。按「新增筆記」，或在「設定」裡設定快速鍵。";
+"nook.notes.notice.noteDownloading" = "仍在下載";
+"nook.notes.problem.noteDownloading" = "%@ 還在從 iCloud 下載。稍後再試。";
+"nook.notes.row.downloading" = "下載中";

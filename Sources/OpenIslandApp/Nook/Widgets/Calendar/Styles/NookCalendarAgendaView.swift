@@ -37,7 +37,7 @@ struct NookCalendarAgendaView: View {
         } else {
             VStack(alignment: .leading, spacing: 5) {
                 ForEach(shown) { event in
-                    NookCalendarRow(event: event, now: now) { nook.startNote(for: event) } onJoin: { nook.joinMeeting(event) }
+                    NookCalendarRow(event: event, now: now) { nook.joinMeeting(event) }
                 }
             }
             Spacer(minLength: 0)

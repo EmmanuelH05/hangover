@@ -83,6 +83,30 @@ struct OnboardingExtrasRenderTests {
         #expect(without != with)
     }
 
+    /// The most the page lists is six rows: the agents on, the pulse on and
+    /// Record's row. Six sit above the buttons the way five do: the strip with
+    /// the buttons in it is the same picture, which it would not be if the
+    /// rows pushed the page out of the window.
+    @Test func sixRowsOfPermissionsKeepTheButtonsWhereFiveHad() throws {
+        var six = Self.base()
+        six.beat.isOn = true
+        #expect(OnboardingGrant.shown(agentsEnabled: true).count == 5)
+        #expect(OnboardingGrant.shown(agentsEnabled: true, beatIsOn: true).count == 6)
+        #expect(OnboardingPermissionsPage.rowPadding(rowCount: 6) < OnboardingPermissionsPage.rowPadding(rowCount: 5))
+
+        let five = try image { tourView(.permissions, Self.base()) }
+        let tall = try image { tourView(.permissions, six) }
+        #expect(five.width == tall.width && five.height == tall.height)
+
+        let strip = Int(Self.scale * 50)
+        let rect = CGRect(x: 0, y: five.height - strip, width: five.width, height: strip)
+        let fiveButtons = try #require(five.cropping(to: rect))
+        let sixButtons = try #require(tall.cropping(to: rect))
+        let fivePNG = try #require(NSBitmapImageRep(cgImage: fiveButtons).representation(using: .png, properties: [:]))
+        let sixPNG = try #require(NSBitmapImageRep(cgImage: sixButtons).representation(using: .png, properties: [:]))
+        #expect(fivePNG == sixPNG, "six rows pushed the buttons out of place")
+    }
+
     // MARK: The summary
 
     @Test func theLastPageDrawsTheKitAndTheLightsWhenChosen() throws {

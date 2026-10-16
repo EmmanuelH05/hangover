@@ -89,6 +89,7 @@ struct TemplateGallery: View {
                         Label(lang.t("settings.appearance.templates.undo"), systemImage: "arrow.uturn.backward")
                     }
                     .buttonStyle(.plain)
+                    .demoTarget(.templateUndo)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Color.white.opacity(0.55))
                     .transition(Motion.transition(.opacity, reduceMotion: reduceMotion))
@@ -161,6 +162,7 @@ struct TemplateGallery: View {
                         showsAgents: showsAgents
                     )
                 }
+                .demoTarget(.template(template.id))
                 // A sibling above the card, not inside its label: a click
                 // here opens the preview and never applies the template. It
                 // lands on the room the row keeps under the thumbnail.

@@ -107,3 +107,21 @@ struct TickTickDateParser {
         return nil
     }
 }
+
+/// Writes a moment the way TickTick's own examples do, in UTC:
+/// `2019-11-13T03:00:00+0000`.
+struct TickTickDateWriter {
+    private let formatter: DateFormatter
+
+    init() {
+        formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZ"
+    }
+
+    func string(from date: Date) -> String {
+        formatter.string(from: date)
+    }
+}

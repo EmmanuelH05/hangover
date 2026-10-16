@@ -43,7 +43,7 @@ import Testing
         #expect(NookWidgetKind.startsOff.contains(.linkAudio))
         #expect(NookWidgetKind.tools.contains(.linkAudio))
         #expect(!NookWidgetKind.defaultEnabled.contains(.linkAudio))
-        #expect(NookWidgetKind.allCases.count == 10)
+        #expect(NookWidgetKind.allCases.count == 11)
     }
 
     /// It is drawn once it is on the page, and its step ends the widget walk
@@ -223,6 +223,7 @@ import Testing
         }
         // A settings key is not a string to show.
         keys.remove(NookLinkAudioFolderRule.defaultsKey)
+        keys.remove(NookLinkAudioService.findsKeyDefaultsKey)
         return keys
     }
 

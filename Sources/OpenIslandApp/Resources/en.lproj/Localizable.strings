@@ -1060,6 +1060,11 @@
 "nook.linkAudio.settings.folderDollar" = "That folder was not used. Its path has a dollar sign in it, which yt-dlp would read as a variable. Choose another folder.";
 "nook.linkAudio.settings.notFound" = "Not found";
 "nook.linkAudio.settings.caption" = "Hangover hands the link to yt-dlp on your Mac, which fetches it from the site. Only save what you have the right to.";
+"nook.linkAudio.key.major" = "%@ major";
+"nook.linkAudio.key.minor" = "%@ minor";
+"nook.linkAudio.found.guess" = "Probably %@";
+"nook.linkAudio.settings.findKey" = "Find the key and tempo";
+"nook.linkAudio.settings.findKeyCaption" = "After a download, Hangover reads the key and tempo from the title and description. A tempo that is not written there is worked out from the sound and starts with ~. Both also go in the file name. When it is not sure, it says nothing.";
 
 /* Personalization: templates */
 "settings.appearance.templates.title" = "Templates";
@@ -1253,13 +1258,13 @@
 "onboarding.agents.all" = "All agents…";
 "onboarding.widgets.title" = "Which ones do you want?";
 "onboarding.widgets.body" = "Widgets are the cards the island shows when it opens. The page they sit on is called the Nook. Switch on the ones you will use. The next page shows each one working.";
-"onboarding.widgets.note" = "Mirror, Weather, Design kit and Link to MP3 start switched off. The same switches are in Settings, under Nook.";
-"onboarding.widgets.note.release" = "Mirror, Weather and Design kit start switched off. The same switches are in Settings, under Nook.";
+"onboarding.widgets.note" = "Mirror, Weather, Record, Design kit and Link to MP3 start switched off. The same switches are in Settings, under Nook.";
+"onboarding.widgets.note.release" = "Mirror, Weather, Record and Design kit start switched off. The same switches are in Settings, under Nook.";
 "onboarding.widgets.empty" = "No widgets are switched on";
 "onboarding.widgets.media" = "What is playing, with play, pause and skip.";
 "onboarding.widgets.calendar" = "Your next events at a glance.";
 "onboarding.widgets.todo" = "Your tasks from Reminders, Notion or TickTick.";
-"onboarding.widgets.notes" = "Jot down a line without leaving your work.";
+"onboarding.widgets.notes" = "Jot down a note without leaving your work.";
 "onboarding.widgets.tray" = "Drop files on the notch and keep them handy.";
 "onboarding.widgets.timer" = "A focus timer, with pomodoro rounds.";
 "onboarding.widgets.mirror" = "A quick look at yourself. Uses the camera only while it is on.";
@@ -1297,22 +1302,24 @@
 "onboarding.todos.loaded.zero" = "No open tasks yet. Add one in the to-do card on your island.";
 "onboarding.todos.loaded.one" = "1 task is on your island now.";
 "onboarding.todos.loaded.other" = "%d tasks are on your island now.";
-"onboarding.notes.title" = "Where should your quick notes go?";
-"onboarding.notes.body" = "A note you type on your island lands in one place. Pick yours, then try it.";
-"onboarding.notes.note" = "Change it any time in Settings, under Nook.";
-"onboarding.notes.file.title" = "Markdown file";
-"onboarding.notes.file.text" = "A plain text file you can open in any editor.";
+"onboarding.notes.title" = "Where should your notes go?";
+"onboarding.notes.body" = "A note you write on your island saves itself. Pick where it lands, then try it.";
+"onboarding.notes.note" = "Change it any time in Settings, under Nook. Notes already saved stay where they are.";
+"onboarding.notes.folder.title" = "Obsidian folder";
+"onboarding.notes.folder.text" = "Each note is a Markdown file in a folder you pick, usually inside your Obsidian vault.";
 "onboarding.notes.appleNotes.title" = "Apple Notes";
-"onboarding.notes.appleNotes.text" = "One note in the Notes app.";
-"onboarding.notes.file.where" = "Your notes are saved in this file";
-"onboarding.notes.file.choose" = "Choose a folder…";
-"onboarding.notes.file.panelPrompt" = "Use This Folder";
-"onboarding.notes.file.any" = "Any folder works, for example one inside an Obsidian vault. The file is called Quick Notes.md.";
-"onboarding.notes.appleNotes.where" = "Each note is added as a line to a note titled %@, in the default folder of your Notes app.";
+"onboarding.notes.appleNotes.text" = "Each note is its own note in a Hangover folder in the Notes app.";
+"onboarding.notes.both.title" = "Both";
+"onboarding.notes.both.text" = "The file is the note, and each save also updates its note in Apple Notes.";
+"onboarding.notes.folder.where" = "Your notes are saved in this folder";
+"onboarding.notes.folder.choose" = "Choose a folder…";
+"onboarding.notes.folder.panelPrompt" = "Use This Folder";
+"onboarding.notes.folder.any" = "Any folder works. The picker opens in your Obsidian iCloud folder when there is one, and a note edited in Obsidian shows up here.";
+"onboarding.notes.appleNotes.where" = "Each note is its own note in a folder called %@ in the Notes app. Edits made in Apple Notes do not come back, and are replaced the next time you edit that note in Hangover.";
 "onboarding.notes.appleNotes.ask" = "macOS asks once whether Hangover may use Notes, when your first note is saved.";
-"onboarding.notes.try" = "Try it. Type a line in the notes card on your island and press Return.";
+"onboarding.notes.try" = "Try it. Press New note on your island, type a few words and pause. It saves itself.";
 "onboarding.notes.try.done" = "Saved. Your note went in.";
-"onboarding.notes.show.file" = "Show the file in Finder";
+"onboarding.notes.show.folder" = "Show the folder in Finder";
 "onboarding.notes.show.appleNotes" = "Open Notes";
 "onboarding.weather.title" = "Where are you?";
 "onboarding.weather.body" = "The weather card and the temperature on the closed island both need a place. Type your city and search.";
@@ -1386,8 +1393,8 @@
 "onboarding.permissions.body" = "Hangover starts with no permissions. macOS asks you the first time you use one of these, and you can say no.";
 "onboarding.permissions.note" = "Change an answer later in System Settings, under Privacy & Security.";
 "onboarding.permissions.camera.title" = "Camera";
-"onboarding.permissions.camera.when" = "Only if you use the mirror";
-"onboarding.permissions.camera.note" = "Asked the first time you turn the mirror on. The camera stays off until then.";
+"onboarding.permissions.camera.when" = "Only if you use the mirror or the face cam";
+"onboarding.permissions.camera.note" = "Asked the first time you turn the mirror on, or record with the face cam. The camera stays off until then.";
 "onboarding.permissions.accessibility.title" = "Accessibility";
 "onboarding.permissions.accessibility.when" = "Only if you replace the macOS volume popup";
 "onboarding.permissions.accessibility.note" = "Asked when you turn on the option that replaces the macOS volume and brightness popups, in Settings under Nook.";
@@ -1409,6 +1416,8 @@
 "onboarding.tips.swipeAway.text" = "Swipe up with two fingers to close the island. Swipe sideways on it while it is closed to hide what it shows, and again to bring it back.";
 "onboarding.tips.dropFiles.title" = "Drop files on the notch";
 "onboarding.tips.dropFiles.text" = "Drag a file onto the island and let go. It waits in the file tray until you need it.";
+"onboarding.tips.convertFiles.title" = "Convert in the tray";
+"onboarding.tips.convertFiles.text" = "Open a file's Convert menu in the tray. For %@ it offers: %@.";
 "onboarding.tips.rearrange.title" = "Rearrange your widgets";
 "onboarding.tips.rearrange.text" = "Press and hold a widget, or right-click it and choose Edit Widgets. Then drag to reorder, and pull its corner to resize.";
 "onboarding.tips.switchPages.title" = "Two pages, one button";
@@ -1418,7 +1427,7 @@
 "onboarding.tips.todoNotes.title" = "Notes on a to-do";
 "onboarding.tips.todoNotes.text" = "Click a task's name to open it and see its notes. Click its circle to check it off.";
 "onboarding.tips.quickNotes.title" = "Quick notes";
-"onboarding.tips.quickNotes.text" = "Type in the Notes widget and press Return. The line is saved at once.";
+"onboarding.tips.quickNotes.text" = "Press New note in the Notes widget and type. It saves a moment after you stop.";
 "onboarding.tips.speaker.title" = "Pick your speaker";
 "onboarding.tips.speaker.text" = "The speaker button in the music widget sends the sound to another speaker or your headphones.";
 "onboarding.tips.volume.title" = "Volume in the notch";
@@ -1443,7 +1452,7 @@
 "onboarding.done.recap.calendar" = "Calendar look";
 "onboarding.done.recap.widgets.none" = "None switched on";
 "onboarding.done.recap.todos" = "To-dos from";
-"onboarding.done.recap.notes" = "Quick notes to";
+"onboarding.done.recap.notes" = "Notes saved to";
 "onboarding.done.recap.weather" = "Weather for";
 "onboarding.done.recap.weather.none" = "Not set";
 "onboarding.done.recap.layout" = "Layout";
@@ -1487,8 +1496,8 @@
 "onboarding.features.title" = "See what each one does";
 "onboarding.features.body" = "Each widget you switched on is ringed on your island while it is shown here. Press its buttons to make it work.";
 "onboarding.features.none" = "No widget is switched on. Go back one page and switch some on.";
-"onboarding.features.note" = "When you move on, the mirror, the ring light, a photo booth session and a timer that a button started go off again. Music keeps doing what you left it doing. The design kit and Link to MP3 stay on if you turned them on.";
-"onboarding.features.note.release" = "When you move on, the mirror, the ring light, a photo booth session and a timer that a button started go off again. Music keeps doing what you left it doing. The design kit stays on if you turned it on.";
+"onboarding.features.note" = "When you move on, the mirror, the ring light, a photo booth session, a timer and Record go off again if a button here turned them on. The tour never starts a recording. Music keeps doing what you left it doing. The design kit and Link to MP3 stay on if you turned them on.";
+"onboarding.features.note.release" = "When you move on, the mirror, the ring light, a photo booth session, a timer and Record go off again if a button here turned them on. The tour never starts a recording. Music keeps doing what you left it doing. The design kit stays on if you turned it on.";
 "onboarding.features.count" = "%lld of %lld";
 "onboarding.features.previous" = "Previous widget";
 "onboarding.features.next" = "Next widget";
@@ -1548,17 +1557,17 @@
 "onboarding.feature.calendarNext" = "Notices 10 and 2 minutes before, and a Join button.";
 "onboarding.feature.todoCheck" = "Check tasks off and add new ones from the island.";
 "onboarding.feature.todoNotes" = "Open a task to read and write its notes.";
-"onboarding.feature.todoDue" = "A due date shows beside the task, in red once it is late.";
+"onboarding.feature.todoDue" = "The calendar button adds a date, which shows beside the task, in red once it is late. The closed island reminds you on the day.";
 "onboarding.feature.todoSources" = "Tasks can come from Reminders, Notion or TickTick.";
-"onboarding.feature.notesAdd" = "Type a line, press Return, and it is saved.";
-"onboarding.feature.notesRecent" = "Your newest lines show under the field.";
-"onboarding.feature.notesDelete" = "With a Markdown file, you can delete a line from the card.";
-"onboarding.feature.notesWhere" = "Save to a Markdown file you pick, or to Apple Notes.";
+"onboarding.feature.notesAdd" = "Write a note of any length. It saves itself a second after you stop typing.";
+"onboarding.feature.notesRecent" = "Your notes list newest first. Click one to open it.";
+"onboarding.feature.notesDelete" = "Right-click a note to delete it. A file goes to the Trash.";
+"onboarding.feature.notesWhere" = "Save to an Obsidian folder, to Apple Notes, or to both.";
 "onboarding.feature.trayDrag" = "Drop files on the island to hold them. Drag them back out.";
 "onboarding.feature.trayActions" = "Right-click a file to share, AirDrop, zip or copy its path.";
 "onboarding.feature.trayClipboard" = "Turn on the clipboard tab. Click a copy to copy it again.";
 "onboarding.feature.trayPrivate" = "The clipboard list skips copies that apps mark as private, like passwords, and keeps nothing on disk.";
-"onboarding.feature.timerSet" = "Type your own length, like 45 or 1:30, or tap 15, 25 or 50.";
+"onboarding.feature.timerSet" = "Type 45 for 45 minutes or 1:30 for a minute and a half, or tap 15, 25 or 50.";
 "onboarding.feature.timerPomodoro" = "Start a pomodoro run of work and break rounds.";
 "onboarding.feature.timerPause" = "Pause or reset it any time from the card.";
 "onboarding.feature.timerClosed" = "Time left shows in the closed island, with an optional sound.";
@@ -1573,7 +1582,7 @@
 "onboarding.integrations.calendar.text" = "Shows your events and lets you add one. Reminders can feed the to-do widget.";
 "onboarding.integrations.calendar.where" = "Settings, Nook tab";
 "onboarding.integrations.appleNotes.name" = "Apple Notes";
-"onboarding.integrations.appleNotes.text" = "Quick notes can be saved as lines in a note in Apple Notes.";
+"onboarding.integrations.appleNotes.text" = "Notes can be saved as notes in a Hangover folder in Apple Notes.";
 "onboarding.integrations.appleNotes.where" = "Settings, Nook tab, Notes";
 "onboarding.integrations.notion.name" = "Notion";
 "onboarding.integrations.notion.text" = "Your Notion tasks show in the to-do widget. You paste in a token.";
@@ -1755,3 +1764,264 @@
 "onboarding.feature.linkAudioQueue" = "One link is saved at a time, and up to five wait their turn.";
 "onboarding.feature.linkAudioFolder" = "Files go to a Hangover folder in Music, or to a folder you choose in Settings.";
 "onboarding.feature.linkAudioRights" = "Only save what you have the right to.";
+
+/* Tour: Record in the widget walk, converting in the tray, and the long tour's pages for both (D67, D68) */
+"onboarding.nook.widget.record" = "Record";
+"onboarding.widgets.record" = "Record the screen, one window or an area, with a face cam bubble and sound.";
+"onboarding.features.try.recordOn" = "Turn Record on";
+"onboarding.features.try.recordOn.note" = "This switches the widget on and shows it on your island. Nothing is recorded until you press Record yourself, and the tour never starts a recording.";
+"onboarding.feature.recordTargets" = "Record the whole screen, one window or an area you drag out.";
+"onboarding.feature.recordFaceCam" = "Add a face cam, a round bubble with your camera that floats over the screen. Drag it to move it, and drag its edge to resize it.";
+"onboarding.feature.recordSound" = "Add your voice from the microphone and the sound your Mac plays, each with its own switch.";
+"onboarding.feature.recordNotch" = "The notch, with its red dot and timer, shows in the video. Turn that off in Settings to leave it out.";
+"onboarding.feature.recordShortcut" = "Press Control Option R in any app to start and stop. You can change the shortcut in Settings.";
+"onboarding.feature.recordSaved" = "Each recording is saved in the Hangover folder in Movies, and dropped in your file tray.";
+"onboarding.feature.trayConvert" = "Convert a picture, a video or a PDF from the Convert menu on its file. The result is a new file next to the original.";
+"onboarding.permissions.record.title" = "Screen Recording and microphone";
+"onboarding.permissions.record.when" = "Only if you use Record";
+"onboarding.permissions.record.note" = "Screen Recording is asked the first time you record the screen or an area, and the microphone the first time you record your voice. Nothing is recorded before you press Record.";
+"onboarding.more.record.title" = "Record your screen";
+"onboarding.more.record.text" = "Record the whole screen, one window or an area, with a face cam bubble and your voice or the sound your Mac plays. Each recording is saved in Movies and dropped in your file tray.";
+"onboarding.more.record.where" = "Settings, Nook tab, Record";
+"onboarding.more.record.note" = "Nothing is recorded until you press Record. macOS asks for Screen Recording the first time you record a screen or an area, and for the microphone when you record your voice.";
+"onboarding.more.convert.title" = "Convert files in the tray";
+"onboarding.more.convert.text" = "Press Convert next to Files, then click a file to see what it can become: pictures change format or size, videos get smaller, become a looping GIF or keep only their sound, and PDF pages become pictures. Command-click several pictures or PDFs to join them into one PDF.";
+"onboarding.more.convert.where" = "Settings, Nook tab, File tray";
+
+/* GIF maker (D68) */
+"nook.gif.title" = "Make a GIF";
+"nook.gif.titleFrom" = "Make a GIF from %@";
+"nook.gif.explain" = "A looping picture with no sound. It appears in the tray next to the video.";
+"nook.gif.width.small" = "Small";
+"nook.gif.width.medium" = "Medium";
+"nook.gif.width.large" = "Large";
+"nook.gif.width.help" = "%d pixels wide";
+"nook.gif.fps" = "%d fps";
+"nook.gif.estimate" = "About %@";
+"nook.gif.estimate.loading" = "Reading the video…";
+"nook.gif.unreadable" = "Hangover can't read this video.";
+"nook.gif.tooLong" = "GIFs are limited to 2 minutes. Trim the video first.";
+"nook.gif.cancel" = "Cancel";
+"nook.gif.make" = "Make GIF";
+
+/* Tray converter (D68) */
+"nook.tray.convert.menu" = "Convert";
+"nook.tray.convert.group.format" = "Format";
+"nook.tray.convert.group.size" = "Size";
+"nook.tray.convert.group.other" = "Other";
+"nook.tray.convert.firstFrameOnly" = "Uses the first frame";
+"nook.tray.convert.image.png" = "To PNG";
+"nook.tray.convert.image.jpeg" = "To JPEG";
+"nook.tray.convert.image.heic" = "To HEIC";
+"nook.tray.convert.image.tiff" = "To TIFF";
+"nook.tray.convert.image.gif" = "To GIF";
+"nook.tray.convert.image.bmp" = "To BMP";
+"nook.tray.convert.resize.half" = "50% size";
+"nook.tray.convert.resize.quarter" = "25% size";
+"nook.tray.convert.resize.longSide" = "Longest side %d px";
+"nook.tray.convert.smallerImage" = "Smaller file";
+"nook.tray.convert.video.mp4" = "To MP4";
+"nook.tray.convert.video.mov" = "To MOV";
+"nook.tray.convert.smallerVideo.p1080" = "Smaller (1080p)";
+"nook.tray.convert.smallerVideo.p720" = "Smaller (720p)";
+"nook.tray.convert.makeGIF" = "Make GIF…";
+"nook.tray.convert.soundOnly" = "Sound only";
+"nook.tray.convert.pdfPages.png" = "Pages to PNG";
+"nook.tray.convert.pdfPages.jpeg" = "Pages to JPEG";
+"nook.tray.convert.combine.picturesToPDF" = "Make one PDF";
+"nook.tray.convert.combine.joinPDFs" = "Join PDFs";
+"nook.tray.convert.combine.clear" = "Clear selection";
+"nook.tray.convert.cancel" = "Cancel";
+"nook.tray.convert.notice.done" = "Saved next to the original";
+"nook.tray.convert.notice.videoFailed" = "Could not convert the video";
+"nook.tray.convert.notice.gifFailed" = "Could not make the GIF";
+"nook.tray.convert.notice.gifTooLong" = "Only clips up to 2 minutes can become a GIF";
+"nook.tray.convert.notice.pdfFailed" = "Could not split the PDF";
+"nook.tray.convert.notice.tooManyPages" = "Only PDFs up to 200 pages can be split";
+"nook.tray.convert.notice.combineFailed" = "Could not make the PDF";
+"nook.tray.convert.notice.noSound" = "That video has no sound";
+
+/* Record widget (D67) */
+"nook.record.title" = "Record";
+"nook.record.capture.fullScreen" = "Full screen";
+"nook.record.capture.window" = "Window";
+"nook.record.capture.area" = "Area";
+"nook.record.quality.standard" = "Standard";
+"nook.record.quality.high" = "High";
+"nook.record.toggle.faceCam" = "Face cam";
+"nook.record.toggle.voice" = "Voice";
+"nook.record.toggle.macSound" = "Mac sound";
+"nook.record.button.record" = "Record";
+"nook.record.button.stop" = "Stop";
+"nook.record.button.pause" = "Pause";
+"nook.record.button.resume" = "Resume";
+"nook.record.button.cancel" = "Cancel";
+"nook.record.state.starting" = "Starting";
+"nook.record.state.saving" = "Saving";
+"nook.record.area.hint" = "Drag to choose what to record. Press Esc to cancel.";
+"nook.record.facecam.size.small" = "Small";
+"nook.record.facecam.size.medium" = "Medium";
+"nook.record.facecam.size.large" = "Large";
+"nook.record.failure.screenPermission" = "Hangover needs Screen Recording. Turn it on in System Settings, Privacy & Security.";
+"nook.record.failure.micPermission" = "Turn on the microphone for Hangover in System Settings to record your voice.";
+"nook.record.failure.pickerCancelled" = "No window was picked.";
+"nook.record.failure.noDisplay" = "That screen is not connected anymore.";
+"nook.record.failure.lowDisk" = "Less than 1 GB is free. Free up space, then record.";
+"nook.record.failure.writeFailed" = "The recording could not be saved.";
+"nook.record.notice.saved" = "Recording saved to Movies/Hangover";
+"nook.record.notice.lowDisk" = "Recording stopped: less than 1 GB free. What was recorded is saved.";
+"nook.record.mirror.cameraInUse" = "Camera in use by the recording";
+"nook.record.settings.section" = "Record";
+"nook.record.settings.off" = "The Record widget is off. Turn it on under Widgets to use what is below.";
+"nook.record.settings.includeIsland" = "Show the notch in recordings";
+"nook.record.settings.includeIsland.note" = "The red dot and the timer in the notch are part of the video. Turn this off to leave the notch out.";
+"nook.record.settings.hotkey" = "Start and stop shortcut";
+"nook.record.settings.hotkey.note" = "Works from any app while the Record widget is on. Press it once to start and again to stop.";
+"nook.record.settings.hotkey.reset" = "Reset";
+"nook.record.settings.hotkey.problem.taken" = "Another Hangover shortcut already uses these keys.";
+"nook.record.settings.openFolder" = "Open recordings folder";
+"nook.record.settings.folder.note" = "Recordings are saved to Movies/Hangover, and each one is added to the tray.";
+
+/* Tray fixes (D68) */
+"nook.tray.convert.notice.alreadySmall" = "That file is already about as small as it gets.";
+"nook.tray.convert.notice.gifDecodeFailed" = "Part of that video could not be read, and no GIF was made.";
+"nook.tray.notice.recordingNotAdded" = "Recording saved to Movies/Hangover, but it could not be added to the tray.";
+"nook.tray.convert.wait" = "Wait for the conversion on %@ to finish";
+"nook.tray.recording.smaller" = "Smaller (1080p)";
+"nook.tray.recording.showInFinder" = "Show in Finder";
+
+/* To-do due dates (D69) */
+"nook.todo.due.today" = "Today";
+"nook.todo.due.tomorrow" = "Tomorrow";
+"nook.todo.due.pick" = "Pick a date…";
+"nook.todo.due.none" = "No date";
+"nook.todo.due.button" = "Add a date";
+"nook.todo.due.clear" = "Remove the date";
+"nook.todo.due.pickColumn" = "Pick a Due column in Settings to add dates.";
+"nook.todo.due.unavailable" = "Dates cannot be set right now.";
+"nook.todo.due.notice.one" = "%@ due today";
+"nook.todo.due.notice.many" = "%d to-dos due today";
+"nook.todo.due.notice.overdue.one" = "1 to-do overdue";
+"nook.todo.due.notice.overdue.many" = "%d to-dos overdue";
+"nook.todo.due.remind" = "Remind me on the due day";
+"nook.todo.due.remind.note" = "At 9 AM, or when Hangover first runs after that, the closed island says what is due today and what is overdue. Each notice shows once a day, and follows the notices setting of each display.";
+
+/* Record fixes (D67) */
+"nook.record.failure.noPicture" = "The screen sent no picture. Nothing was recorded.";
+"nook.record.failure.couldNotStart" = "The recording could not start.";
+"nook.record.failure.writerFailed" = "Recording stopped at %@: the file could not be written.";
+"nook.record.failure.noMicrophone" = "No microphone is connected.";
+"nook.record.failure.pickerFailed" = "The window picker did not open.";
+"nook.record.notice.system" = "Recording stopped by macOS. What was recorded is saved.";
+"nook.record.warning.voiceLost" = "Voice stopped: the microphone was disconnected.";
+"nook.record.warning.voiceDidNotStart" = "Voice is off: the microphone could not start.";
+"nook.record.notice.noVoice" = "No voice was recorded.";
+"nook.record.notice.droppedFrames" = "Some frames were dropped. Standard quality may be smoother on this Mac.";
+"nook.record.facecam.problem.noAccess" = "Face cam is off: Hangover has no camera access. Turn it on in System Settings, Privacy & Security, Camera.";
+"nook.record.facecam.problem.noCamera" = "Face cam is off: no camera is connected.";
+"nook.record.facecam.problem.failed" = "Face cam is off: the camera could not start.";
+"nook.record.facecam.problem.stopped" = "Face cam stopped: the camera was disconnected.";
+"nook.record.notice.keptPartial" = "What was recorded is in Movies/Hangover.";
+"nook.record.facecam.windowHelp" = "The face cam shows in Full screen and Area recordings.";
+"nook.record.hotkey.refused" = "The Record shortcut is taken by another app or by macOS. Choose other keys in Settings.";
+
+/* Recorder and tray fixes, round 2 */
+"nook.record.notice.droppedFramesPlain" = "Some frames were dropped.";
+"nook.design.standing.record" = "Record uses these keys. Open Settings.";
+
+/* To-do and tour fixes */
+"nook.todo.reminders.error.noList" = "No Reminders list to add to.";
+"nook.todo.reminders.error.addFailed" = "Could not add the reminder.";
+"nook.todo.reminders.error.completeFailed" = "Could not mark the reminder done.";
+"nook.todo.reminders.error.notesFailed" = "Could not save the notes.";
+"nook.todo.ticktick.error.addedWithoutDate" = "Added without its date.";
+
+/* Eyedropper keys held by Record or Notes */
+"nook.design.hotkey.problem.record" = "That is already the Record shortcut. Pick another.";
+"nook.design.hotkey.problem.notes" = "That is already the new note shortcut. Pick another.";
+"nook.design.standing.notes" = "Notes uses these keys. Open Settings.";
+
+/* Reference panel resize */
+"nook.design.panel.matchShape" = "Match the picture's shape";
+"nook.design.panel.matchShape.help" = "Double-click to match the picture's shape";
+
+/* Tray Convert mode */
+"nook.tray.convert.chip" = "Convert";
+"nook.tray.convert.chip.picking" = "Pick a file";
+"nook.tray.convert.strip.title" = "Convert %@";
+"nook.tray.convert.strip.explain" = "Pick what it should become. The new file appears in the tray next to it.";
+
+/* Notes redesign (D70) */
+"nook.notes.title" = "Notes";
+"nook.notes.new" = "New note";
+"nook.notes.new.help" = "Start a new note";
+"nook.notes.done" = "Done";
+"nook.notes.done.help" = "Close the note. It is already saved.";
+"nook.notes.delete" = "Delete";
+"nook.notes.untitled" = "Untitled";
+"nook.notes.empty" = "No notes yet. Press New note, or %@ in any app.";
+"nook.notes.row.hint" = "Opens the note";
+"nook.notes.editor.placeholder" = "Start writing. The first line is the title.";
+"nook.notes.editor.label" = "Note";
+"nook.notes.age.now" = "now";
+"nook.notes.age.minutes" = "%lldm ago";
+"nook.notes.age.hours" = "%lldh ago";
+"nook.notes.savesTo.folder" = "Saves to %@";
+"nook.notes.savesTo.appleNotes" = "Saves to Apple Notes, in the Hangover folder";
+"nook.notes.savesTo.both" = "Saves to %@ and Apple Notes";
+"nook.notes.notice.notSaved" = "Note not saved";
+"nook.notes.notice.notDeleted" = "Note not deleted";
+"nook.notes.notice.notImported" = "Import failed";
+"nook.notes.notice.appleOff.folder" = "Notes access off";
+"nook.notes.notice.appleOff.hangover" = "Notes access off";
+"nook.notes.notice.appleFailed.folder" = "Apple Notes error";
+"nook.notes.notice.appleFailed.hangover" = "Apple Notes error";
+"nook.notes.settings.section" = "Notes";
+"nook.notes.settings.saveTo" = "Save notes to";
+"nook.notes.saveTo.folder" = "Obsidian folder";
+"nook.notes.saveTo.appleNotes" = "Apple Notes";
+"nook.notes.saveTo.both" = "Both";
+"nook.notes.settings.folder" = "Folder";
+"nook.notes.settings.chooseFolder" = "Choose folder…";
+"nook.notes.settings.chooseFolder.prompt" = "Use This Folder";
+"nook.notes.settings.reveal" = "Show in Finder";
+"nook.notes.settings.openNotes" = "Open Notes";
+"nook.notes.settings.folder.note" = "Each note is its own Markdown file, named after its first line, with created and updated dates. Pick a folder inside an Obsidian vault and notes you edit, add or delete in Obsidian show up here. Notes already saved stay where they are when you pick another place.";
+"nook.notes.settings.appleNotes.note" = "Each note is its own note in a Hangover folder in the Notes app. Edits made in Apple Notes do not come back, and are replaced the next time you edit that note in Hangover. macOS asks once whether Hangover may control Notes.";
+"nook.notes.settings.both.note" = "The Markdown file is the note, and each save also updates its note in Apple Notes. Edits made in Apple Notes do not come back, and are replaced the next time you edit that note in Hangover. If Notes refuses, the file is still saved.";
+"nook.notes.settings.hotkey" = "New note shortcut";
+"nook.notes.settings.hotkey.note" = "Works from any app, whether or not the Notes widget is on the page. It opens the island on a new, empty note with the cursor in it.";
+"nook.notes.settings.hotkey.reset" = "Reset";
+"nook.notes.settings.hotkey.problem.taken" = "Another Hangover shortcut already uses these keys.";
+"onboarding.feature.notesShortcut" = "Press Control Option J in any app to start a new note.";
+
+/* Notes fixes (D70) */
+"nook.notes.action.chooseFolder" = "Choose folder";
+"nook.notes.notice.restored" = "Note restored";
+"nook.notes.problem.notSaved" = "This note is not saved yet. Hangover keeps a copy of what you typed.";
+"nook.notes.problem.notSavedInFolder" = "Hangover can't save in %@. It keeps a copy of this note. Choose another folder.";
+"nook.notes.problem.notDeleted" = "This note could not be deleted.";
+"nook.notes.problem.notImported" = "Hangover could not move your old Quick Notes in. It tries again the next time it starts.";
+"nook.notes.problem.restored" = "Hangover put back a note it could not save before it quit.";
+"nook.notes.problem.appleOff.folder" = "Hangover cannot control Notes. Your notes are saved in the folder. Allow it in Privacy and Security, Automation.";
+"nook.notes.problem.appleOff.hangover" = "Hangover cannot control Notes. Your notes are kept in Hangover only. Allow it in Privacy and Security, Automation.";
+"nook.notes.problem.appleFailed.folder" = "Apple Notes did not take a note. It is saved in the folder, and Hangover will send it again.";
+"nook.notes.problem.appleFailed.hangover" = "Apple Notes did not take a note. It is kept in Hangover only, and Hangover will send it again.";
+"nook.notes.notice.listUnreadable" = "List unreadable";
+"nook.notes.problem.listSetAside" = "Hangover could not read its list of Apple notes. It kept the old file as %@ and started a new list.";
+"nook.notes.problem.listUnreadable" = "Hangover can't read its list of Apple notes and can't set the file aside. It saves nothing there and keeps a copy of this note.";
+"nook.notes.notice.savedCopy" = "Saved a copy";
+"nook.notes.problem.savedCopy" = "Another app changed this note while you were typing. Hangover saved your version as %@ and left the other one alone.";
+"nook.notes.notice.noteUnreadable" = "Can't read note";
+"nook.notes.problem.noteUnreadable" = "Hangover can't read %@.";
+"nook.notes.action.createFolder" = "Create it";
+"nook.notes.notice.cantReadFolder" = "Can't read folder";
+"nook.notes.problem.cantReadFolder" = "Hangover can't read the folder %@. Choose a folder to see your notes.";
+"nook.notes.notice.folderGone" = "Folder is gone";
+"nook.notes.problem.folderGone" = "The folder %@ is gone. Choose another folder or create it again.";
+"nook.notes.row.unreadable" = "can't read";
+"nook.notes.action.openAutomation" = "Open Settings";
+"nook.notes.empty.settings" = "No notes yet. Press New note, or set a shortcut in Settings.";
+"nook.notes.notice.noteDownloading" = "Still downloading";
+"nook.notes.problem.noteDownloading" = "%@ is still downloading from iCloud. Try again in a moment.";
+"nook.notes.row.downloading" = "downloading";

@@ -31,7 +31,8 @@ struct NookPanelView: View {
         if placements.isEmpty {
             // The shelf stands in for the grid and sits between the two
             // `verticalPadding` terms.
-            grid = isEditing ? 0 : emptyHeight
+            // A note open alone on the page needs no empty-state line.
+            grid = isEditing || extras.showsNoteEditor ? 0 : emptyHeight
             shelf = isEditing ? editingExtraHeight : 0
         } else {
             grid = NookWidgetLayout.contentHeight(placements) {
@@ -65,6 +66,7 @@ struct NookPanelView: View {
         case .weather: NookWeatherCard.height(for: size)
         case .design: NookDesignCard.height(for: size)
         case .linkAudio: NookLinkAudioCard.height(for: size)
+        case .record: NookRecordCard.height(for: size)
         }
     }
 
@@ -98,6 +100,33 @@ struct NookPanelView: View {
                 // The editor sits above everything, the way the mirror does.
                 NookEventEditor(nook: nook)
                     .frame(height: NookEventEditorLayout.height)
+                    .padding(.top, Self.verticalPadding)
+                    .padding(.bottom, NookWidgetLayout.rowSpacing - Self.verticalPadding)
+                    .transition(Motion.transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity), reduceMotion: reduceMotion))
+            }
+            if extras.showsNoteEditor {
+                // A note opened by the shortcut with the Notes widget off
+                // the page: the editor stands alone above the grid.
+                NookPinnedNoteEditor(nook: nook)
+                    .frame(height: NookNoteSizes.pinnedEditorHeight)
+                    .padding(.top, Self.verticalPadding)
+                    .padding(.bottom, NookWidgetLayout.rowSpacing - Self.verticalPadding)
+                    .transition(Motion.transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity), reduceMotion: reduceMotion))
+            }
+            if extras.showsGIFOptions, let source = nook.tray.gifSourceItem {
+                // Above the cards at the page's full width: a tray card at any
+                // size is too short for the options.
+                NookGIFStrip(tray: nook.tray, source: source)
+                    .frame(height: NookGIFStripLayout.height)
+                    .padding(.top, Self.verticalPadding)
+                    .padding(.bottom, NookWidgetLayout.rowSpacing - Self.verticalPadding)
+                    .transition(Motion.transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity), reduceMotion: reduceMotion))
+            }
+            if extras.showsConvertOptions, let source = nook.tray.convertSourceItem {
+                // The same slot and the same width as the GIF options, and
+                // never both at once.
+                NookConvertStrip(tray: nook.tray, source: source)
+                    .frame(height: NookConvertStripLayout.height)
                     .padding(.top, Self.verticalPadding)
                     .padding(.bottom, NookWidgetLayout.rowSpacing - Self.verticalPadding)
                     .transition(Motion.transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity), reduceMotion: reduceMotion))
@@ -140,10 +169,16 @@ struct NookPanelView: View {
                 .frame(minHeight: 0, idealHeight: scrollHeight, maxHeight: scrollHeight)
                 .transition(.opacity)
             } else if !isEditing {
-                emptyState
-                    .frame(height: Self.emptyHeight)
-                    .padding(.vertical, Self.verticalPadding)
-                    .transition(.opacity)
+                if extras.showsNoteEditor {
+                    // The room the grid's padding takes, so the window and
+                    // the page agree on the height (`preferredHeight`).
+                    Color.clear.frame(height: Self.verticalPadding * 2)
+                } else {
+                    emptyState
+                        .frame(height: Self.emptyHeight)
+                        .padding(.vertical, Self.verticalPadding)
+                        .transition(.opacity)
+                }
             }
             if isEditing {
                 // One shelf for both cases, so it stays put when the page
@@ -210,6 +245,7 @@ struct NookPanelView: View {
         ) { placement in
             card(for: placement.kind)
         }
+        .demoTarget(.widgetPage)
     }
 
     private func shelf(_ placements: [NookWidgetPlacement]) -> some View {
@@ -239,6 +275,7 @@ struct NookPanelView: View {
         case .weather: NookWeatherCard(nook: model.nook)
         case .design: NookDesignCard(nook: model.nook)
         case .linkAudio: NookLinkAudioCard(nook: model.nook)
+        case .record: NookRecordCard(nook: model.nook)
         }
     }
 

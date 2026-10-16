@@ -8,8 +8,8 @@ struct NookDesignSettings: View {
     var nook: NookModel
 
     @State private var isRecording = false
-    /// The rule the last recorded shortcut broke.
-    @State private var rejection: NookDesignHotkeyProblem?
+    /// The sentence for the rule the last recorded shortcut broke.
+    @State private var rejectionKey: String?
     @State private var recorder = AgentHotkeyRecorder()
     /// "Remove every reference picture" asks twice.
     @State private var clearAsk = NookDesignTwoStepAsk()
@@ -119,7 +119,7 @@ struct NookDesignSettings: View {
 
                 Button(lang.t("nook.design.settings.hotkey.clear")) {
                     stopRecording()
-                    rejection = nil
+                    rejectionKey = nil
                     hotkey.clear()
                 }
                 .disabled(hotkey.combo == nil)
@@ -141,21 +141,21 @@ struct NookDesignSettings: View {
     /// recording broke first, what macOS said otherwise.
     private func message(for hotkey: NookDesignHotkeyController) -> String? {
         let lang = LanguageManager.shared
-        if let rejection { return lang.t(rejection.messageKey) }
+        if let rejectionKey { return lang.t(rejectionKey) }
         switch hotkey.status {
         case let .failed(code):
             return lang.t("settings.general.agentHotkeys.status.failed", Int(code))
         case .usedBySystem:
             return lang.t("settings.general.agentHotkeys.status.usedBySystem")
         case let .invalid(problem):
-            return lang.t(problem.messageKey)
+            return lang.t(nook.design.problemMessageKey(problem, combo: hotkey.combo))
         case .none, .inactive, .ready:
             return nil
         }
     }
 
     private func startRecording() {
-        rejection = nil
+        rejectionKey = nil
         isRecording = true
         nook.design.hotkey.beginRecording()
         recorder.start { event in
@@ -181,7 +181,7 @@ struct NookDesignSettings: View {
         // The controller checks the shortcut before it lets go of the old one.
         let problem = nook.design.hotkey.setCombo(combo)
         stopRecording()
-        rejection = problem
+        rejectionKey = problem.map { nook.design.problemMessageKey($0, combo: combo) }
     }
 
     // MARK: Files

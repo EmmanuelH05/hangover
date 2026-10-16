@@ -312,8 +312,14 @@ enum NotionTodoMapper {
     }
 
     /// Property values for a new, not-done task. A mapped filter gets its
-    /// first value, which keeps the new task visible in the card.
-    static func creationProperties(title: String, resolved: NotionResolvedMapping) -> NotionJSONValue {
+    /// first value, which keeps the new task visible in the card. `due` is a
+    /// whole day, written to the mapped Due column as `YYYY-MM-DD` with no
+    /// time (D69). With no Due column mapped, or no real day, it is left out.
+    static func creationProperties(
+        title: String,
+        resolved: NotionResolvedMapping,
+        due: DateComponents? = nil
+    ) -> NotionJSONValue {
         var properties: [String: NotionJSONValue] = [
             resolved.titleProperty: ["title": [["text": ["content": .string(title)]]]],
         ]
@@ -330,6 +336,9 @@ enum NotionTodoMapper {
             properties[filter.property] = filter.isMultiSelect
                 ? ["multi_select": [["name": .string(value)]]]
                 : ["select": ["name": .string(value)]]
+        }
+        if let dueProperty = resolved.dueProperty, let start = NookTodoDay.isoString(due) {
+            properties[dueProperty] = ["date": ["start": .string(start)]]
         }
         return .object(properties)
     }
@@ -391,9 +400,13 @@ enum NotionTodoMapper {
             guard page.object == "page", !isDone(page, resolved: resolved) else { return nil }
             let title = page.properties[resolved.titleProperty]?.title?.plainText
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let due = resolved.dueProperty
-                .flatMap { page.properties[$0]?.date?.start }
-                .flatMap(parseDate)
+            let range = resolved.dueProperty.flatMap { page.properties[$0]?.date }
+            let due = range?.start.flatMap { parseDate($0) }
+            // A range is overdue by its end, not its start. Only an end that
+            // comes after the start is a range (D9).
+            let end = range?.end.flatMap { parseDate($0) }.flatMap { end in
+                due.map { end > $0 } == true ? end : nil
+            }
             let rank = resolved.priorityProperty
                 .flatMap { page.properties[$0]?.option?.name.lowercased() }
                 .flatMap { resolved.priorityRanks[$0] } ?? Int.max
@@ -401,7 +414,8 @@ enum NotionTodoMapper {
                 .flatMap { page.properties[$0]?.richText?.plainText }
                 .flatMap { $0.isEmpty ? nil : $0 }
             let item = NookTodoItem(
-                id: page.id, title: title, dueDate: due, isCompleted: false, listName: listName, notes: notes
+                id: page.id, title: title, dueDate: due, isCompleted: false, listName: listName, notes: notes,
+                endDate: end
             )
             return Row(item: item, rank: rank, index: index)
         }
@@ -431,12 +445,15 @@ enum NotionTodoMapper {
     private static let dateOnlyLength = 10
 
     /// Notion sends either `2026-09-15` or a full ISO 8601 timestamp. A bare
-    /// date becomes midnight in the user's time zone.
-    static func parseDate(_ raw: String) -> Date? {
+    /// date becomes midnight in the zone of `calendar`, on the Gregorian
+    /// calendar whatever calendar the Mac prefers: Notion's year is always
+    /// Gregorian, and a Buddhist, Japanese or ROC calendar would read 2026 as
+    /// another year (D8). A date that is not a real day gives nil.
+    static func parseDate(_ raw: String, calendar: Calendar = .current) -> Date? {
         if raw.count == dateOnlyLength {
             let parts = raw.split(separator: "-").compactMap { Int($0) }
             guard parts.count == 3 else { return nil }
-            return Calendar.current.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
+            return NookTodoDay.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]), calendar: calendar)
         }
         let withFraction = ISO8601DateFormatter()
         withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

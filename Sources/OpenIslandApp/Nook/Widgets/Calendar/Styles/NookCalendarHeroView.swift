@@ -27,7 +27,7 @@ struct NookCalendarHeroView: View {
                 }
                 featuredRow(event, now: now)
                 if let next = NookCalendarHeroLogic.following(event, in: events, now: now) {
-                    NookCalendarRow(event: next, now: now) { nook.startNote(for: next) } onJoin: { nook.joinMeeting(next) }
+                    NookCalendarRow(event: next, now: now) { nook.joinMeeting(next) }
                         .opacity(0.6)
                 }
                 Spacer(minLength: 0)
@@ -98,8 +98,6 @@ struct NookCalendarHeroView: View {
                 .buttonStyle(.plain)
             }
         }
-        .contentShape(Rectangle())
-        .onTapGesture { nook.startNote(for: event) }
     }
 }
 

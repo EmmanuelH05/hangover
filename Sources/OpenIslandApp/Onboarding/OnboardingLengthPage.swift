@@ -82,6 +82,7 @@ struct OnboardingLengthPage: View {
         .frame(height: Self.cardHeight)
         .accessibilityLabel(title)
         .accessibilityValue(context.lang.t("onboarding.length.steps", steps))
+        .demoTarget(.tourLength(length))
     }
 }
 

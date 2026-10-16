@@ -52,9 +52,17 @@ enum NookDesignEntryResult: Equatable, Sendable {
 /// nothing.
 @MainActor
 protocol NookDesignReferencePresenting: AnyObject {
-    /// Opens a panel for a picture in a cascade slot. `onClose` runs once
+    /// Opens a panel for a picture in a cascade slot, at the size the
+    /// reference remembers if it remembers one. `onResize` runs with the
+    /// panel's size each time the user has resized it. `onClose` runs once
     /// when the panel goes away, whoever closed it.
-    func present(_ reference: NookDesignReference, image: CGImage, slot: Int, onClose: @escaping @MainActor () -> Void)
+    func present(
+        _ reference: NookDesignReference,
+        image: CGImage,
+        slot: Int,
+        onResize: @escaping @MainActor (CGSize) -> Void,
+        onClose: @escaping @MainActor () -> Void
+    )
     func focus(_ id: UUID)
     func close(_ id: UUID)
     func closeAll()
@@ -534,9 +542,13 @@ final class NookDesignKit {
                     self.post("nook.design.notice.pictureMissing", .error)
                     return
                 }
-                presenter.present(current, image: image, slot: slot) { [weak self] in
-                    self?.openPanels[id] = nil
-                }
+                presenter.present(
+                    current,
+                    image: image,
+                    slot: slot,
+                    onResize: { [weak self] size in self?.references.rememberPanelSize(id, size) },
+                    onClose: { [weak self] in self?.openPanels[id] = nil }
+                )
             }
         }
     }

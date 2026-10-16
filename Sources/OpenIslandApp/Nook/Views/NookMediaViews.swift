@@ -355,8 +355,11 @@ struct NookMediaCard: View {
             HStack(spacing: 4) {
                 shuffleButton(state)
                 transportButton("backward.fill") { nook.media.previousTrack() }
+                    .demoTarget(.previousTrack)
                 transportButton(state.isPlaying ? "pause.fill" : "play.fill", size: 16) { nook.media.togglePlayPause() }
+                    .demoTarget(.playPause)
                 transportButton("forward.fill") { nook.media.nextTrack() }
+                    .demoTarget(.nextTrack)
                 repeatButton(state)
                 speakerButton()
             }
@@ -541,8 +544,11 @@ struct NookMediaCard: View {
         Group {
             shuffleButton(state, size: iconSize, hit: hit)
             transportButton("backward.fill", size: iconSize, hit: hit) { nook.media.previousTrack() }
+                .demoTarget(.previousTrack)
             transportButton(state.isPlaying ? "pause.fill" : "play.fill", size: playSize, hit: hit) { nook.media.togglePlayPause() }
+                .demoTarget(.playPause)
             transportButton("forward.fill", size: iconSize, hit: hit) { nook.media.nextTrack() }
+                .demoTarget(.nextTrack)
             repeatButton(state, size: iconSize, hit: hit)
         }
         .frame(maxWidth: slot)

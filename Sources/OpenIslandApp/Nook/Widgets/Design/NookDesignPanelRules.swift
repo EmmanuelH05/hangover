@@ -97,7 +97,8 @@ enum NookDesignPanelDecision: Equatable, Sendable {
 }
 
 /// Pure rules for the floating reference panels: how many, where, how
-/// large, and how they resize.
+/// large, and how they resize. A panel is as large as the user drags it,
+/// within the room it has, and the picture is fitted inside its area.
 enum NookDesignPanelRules {
     /// Panels that can be up at once.
     static let maxOpenPanels = 6
@@ -107,9 +108,14 @@ enum NookDesignPanelRules {
     static let minimumWidth: CGFloat = 240
     /// Height of the strip of controls under the picture.
     static let barHeight: CGFloat = 30
-    /// A panel's picture area is never narrower or wider than this for its
+    /// The least height the picture area is dragged down to.
+    static let minimumAreaHeight: CGFloat = 120
+    /// The panel's least height: that area and the strip of controls.
+    static let minimumHeight: CGFloat = minimumAreaHeight + barHeight
+    /// The picture area of a new panel, and of a panel sent back to the
+    /// picture's shape, is never narrower or wider than this for its
     /// height. A picture outside it, such as a long page, is fitted inside
-    /// and read by zooming.
+    /// and read by zooming. A panel the user drags is not held to it.
     static let aspectRange: ClosedRange<CGFloat> = 0.5...2.4
     /// Room kept between a new panel and the screen's edges.
     static let screenMargin: CGFloat = 24
@@ -137,18 +143,25 @@ enum NookDesignPanelRules {
 
     // MARK: Shape
 
-    /// The shape of the picture area for a picture of this shape.
+    /// The shape of the picture area for a picture of this shape, which is
+    /// the shape a new panel opens in.
     static func areaAspect(forPictureAspect aspect: CGFloat) -> CGFloat {
         guard aspect.isFinite, aspect > 0 else { return 1 }
         return min(max(aspect, aspectRange.lowerBound), aspectRange.upperBound)
     }
 
     /// The part of the picture area the fitted picture covers on each
-    /// axis. Both are 1 unless the picture's shape is outside
-    /// `aspectRange`.
-    static func fittedFraction(pictureAspect: CGFloat) -> CGSize {
-        guard pictureAspect.isFinite, pictureAspect > 0 else { return CGSize(width: 1, height: 1) }
-        let area = areaAspect(forPictureAspect: pictureAspect)
+    /// axis, for a panel of this size. The area is what is left of the
+    /// panel above the strip of controls. A picture in the area's own shape
+    /// covers all of it, and in any other shape it covers all of one axis
+    /// and part of the other.
+    static func fittedFraction(pictureAspect: CGFloat, panelSize: CGSize) -> CGSize {
+        let whole = CGSize(width: 1, height: 1)
+        let areaHeight = panelSize.height - barHeight
+        guard pictureAspect.isFinite, pictureAspect > 0,
+              panelSize.width.isFinite, areaHeight.isFinite,
+              panelSize.width > 0, areaHeight > 0 else { return whole }
+        let area = panelSize.width / areaHeight
         return pictureAspect >= area
             ? CGSize(width: 1, height: area / pictureAspect)
             : CGSize(width: pictureAspect / area, height: 1)
@@ -175,30 +188,65 @@ enum NookDesignPanelRules {
         return fitted(width: width, pictureAspect: pictureAspect, available: available)
     }
 
-    /// The size a resize lands on. The edge that moved more decides, and
-    /// the other follows, which keeps the picture area in its shape.
-    static func resizedSize(
-        proposed: CGSize,
-        current: CGSize,
-        pictureAspect: CGFloat,
-        available: CGSize
-    ) -> CGSize {
-        let widthMoved = abs(proposed.width - current.width)
-        let heightMoved = abs(proposed.height - current.height)
-        let width = widthMoved >= heightMoved
-            ? proposed.width
-            : panelWidth(height: proposed.height, pictureAspect: pictureAspect)
-        return fitted(width: width, pictureAspect: pictureAspect, available: available)
+    /// The size a panel opens at: the size it was left at when there is
+    /// one, held to the room this screen has, and `initialSize` when there
+    /// is none or it cannot be a size.
+    static func openingSize(remembered: CGSize?, pictureAspect: CGFloat, available: CGSize) -> CGSize {
+        guard let remembered, remembered.width.isFinite, remembered.height.isFinite,
+              remembered.width > 0, remembered.height > 0 else {
+            return initialSize(pictureAspect: pictureAspect, available: available)
+        }
+        return resizedSize(proposed: remembered, available: available)
     }
 
-    /// The panel size nearest `width` that is at least the minimum width
-    /// and fits in `available`. The minimum wins when the two disagree.
+    /// The size a resize lands on: the width and the height the user
+    /// dragged to, each held between its minimum and the room there is.
+    /// Neither follows the other, and the picture's shape is not asked.
+    /// The minimum wins when the room is smaller than it.
+    static func resizedSize(proposed: CGSize, available: CGSize) -> CGSize {
+        CGSize(
+            width: limited(proposed.width, minimum: minimumWidth, maximum: available.width),
+            height: limited(proposed.height, minimum: minimumHeight, maximum: available.height)
+        )
+    }
+
+    private static func limited(_ value: CGFloat, minimum: CGFloat, maximum: CGFloat) -> CGFloat {
+        let wanted = value.isNaN ? minimum : value.rounded()
+        let capped = maximum.isNaN ? wanted : min(wanted, maximum.rounded(.down))
+        guard capped.isFinite else { return minimum }
+        return max(capped, minimum)
+    }
+
+    /// The panel sent back to its picture's shape: the width it has now,
+    /// and the height the picture area needs at that width. It is held to
+    /// the same minimums and room as any other size.
+    static func matchedSize(current: CGSize, pictureAspect: CGFloat, available: CGSize) -> CGSize {
+        fitted(width: current.width, pictureAspect: pictureAspect, available: available)
+    }
+
+    /// The frame of a panel that a button or a double click resized, not a
+    /// drag. Its top left corner stays where it is. It moves back onto the
+    /// screen only by as much as the new size pushed it off, which keeps a
+    /// panel the user left partly off the screen from jumping. The frame is
+    /// counted from the bottom left, the way AppKit counts.
+    static func frame(keepingTopLeftOf frame: CGRect, resizedTo size: CGSize, in visible: CGRect) -> CGRect {
+        var origin = CGPoint(x: frame.minX, y: frame.maxY - size.height)
+        let newMaxX = origin.x + size.width
+        origin.x -= max(0, newMaxX - max(visible.maxX, frame.maxX))
+        origin.y += max(0, min(visible.minY, frame.minY) - origin.y)
+        return CGRect(origin: origin, size: size)
+    }
+
+    /// The panel size in the picture's shape nearest `width`, at least the
+    /// minimum size and fitting in `available`. The minimum wins when the
+    /// two disagree.
     private static func fitted(width: CGFloat, pictureAspect: CGFloat, available: CGSize) -> CGSize {
         var width = width.isFinite ? width : initialLongSide
         width = min(width, available.width)
         width = min(width, panelWidth(height: available.height, pictureAspect: pictureAspect))
         width = max(width, minimumWidth)
-        return panelSize(width: width.rounded(), pictureAspect: pictureAspect)
+        let size = panelSize(width: width.rounded(), pictureAspect: pictureAspect)
+        return CGSize(width: size.width, height: max(size.height, minimumHeight))
     }
 
     // MARK: Place

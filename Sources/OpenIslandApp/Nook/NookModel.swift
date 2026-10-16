@@ -23,6 +23,7 @@ enum NookWidgetKind: String, CaseIterable, Codable, Identifiable, Sendable {
     case timer
     case mirror
     case weather
+    case record
     case design
     case linkAudio
 
@@ -40,6 +41,7 @@ enum NookWidgetKind: String, CaseIterable, Codable, Identifiable, Sendable {
         case .weather: LanguageManager.shared.t("nook.weather.title")
         case .design: LanguageManager.shared.t("nook.design.title")
         case .linkAudio: LanguageManager.shared.t("nook.linkAudio.title")
+        case .record: LanguageManager.shared.t("nook.record.title")
         }
     }
 
@@ -55,6 +57,7 @@ enum NookWidgetKind: String, CaseIterable, Codable, Identifiable, Sendable {
         case .weather: "cloud.sun"
         case .design: "paintpalette"
         case .linkAudio: "arrow.down.circle"
+        case .record: "record.circle"
         }
     }
 
@@ -63,6 +66,8 @@ enum NookWidgetKind: String, CaseIterable, Codable, Identifiable, Sendable {
     /// that asks a server for anything. The design kit stays off as a
     /// tool for one kind of work, and it holds a global shortcut once on.
     /// Link to MP3 stays off because it runs programs on the user's Mac.
+    /// Record stays off because it holds a global shortcut, and recording the
+    /// screen is a thing to ask for.
     static let defaultEnabled: [NookWidgetKind] = [.media, .calendar, .todo, .notes, .tray, .timer]
 }
 
@@ -109,7 +114,7 @@ final class NookModel {
     let calendar: NookCalendarService
     let reminders: NookRemindersService
     let todo: NookTodoHub
-    let notes: NookNotesService
+    let notes: NookNotesStore
     let tray: NookTrayStore
     let timer: NookFocusTimer
     /// The photo booth in the mirror.
@@ -126,6 +131,8 @@ final class NookModel {
     let linkAudio: NookLinkAudioService
     /// Whether this build offers Link to MP3, read once when the model is made.
     let offersLinkAudio: Bool
+    /// Screen recording with an optional face cam bubble.
+    let record: NookRecordModel
     /// Dominant album-art color for the music halo.
     let artworkTint = NookArtworkTintService()
 
@@ -172,6 +179,12 @@ final class NookModel {
     var isMirrorOn = false {
         didSet {
             guard isMirrorOn != oldValue else { return }
+            // The face cam bubble has the camera while a recording needs it.
+            // Only one of the two uses it at a time.
+            if isMirrorOn, record.isFaceCamUp {
+                isMirrorOn = false
+                return
+            }
             // Mirror off closes the sticker picker here and not only when
             // its view goes away, which can be late or never.
             if !isMirrorOn { stopDecoratingMirror() }
@@ -196,6 +209,11 @@ final class NookModel {
     }
 
     var isAddingEvent: Bool { isEventEditorOpen }
+
+    /// A picker that hangs off the island: the tray's share menu or the to-do
+    /// date popover. A click, a swipe or a drifting pointer must not close the
+    /// island under one, which would pull it away mid-choice.
+    var hasOpenPicker: Bool { tray.isSharePickerOpen || todo.isPickingDate }
 
     /// What the editor holds. Only the editor reads it, which keeps a
     /// keystroke from re-rendering the whole page.
@@ -287,7 +305,12 @@ final class NookModel {
     }
 
     func forgetDrafts() {
+        // A note being typed is saved and closed, not forgotten (D70).
+        notes.islandClosed()
         unsavedDrafts.removeAll()
+        // One that could not be saved is still held, and the island stays
+        // open for it.
+        if notes.holdsUnsavedDraft { setDraft(.note, isUnsaved: true) }
         // A name question of the design card is open before anything is typed
         // in it, and goes where the lines go.
         design.endNaming()
@@ -323,6 +346,10 @@ final class NookModel {
     /// pop animation and mute switch without owning the app model.
     @ObservationIgnored var onTransient: (() -> Void)?
     @ObservationIgnored var isSoundMuted: () -> Bool = { false }
+    /// True while the island is open, which draws the open island and not a
+    /// notice on the closed one. The app model installs this. It reads
+    /// observed state, which makes whatever watches it look again when the island closes.
+    @ObservationIgnored var isIslandOpen: () -> Bool = { false }
 
     /// Widgets shown on the Nook page, in order.
     var enabledWidgets: [NookWidgetKind] {
@@ -337,6 +364,9 @@ final class NookModel {
             design.widgetSwitched(enabledWidgets.contains(.design))
             // Link to MP3 stops what it is doing once it is off.
             linkAudio.widgetSwitched(enabledWidgets.contains(.linkAudio))
+            // Record holds its shortcut only while on, and finishes a
+            // recording that is under way when it is switched off.
+            record.widgetSwitched(enabledWidgets.contains(.record))
         }
     }
 
@@ -378,6 +408,10 @@ final class NookModel {
     @ObservationIgnored private var cachedArtwork: (key: String, image: NSImage)?
     @ObservationIgnored private var lingerTask: Task<Void, Never>?
     @ObservationIgnored private var transientTask: Task<Void, Never>?
+    /// Counts the notices put on the closed notch, and holds the number of
+    /// the last one that stayed up its whole time (`transientRanItsTime`).
+    @ObservationIgnored private var transientSerial = 0
+    @ObservationIgnored private var lastFinishedTransient = 0
     @ObservationIgnored private var hasStarted = false
 
     /// The three services default to the real ones. A test of permission
@@ -392,12 +426,13 @@ final class NookModel {
         reminders: NookRemindersService? = nil,
         todo: NookTodoHub? = nil,
         media: MediaRemoteService? = nil,
-        notes: NookNotesService? = nil,
+        notes: NookNotesStore? = nil,
         tray: NookTrayStore? = nil,
         weather: NookWeatherService? = nil,
         design: NookDesignKit? = nil,
         linkAudio: NookLinkAudioService? = nil,
         volume: NookVolumeMonitor? = nil,
+        record: NookRecordModel? = nil,
         defaults: UserDefaults = .standard,
         looksForImportedGIF: Bool = true,
         asksMacOSForAccess: Bool = true
@@ -413,8 +448,20 @@ final class NookModel {
         self.calendar = calendar ?? NookCalendarService(defaults: defaults)
         self.reminders = reminders ?? NookRemindersService(defaults: defaults)
         self.todo = todo ?? NookTodoHub(defaults: defaults)
-        self.notes = notes ?? NookNotesService(defaults: defaults)
-        self.tray = tray ?? NookTrayStore(defaults: defaults)
+        self.notes = notes ?? NookNotesStore.make(defaults: defaults)
+        let trayStore = tray ?? NookTrayStore(defaults: defaults)
+        self.tray = trayStore
+        // A finished recording goes to the tray as a link, not a copy: it can
+        // be gigabytes. A model on a store of its own records into a folder of
+        // its own, which keeps a test from making `Movies/Hangover`.
+        self.record = record ?? NookRecordModel(
+            recorder: NookScreenRecorder(),
+            defaults: defaults,
+            folder: defaults === UserDefaults.standard
+                ? NookRecordFiles.folder()
+                : FileManager.default.temporaryDirectory.appendingPathComponent("NookRecord-\(UUID().uuidString)", isDirectory: true),
+            onFinished: { trayStore.add(fileAt: $0, linking: true) }
+        )
         timer = NookFocusTimer(defaults: defaults)
         photoBooth = NookPhotoBoothModel(defaults: defaults)
         self.volume = volume ?? NookVolumeMonitor(defaults: defaults)
@@ -480,6 +527,7 @@ final class NookModel {
         volume.start(nook: self)
         weather.start(nook: self)
         design.start(nook: self)
+        record.start(nook: self)
         startLinkAudioIfOffered()
         artworkTint.start(nook: self)
         observeScreenGoingAway()
@@ -696,7 +744,8 @@ final class NookModel {
             ),
             media: closedMediaActivity,
             preferences: preferences,
-            isHidden: isHidden
+            isHidden: isHidden,
+            recording: record.closedRecording(now: Date())
         )
     }
 
@@ -718,6 +767,8 @@ final class NookModel {
     /// `pops` false changes a notice that is already up without popping
     /// the island again, for a stream of them such as a held volume key.
     /// `level` draws a ring with that number in place of the text.
+    /// Returns the notice's number, for `transientRanItsTime`.
+    @discardableResult
     func showTransient(
         symbol: String,
         text: String,
@@ -725,15 +776,25 @@ final class NookModel {
         level: Int? = nil,
         duration: Duration = .seconds(4),
         pops: Bool = true
-    ) {
+    ) -> Int {
         transientTask?.cancel()
+        transientSerial += 1
+        let serial = transientSerial
         transient = NookTransientActivity(symbol: symbol, text: text, tint: tint, level: level)
         if pops { onTransient?() }
         transientTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: duration)
             guard !Task.isCancelled else { return }
+            self?.lastFinishedTransient = serial
             self?.transient = nil
         }
+        return serial
+    }
+
+    /// True when the notice with this number stayed on the closed notch for
+    /// its whole time, with no later notice taking its place.
+    func transientRanItsTime(_ serial: Int) -> Bool {
+        lastFinishedTransient == serial
     }
 
     // MARK: - Working with the agents
@@ -812,15 +873,6 @@ final class NookModel {
             guard !item.isCompleted, let due = item.dueDate else { return false }
             return cal.isDate(due, inSameDayAs: day)
         }
-    }
-
-    /// Starts a line for an event in Quick Notes.
-    func startNote(for event: NookCalendarEvent) {
-        let when = event.isAllDay
-            ? event.start.formatted(.dateTime.month(.abbreviated).day())
-            : event.start.formatted(.dateTime.month(.abbreviated).day().hour().minute())
-        notes.append("\(event.title) (\(when)): ")
-        showTransient(symbol: "note.text", text: "Note started", duration: .seconds(3))
     }
 
     /// Whether the compact bar on the agents page has anything to say.

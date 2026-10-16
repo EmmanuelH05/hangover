@@ -26,7 +26,8 @@ struct OnboardingFeaturesTourTests {
             features: OnboardingFeatureReading = OnboardingFeatureReading()
         ) {
             state.nookPlacements = kinds.map { NookWidgetPlacement(kind: $0, size: .medium) }
-            state.enabledWidgets = Set(NookWidgetKind.allCases)
+            // Every switch is on but Record's, which starts off like the app's.
+            state.enabledWidgets = Set(NookWidgetKind.allCases).subtracting([.record])
             state.features = features
         }
 
@@ -112,7 +113,7 @@ struct OnboardingFeaturesTourTests {
         tour.actions.nextFeature()
         tour.actions.nextFeature()
         #expect(tour.state.featureKind == .timer)
-        #expect(tour.state.featureWalk.position == 3 && tour.state.featureWalk.count == 6, "four widgets, the kit and Link to MP3")
+        #expect(tour.state.featureWalk.position == 3 && tour.state.featureWalk.count == 7, "four widgets, Record, the kit and Link to MP3")
 
         tour.actions.previousFeature()
         #expect(tour.state.featureKind == .media)
@@ -150,11 +151,13 @@ struct OnboardingFeaturesTourTests {
         let world = World(kinds: [.media, .notes])
         let tour = Self.tour(world)
         tour.next()
-        #expect(tour.state.featureWalk.kinds == [.media, .notes, .design, .linkAudio])
+        #expect(tour.state.featureWalk.kinds == [.media, .notes, .record, .design, .linkAudio])
         tour.actions.nextFeature()
         #expect(tour.state.featureKind == .notes)
         tour.actions.nextFeature()
-        #expect(tour.state.featureKind == .design, "the kit comes after the widgets on the page")
+        #expect(tour.state.featureKind == .record, "Record comes after the widgets on the page")
+        tour.actions.nextFeature()
+        #expect(tour.state.featureKind == .design, "the kit comes after Record")
         tour.actions.nextFeature()
         #expect(tour.state.featureKind == .linkAudio, "Link to MP3 is the last step")
         tour.actions.nextFeature()
@@ -766,8 +769,8 @@ struct OnboardingFeaturesRenderTests {
 
     @Test(arguments: OnboardingTestSize.narrowWidths)
     func theFeaturesPageDrawsEachWidgetAtBothWidths(width: CGFloat) throws {
-        // Every widget the walk can hold: the ones the tour knows and the kit,
-        // which is the last step. Link to MP3 has no page of its own here.
+        // Every widget the walk can hold: the ones the tour knows, Record and the kit,
+        // which come last. Link to MP3 is the very last step.
         var pictures: [Data] = []
         for kind in OnboardingFeatureWalk.everyKind {
             pictures.append(try render("07-features-\(kind.rawValue)-\(Int(width))") {
@@ -805,12 +808,12 @@ struct OnboardingFeaturesRenderTests {
         #expect(all.featureWalk.kinds.count == OnboardingFeatureWalk.everyKind.count)
     }
 
-    @Test func noWidgetsLeavesTheKitAndLinkToMP3AsTheOnlySteps() throws {
+    @Test func noWidgetsLeavesRecordTheKitAndLinkToMP3AsTheOnlySteps() throws {
         var none = Self.state(.media, kinds: [])
         none.nookPlacements = []
         _ = try render("07-features-none-320") { tourView(none, width: 320) }
-        #expect(none.featureWalk.kinds == [.design, .linkAudio])
-        #expect(none.featureWalk.current == .design && none.featureWalk.count == 2)
+        #expect(none.featureWalk.kinds == [.record, .design, .linkAudio])
+        #expect(none.featureWalk.current == .record && none.featureWalk.count == 3)
     }
 
     @Test func thePageIsTheNarrowWindowsSize() throws {

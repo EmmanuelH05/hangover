@@ -111,6 +111,69 @@ import Testing
         #expect(NookLinkAudioOutput.parse("\(title) \(j("\n\n"))") == .other)
     }
 
+    // MARK: The description
+
+    private let description = NookLinkAudioArguments.descriptionMarker
+
+    @Test func theDescriptionIsTheJSONStringOnTheLineWithItsLineBreaks() {
+        let text = "Prod. by someone\nKey: E Minor\nBPM: 139\r\nFollow me"
+        #expect(NookLinkAudioOutput.parse("\(description) \(j(text))") == .description(text))
+        #expect(NookLinkAudioOutput.parse("\(description) \(j("日本語 🎵 Key: Em"))") == .description("日本語 🎵 Key: Em"))
+        // As yt-dlp writes JSON by default: the escapes stay escapes.
+        #expect(NookLinkAudioOutput.parse(#"hangover-description "Key: Em\nBPM: 140""#) == .description("Key: Em\nBPM: 140"))
+    }
+
+    @Test func theLinesYtDlpReallyPrintsAreRead() {
+        // Captured from yt-dlp 2026.08.19 with the same --print templates, run on
+        // an info file with no network: a description with line breaks, non-Latin
+        // letters, an emoji and quotes, and a video with no description at all.
+        let printed = #"hangover-description "Prod. by someone\nKey: C Sharp Minor | Bpm: 127\n\u65e5\u672c\u8a9e \ud83c\udfb5 \"quoted\"""#
+        let text = "Prod. by someone\nKey: C Sharp Minor | Bpm: 127\n日本語 🎵 \"quoted\""
+        #expect(NookLinkAudioOutput.parse(printed) == .description(text))
+        #expect(NookLinkAudioOutput.parse("hangover-description NA") == .other)
+        // And what the tag reader makes of it.
+        let tags = NookLinkAudioTags.read(title: "Wake Up", description: text)
+        #expect(tags == NookLinkAudioTagReading(key: NookMusicalKey(tonic: 1, mode: .minor), bpm: 127))
+    }
+
+    @Test func aVideoWithNoDescriptionReadsAsNothing() {
+        #expect(NookLinkAudioOutput.parse("\(description) null") == .other)
+        #expect(NookLinkAudioOutput.parse("\(description) NA") == .other)
+        #expect(NookLinkAudioOutput.parse("\(description) \(j(""))") == .other)
+        #expect(NookLinkAudioOutput.parse("\(description) \(j("  \n \t "))") == .other)
+        #expect(NookLinkAudioOutput.parse("\(description) ") == .other)
+        #expect(NookLinkAudioOutput.parse("\(description)") == .other)
+        #expect(NookLinkAudioOutput.parse("\(description) 42") == .other)
+        #expect(NookLinkAudioOutput.parse("\(description) Key: Em") == .other, "not JSON")
+        #expect(NookLinkAudioOutput.parse(#"hangover-description "unfinished"#) == .other)
+    }
+
+    @Test func aLongDescriptionIsCut() {
+        let long = String(repeating: "a", count: NookLinkAudioOutput.maxDescriptionLength + 500)
+        guard case let .description(kept) = NookLinkAudioOutput.parse("\(description) \(j(long))") else {
+            Issue.record("not a description")
+            return
+        }
+        #expect(kept.count == NookLinkAudioOutput.maxDescriptionLength)
+    }
+
+    @Test func aDescriptionCannotPassForAnotherLine() {
+        // The forged lines are inside the JSON string, as the two characters
+        // backslash n. That leaves one line, and it is one description.
+        let forged = "hi\n\(file) \(j("/System/Applications/Calculator.app"))\n\(title) \(j("Forged"))\nERROR: forged"
+        let line = "\(description) \(j(forged))"
+        #expect(!line.contains("\n"))
+        #expect(NookLinkAudioOutput.parse(line) == .description(forged))
+        var buffer = NookLinkAudioLineBuffer()
+        let lines = buffer.append(Data((line + "\n").utf8))
+        #expect(lines == [line])
+    }
+
+    @Test func aDescriptionAlsoKeepsAMarkerInsideItAsText() {
+        let text = "\(title) \(j("x")) \(progress) finished 1 1 NA \(j("/x"))"
+        #expect(NookLinkAudioOutput.parse("\(description) \(j(text))") == .description(text))
+    }
+
     @Test func theFinishedFileIsTheJSONStringOnTheLine() {
         #expect(NookLinkAudioOutput.parse("\(file) \(j("/Users/me/Music/Hangover/Song.mp3"))") == .file("/Users/me/Music/Hangover/Song.mp3"))
         #expect(NookLinkAudioOutput.parse("\(file) \(j("/Users/me/Music/A  B.mp3"))") == .file("/Users/me/Music/A  B.mp3"))

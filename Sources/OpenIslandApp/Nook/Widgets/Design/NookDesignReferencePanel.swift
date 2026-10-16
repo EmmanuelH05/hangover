@@ -74,12 +74,16 @@ final class NookDesignReferencePanelController: NSObject, NookDesignReferencePre
     private struct Entry {
         let panel: NookDesignReferencePanel
         let state: NookDesignPanelState
+        let onResize: @MainActor (CGSize) -> Void
         let onClose: @MainActor () -> Void
     }
 
     private var entries: [UUID: Entry] = [:]
     /// Where the pointer and the panel were when a drag began to move it.
     private var moveStart: (id: UUID, pointer: CGPoint, origin: CGPoint)?
+    /// The size a panel had when the user began to drag its edge. A drag
+    /// that ends where it began is not worth remembering.
+    private var liveResizeStart: [UUID: CGSize] = [:]
 
     // MARK: Rules that need AppKit's types
 
@@ -101,6 +105,7 @@ final class NookDesignReferencePanelController: NSObject, NookDesignReferencePre
         _ reference: NookDesignReference,
         image: CGImage,
         slot: Int,
+        onResize: @escaping @MainActor (CGSize) -> Void,
         onClose: @escaping @MainActor () -> Void
     ) {
         if let existing = entries[reference.id] {
@@ -108,10 +113,12 @@ final class NookDesignReferencePanelController: NSObject, NookDesignReferencePre
             return
         }
         let id = reference.id
-        let state = NookDesignPanelState(reference: reference, image: image)
         let screen = Self.screenUnderPointer()
         let visible = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1280, height: 720)
-        let size = NookDesignPanelRules.initialSize(pictureAspect: reference.aspectRatio, available: Self.room(in: visible))
+        let size = NookDesignPanelRules.openingSize(
+            remembered: reference.panelSize, pictureAspect: reference.aspectRatio, available: Self.room(in: visible)
+        )
+        let state = NookDesignPanelState(reference: reference, image: image, panelSize: size)
         let origin = NookDesignPanelRules.frameOrigin(slot: slot, size: size, in: visible)
 
         let panel = NookDesignReferencePanel(
@@ -134,9 +141,7 @@ final class NookDesignReferencePanelController: NSObject, NookDesignReferencePre
         panel.isMovableByWindowBackground = false
         panel.backgroundColor = .black
         panel.animationBehavior = Motion.prefersReducedMotion ? .none : .utilityWindow
-        panel.minSize = NookDesignPanelRules.panelSize(
-            width: NookDesignPanelRules.minimumWidth, pictureAspect: reference.aspectRatio
-        )
+        panel.minSize = CGSize(width: NookDesignPanelRules.minimumWidth, height: NookDesignPanelRules.minimumHeight)
         apply(isPinned: state.isPinned, to: panel)
 
         let actions = NookDesignPanelActions(
@@ -145,7 +150,8 @@ final class NookDesignReferencePanelController: NSObject, NookDesignReferencePre
             close: { [weak self] in self?.close(id) },
             focus: { [weak self] in self?.entries[id]?.panel.makeKey() },
             beginMove: { [weak self] in self?.beginMove(id) },
-            move: { [weak self] in self?.continueMove(id) }
+            move: { [weak self] in self?.continueMove(id) },
+            matchShape: { [weak self] in self?.matchShape(id) }
         )
         let hosting = NookDesignPanelHostingView(rootView: NookDesignPanelView(state: state, actions: actions))
         // The panel's size is the rules' to decide, never the view's.
@@ -160,7 +166,7 @@ final class NookDesignReferencePanelController: NSObject, NookDesignReferencePre
         panel.delegate = self
         panel.setFrame(CGRect(origin: origin, size: size), display: false)
 
-        entries[id] = Entry(panel: panel, state: state, onClose: onClose)
+        entries[id] = Entry(panel: panel, state: state, onResize: onResize, onClose: onClose)
         // Shown without being made key: the keyboard stays where it is.
         panel.orderFrontRegardless()
     }
@@ -182,15 +188,31 @@ final class NookDesignReferencePanelController: NSObject, NookDesignReferencePre
 
     // MARK: NSWindowDelegate
 
+    /// Any width and height the user drags to, within the minimums and the
+    /// screen. The picture is fitted inside the area, never stretched.
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
-        guard let entry = entry(for: sender) else { return frameSize }
+        guard entry(for: sender) != nil else { return frameSize }
         let visible = sender.screen?.visibleFrame ?? CGRect(origin: .zero, size: frameSize)
-        return NookDesignPanelRules.resizedSize(
-            proposed: frameSize,
-            current: sender.frame.size,
-            pictureAspect: entry.state.reference.aspectRatio,
-            available: visible.size
-        )
+        return NookDesignPanelRules.resizedSize(proposed: frameSize, available: visible.size)
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, let entry = entry(for: window) else { return }
+        entry.state.resize(to: window.frame.size)
+    }
+
+    func windowWillStartLiveResize(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow,
+              let id = entries.first(where: { $0.value.panel === window })?.key else { return }
+        liveResizeStart[id] = window.frame.size
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow,
+              let id = entries.first(where: { $0.value.panel === window })?.key,
+              let entry = entries[id] else { return }
+        let started = liveResizeStart.removeValue(forKey: id)
+        if window.frame.size != started { entry.onResize(window.frame.size) }
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
@@ -206,11 +228,30 @@ final class NookDesignReferencePanelController: NSObject, NookDesignReferencePre
               let id = entries.first(where: { $0.value.panel === window })?.key,
               let entry = entries.removeValue(forKey: id) else { return }
         if moveStart?.id == id { moveStart = nil }
+        liveResizeStart[id] = nil
         entry.panel.delegate = nil
         entry.onClose()
     }
 
     // MARK: Controls
+
+    /// Sends the panel back to its picture's shape at the width it has,
+    /// held to the same minimums and screen as a drag. The size is
+    /// remembered like a drag's.
+    private func matchShape(_ id: UUID) {
+        guard let entry = entries[id] else { return }
+        let panel = entry.panel
+        let visible = panel.screen?.visibleFrame
+            ?? Self.screenUnderPointer()?.visibleFrame
+            ?? CGRect(x: 0, y: 0, width: 1280, height: 720)
+        let size = NookDesignPanelRules.matchedSize(
+            current: panel.frame.size, pictureAspect: entry.state.reference.aspectRatio, available: visible.size
+        )
+        let frame = NookDesignPanelRules.frame(keepingTopLeftOf: panel.frame, resizedTo: size, in: visible)
+        guard frame != panel.frame else { return }
+        panel.setFrame(frame, display: true, animate: !Motion.prefersReducedMotion)
+        entry.onResize(size)
+    }
 
     private func setPinned(_ pinned: Bool, for id: UUID) {
         guard let entry = entries[id] else { return }

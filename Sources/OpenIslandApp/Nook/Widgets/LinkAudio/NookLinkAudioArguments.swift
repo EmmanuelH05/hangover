@@ -8,6 +8,7 @@ enum NookLinkAudioArguments {
     /// other line `yt-dlp` writes is ignored, apart from its errors.
     static let progressMarker = "hangover-progress"
     static let titleMarker = "hangover-title"
+    static let descriptionMarker = "hangover-description"
     static let fileMarker = "hangover-file"
 
     /// The file name `yt-dlp` is given inside the folder. `yt-dlp` fills in
@@ -49,8 +50,8 @@ enum NookLinkAudioArguments {
     /// - `--newline`, `--progress`, `--no-simulate`: `--print` makes `yt-dlp`
     ///   quiet and a dry run, and these undo both.
     /// - `--ffmpeg-location`: the folder of the `ffmpeg` that was found.
-    /// - `--print`: the title once it is known, and the finished file, both
-    ///   as JSON.
+    /// - `--print`: the title and the description once they are known, and the
+    ///   finished file, all as JSON. A video with no description prints `NA`.
     static func make(link: NookLinkAudioLink, folder: URL, ffmpegDirectory: URL) -> [String] {
         [
             "--ignore-config",
@@ -67,6 +68,7 @@ enum NookLinkAudioArguments {
             "--ffmpeg-location", ffmpegDirectory.path,
             "-o", outputTemplate(folder: folder),
             "--print", "before_dl:\(titleMarker) %(title)j",
+            "--print", "before_dl:\(descriptionMarker) %(description)j",
             "--print", "after_move:\(fileMarker) %(filepath)j",
             "--",
             link.text,

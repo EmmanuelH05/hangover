@@ -160,12 +160,18 @@ struct NotionDataSource: Decodable, Equatable, Sendable {
 
 struct NotionDateValue: Decodable, Equatable, Sendable {
     let start: String?
+    /// The last day of a date range. Nil for a single date.
+    let end: String?
 
-    init(start: String?) { self.start = start }
+    init(start: String?, end: String? = nil) {
+        self.start = start
+        self.end = end
+    }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: NotionAnyKey.self)
         start = container.lenient(String.self, "start")
+        end = container.lenient(String.self, "end")
     }
 }
 

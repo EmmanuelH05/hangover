@@ -223,6 +223,12 @@ private struct NookLinkAudioSampleContent: View {
     let size: NookWidgetSize
 
     private static let link = try? NookLinkAudioLink.check("https://example.com/track").get()
+    /// A key the producer wrote and a guessed tempo. The app guesses no key
+    /// from the sound (D66).
+    private static let sampleFindings = NookLinkAudioFindings(
+        key: NookLinkAudioFound(value: NookMusicalKey(tonic: 9, mode: .minor), isGuess: false),
+        bpm: NookLinkAudioFound(value: 92, isGuess: true)
+    )
 
     var body: some View {
         let lang = LanguageManager.shared
@@ -249,7 +255,13 @@ private struct NookLinkAudioSampleContent: View {
                 )
                 if size != .small {
                     NookLinkAudioRow(
-                        job: NookLinkAudioJob(id: UUID(), link: link, title: "Sample interview", phase: .done(nil)),
+                        job: NookLinkAudioJob(
+                            id: UUID(),
+                            link: link,
+                            title: "Sample interview",
+                            phase: .done(nil),
+                            findings: Self.sampleFindings
+                        ),
                         isCompact: false
                     )
                 }

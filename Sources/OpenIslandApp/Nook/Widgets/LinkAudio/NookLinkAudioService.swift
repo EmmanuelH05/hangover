@@ -51,10 +51,14 @@ final class NookLinkAudioService {
     private(set) var problem: NookLinkAudioProblem?
     /// Why the last folder that was chosen was not used, for Settings.
     private(set) var folderProblem: NookLinkAudioFolderRefusal?
+    /// Whether a finished download is looked at for its key and tempo.
+    /// On unless the user turned it off.
+    private(set) var findsKeyAndTempo: Bool
 
     @ObservationIgnored let runner: any NookLinkAudioRunner
     @ObservationIgnored let files: any NookLinkAudioFiles
     @ObservationIgnored let clipboard: any NookLinkAudioClipboard
+    @ObservationIgnored let analyzer: any NookLinkAudioAnalyzing
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let isExecutable: (String) -> Bool
     @ObservationIgnored private let finder: (URL) -> Void
@@ -64,6 +68,12 @@ final class NookLinkAudioService {
     @ObservationIgnored private var quitObserver: (any NSObjectProtocol)?
     /// The run that is going, and what it has said until now.
     @ObservationIgnored private var active: ActiveRun?
+    /// The analyses that are going or waiting, by job. Each takes itself out
+    /// when it ends, and a cancelled one stays until it has stopped.
+    @ObservationIgnored private var analyses: [UUID: Task<Void, Never>] = [:]
+    /// The analysis started last. The next one waits for it, which makes the
+    /// analyses run one after another.
+    @ObservationIgnored private var lastAnalysis: Task<Void, Never>?
 
     private struct ActiveRun {
         let id: UUID
@@ -72,6 +82,15 @@ final class NookLinkAudioService {
         let folder: URL
         var run: (any NookLinkAudioRun)?
         var file: URL?
+        /// Whether `yt-dlp` wrote a file of its own for this job. A progress
+        /// line that names one is the sign of it: a download that was skipped
+        /// (`--no-overwrites` found the MP3) prints none, and the file it then
+        /// names was there before the job.
+        var didDownload = false
+        /// The video's own title and description, for the key and tempo tags.
+        /// The title on the row is cut and this one is not.
+        var title: String?
+        var description: String?
         var lastError: String?
         var isCancelling = false
     }
@@ -88,6 +107,7 @@ final class NookLinkAudioService {
         runner: any NookLinkAudioRunner = NookLinkAudioProcessRunner(),
         files: any NookLinkAudioFiles = NookLinkAudioSystemFiles(),
         clipboard: any NookLinkAudioClipboard = NookLinkAudioSystemClipboard(),
+        analyzer: any NookLinkAudioAnalyzing = NookLinkAudioSystemAnalyzer(),
         isExecutable: @escaping (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) },
         showInFinder: @escaping (URL) -> Void = NookLinkAudioService.showInSystemFinder,
         environment: [String: String] = ProcessInfo.processInfo.environment,
@@ -99,6 +119,8 @@ final class NookLinkAudioService {
         self.runner = runner
         self.files = files
         self.clipboard = clipboard
+        self.analyzer = analyzer
+        findsKeyAndTempo = defaults.object(forKey: Self.findsKeyDefaultsKey) as? Bool ?? true
         self.isExecutable = isExecutable
         finder = showInFinder
         baseEnvironment = environment
@@ -132,6 +154,7 @@ final class NookLinkAudioService {
             runner: NookLinkAudioRefusingRunner(),
             files: NookLinkAudioSystemFiles(),
             clipboard: NookLinkAudioEmptyClipboard(),
+            analyzer: NookLinkAudioRefusingAnalyzer(),
             isExecutable: { _ in false },
             showInFinder: { _ in }
         )
@@ -175,6 +198,19 @@ final class NookLinkAudioService {
         folder = url
         defaults.set(url.path, forKey: NookLinkAudioFolderRule.defaultsKey)
         return nil
+    }
+
+    // MARK: Key and tempo setting
+
+    static let findsKeyDefaultsKey = "nook.linkAudio.findsKeyAndTempo"
+
+    /// Turns the search for a key and tempo on or off. It reaches the
+    /// downloads that finish after it, not the ones already saved.
+    func setFindsKeyAndTempo(_ isOn: Bool) {
+        guard isOn != findsKeyAndTempo else { return }
+        findsKeyAndTempo = isOn
+        defaults.set(isOn, forKey: Self.findsKeyDefaultsKey)
+        if !isOn { cancelAnalyses() }
     }
 
     // MARK: Adding
@@ -224,6 +260,7 @@ final class NookLinkAudioService {
     /// the process end.
     func stopForQuit() {
         queue.removeAllWaiting()
+        cancelAnalyses()
         guard let current = active, let job = queue.running, job.id == current.id else { return }
         active = nil
         queue.updateRunning(job.id) { $0.phase = .cancelling }
@@ -236,6 +273,7 @@ final class NookLinkAudioService {
     func widgetSwitched(_ isOn: Bool) {
         guard !isOn else { return }
         queue.removeAllWaiting()
+        cancelAnalyses()
         queue.clearFinished()
         show(nil)
         if let id = queue.running?.id { cancel(id) }
@@ -326,13 +364,17 @@ final class NookLinkAudioService {
             // The file named is the one a cancel may remove. It has to be a
             // file in the job's folder.
             let written = fileName.flatMap { NookLinkAudioFolderRule.directChild($0, of: current.folder) }
+            if written != nil { active?.didDownload = true }
             queue.updateRunning(id) { job in
                 if let written { job.writingFileName = written.path }
                 guard let next = Self.phase(after: job.phase, fraction: fraction, isDownloadDone: isDownloadDone) else { return }
                 job.phase = next
             }
         case let .title(title):
+            active?.title = title
             queue.updateRunning(id) { $0.title = String(title.prefix(Self.maxTitleLength)) }
+        case let .description(text):
+            active?.description = text
         case let .file(path):
             // The finished file is believed only when it is in the job's folder.
             if let file = NookLinkAudioFolderRule.directChild(path, of: current.folder) { active?.file = file }
@@ -365,10 +407,93 @@ final class NookLinkAudioService {
             queue.dropRunning(id)
         } else if exit.isSuccess {
             queue.finishRunning(id, as: .done(finishedRun.file))
+            startAnalysis(
+                of: id,
+                file: finishedRun.file,
+                didDownload: finishedRun.didDownload,
+                title: finishedRun.title,
+                description: finishedRun.description
+            )
         } else {
             queue.finishRunning(id, as: .failed(NookLinkAudioFailure.reason(forErrorLine: finishedRun.lastError)))
         }
         startNextIfIdle()
+    }
+
+    // MARK: Key and tempo
+
+    /// Starts the search for the key and tempo of a file that was just
+    /// saved. The row is already done: the search runs off the main actor,
+    /// and its answer comes back to `finishAnalysis`. The searches run one
+    /// after another, each waiting for the one started before it, which keeps
+    /// two quick finishes from decoding two songs at once. Nothing starts with
+    /// the setting off or without a file. `didDownload` is whether this job
+    /// wrote the file.
+    private func startAnalysis(of id: UUID, file: URL?, didDownload: Bool, title: String?, description: String?) {
+        guard findsKeyAndTempo, let file else { return }
+        let analyzer = analyzer
+        let previous = lastAnalysis
+        let task = Task { [weak self] in
+            await previous?.value
+            var findings: NookLinkAudioFindings?
+            // A cancel that came while this one waited leaves nothing to search.
+            if !Task.isCancelled {
+                findings = await analyzer.analyze(file: file, title: title, description: description)
+            }
+            guard let self else { return }
+            analyses[id] = nil
+            // An answer that was cancelled on its way is dropped.
+            if let findings, !Task.isCancelled {
+                finishAnalysis(of: id, file: file, didDownload: didDownload, findings: findings)
+            }
+        }
+        analyses[id] = task
+        lastAnalysis = task
+    }
+
+    /// Gives the row its key and tempo and puts them in the file's name, when
+    /// this job wrote the file. A file it did not write, because `yt-dlp` found
+    /// the MP3 already in the folder and skipped the download, is never moved
+    /// or trashed: the row points at the file with the new name when there is
+    /// one, and otherwise shows what was found and leaves the name as it is.
+    /// For a file the job wrote, when the new name is taken, which is the same
+    /// link fetched again (`yt-dlp` no longer finds the renamed file and saved
+    /// a second copy), the copy just saved goes to the Trash and the row points
+    /// at the file already there. A file that cannot be moved stays where it
+    /// is, and the row still shows what was found.
+    private func finishAnalysis(of id: UUID, file: URL, didDownload: Bool, findings: NookLinkAudioFindings) {
+        guard findsKeyAndTempo, !findings.isEmpty else { return }
+        let shown = rename(file, with: findings, didDownload: didDownload)
+        queue.updateFinished(id) { job in
+            job.findings = findings
+            if case .done = job.phase { job.phase = .done(shown) }
+        }
+    }
+
+    /// Where the file is after the rename: the new name when it was moved or
+    /// when the file with that name is already there, and `file` otherwise.
+    private func rename(_ file: URL, with findings: NookLinkAudioFindings, didDownload: Bool) -> URL {
+        guard let target = NookLinkAudioName.renamed(file, with: findings) else { return file }
+        // Only a file this job wrote is moved or trashed. A file that is gone
+        // may have been renamed by another job of the same link.
+        guard didDownload, files.exists(file) else { return files.exists(target) ? target : file }
+        if files.exists(target) {
+            return (try? files.trash(file)) != nil ? target : file
+        }
+        return (try? files.move(file, to: target)) != nil ? target : file
+    }
+
+    /// Cancels every search, the ones waiting included. A cancelled search
+    /// stays listed until it has stopped, which is what `finishAnalyses`
+    /// waits for.
+    private func cancelAnalyses() {
+        for task in analyses.values { task.cancel() }
+    }
+
+    /// Waits for every search that is going, cancelled ones too. For tests,
+    /// which have no other way to know the answer has come back.
+    func finishAnalyses() async {
+        for task in Array(analyses.values) { await task.value }
     }
 
     /// Removes what a cancelled job wrote into the folder it ran in.

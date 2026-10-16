@@ -99,5 +99,6 @@ struct OnboardingCalendarLookPicker: View {
             .padding(10)
         }
         .accessibilityLabel(name)
+        .demoTarget(.tourCalendarLook(style))
     }
 }

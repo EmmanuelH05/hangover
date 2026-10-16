@@ -1291,6 +1291,7 @@ final class AppModel {
         nook.onDisplayPreferencesChanged = { [weak self] in self?.refreshOverlayPlacementIfVisible() }
         nook.activeProfile = { [weak self] in self?.activeAppearanceProfile ?? .topBar }
         nook.isSoundMuted = { [weak self] in self?.isSoundMuted ?? false }
+        nook.isIslandOpen = { [weak self] in self?.notchStatus == .opened }
         nook.widgetsInUserView = { [weak self] in self?.nookWidgetsInUserView ?? [] }
         // The volume and brightness keys go back to macOS while the closed
         // notch cannot show what they did.
@@ -1308,6 +1309,8 @@ final class AppModel {
             nook.presentRingLight(nook.isMirrorOn && nook.isRingLightOn)
         }
         wireDesignKit()
+        wireRecord()
+        wireNotes()
         nook.start()
         SystemMotionMonitor.shared.start()
         IslandScreenPresence.shared.start()
@@ -1599,7 +1602,7 @@ final class AppModel {
     var swipeRefusals: IslandSwipeRefusals {
         IslandSwipeRefusals(
             blocksDismiss: shouldBlockDismissWhileAwaitingDecision,
-            hasOpenPicker: nook.tray.isSharePickerOpen,
+            hasOpenPicker: nook.hasOpenPicker,
             holdsOpenForTour: tourHoldsIslandOpen
         )
     }
@@ -1833,12 +1836,18 @@ final class AppModel {
             mirrorHeight: mirrorHeight,
             mirrorWidth: mirrorWidth,
             showsEventEditor: nook.isEventEditorOpen && !placements.isEmpty,
+            showsGIFOptions: nook.tray.gifSourceItem != nil && !placements.isEmpty,
+            showsConvertOptions: nook.tray.convertSourceItem != nil && !placements.isEmpty,
             calendarExtraRows: calendarGrows ? nook.calendarExtraRows : 0,
             showsJoinBar: nook.meetingPrompt != nil,
             showsMirrorDecorationPicker: NookMirrorDecorationLayout.isPickerShown(
                 isDecorating: nook.isDecoratingMirror,
                 mirrorHeight: mirrorHeight
-            )
+            ),
+            showsNoteEditor: NookNoteEditorPlacement.resolve(
+                isOpen: nook.notes.isEditorOpen,
+                notesWidgetOnPage: placements.contains { $0.kind == .notes }
+            ) == .pinned
         )
     }
 

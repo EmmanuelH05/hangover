@@ -7,7 +7,10 @@ import AppKit
 /// desktop.
 @MainActor
 final class DemoBackdrop {
-    private final class Window: NSWindow {
+    /// A panel, like the island's. An ordinary window of an app in the
+    /// background stays off a full screen Space, which left it out of takes
+    /// made with a full screen app in front.
+    private final class Window: NSPanel {
         override var canBecomeKey: Bool { false }
         override var canBecomeMain: Bool { false }
 
@@ -23,7 +26,7 @@ final class DemoBackdrop {
     /// Nil when the picture cannot be read.
     init?(imagePath: String, screen: NSScreen) {
         guard let image = NSImage(contentsOfFile: imagePath) else { return nil }
-        let window = Window(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        let window = Window(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         window.level = DemoWindowLevels.island
         window.isOpaque = true
         window.backgroundColor = .black
@@ -70,6 +73,12 @@ enum DemoPointer {
     /// space, the origin at the bottom left of the main display.
     static func parkPoint(screenFrame: CGRect, mainDisplayHeight: CGFloat) -> CGPoint {
         CGPoint(x: screenFrame.maxX - inset, y: mainDisplayHeight - (screenFrame.minY + inset))
+    }
+
+    /// The same corner in AppKit's space, where the drawn pointer starts
+    /// (D65).
+    static func parkPoint(screenFrame: CGRect) -> CGPoint {
+        CGPoint(x: screenFrame.maxX - inset, y: screenFrame.minY + inset)
     }
 
     /// Moves the pointer there. Warping needs no permission, and it sends

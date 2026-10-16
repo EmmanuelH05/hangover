@@ -137,8 +137,8 @@ extension AppModel {
             todoSource: nook.todo.selectedKind,
             isTodoSourceReady: nook.todo.source(reminders: nook.reminders).connection == .ready,
             todoSetup: todoConnector.setup(),
-            notesDestination: nook.notes.destination,
-            notesFilePath: (nook.notes.fileURL.path as NSString).abbreviatingWithTildeInPath,
+            notesSaveTo: nook.notes.saveTo,
+            notesFolderPath: (nook.notes.folderURL.path as NSString).abbreviatingWithTildeInPath,
             notesSavedCount: nook.notes.savedCount,
             weather: OnboardingWeatherSetup(reading: nook.weather),
             appliedTemplate: appliedTemplateID(for: profile),
@@ -307,7 +307,7 @@ extension AppModel {
                 Task { await connector.allowReminders() }
             },
             openRemindersSettings: { [weak self] in self?.nook.reminders.openSystemSettings() },
-            setNotesDestination: { [weak self] in self?.nook.notes.setDestination($0) },
+            setNotesSaveTo: { [weak self] in self?.nook.notes.setSaveTo($0) },
             chooseNotesFolder: { [weak self] in self?.chooseNotesFolderForTour() },
             showNotes: { [weak self] in self?.showTourNotes() },
             // The calls NookWeatherSettings makes. The search sends the typed
@@ -425,6 +425,7 @@ extension AppModel {
         default: .refused
         }
         return OnboardingFeatureReading(
+            isRecordBusy: nook.record.phase.isBusy,
             isMirrorOn: nook.isMirrorOn,
             isRingLightOn: nook.isRingLightOn,
             camera: onboardingCameraAccess,
@@ -469,8 +470,8 @@ extension AppModel {
         OnboardingTodoConnector(hub: nook.todo, reminders: nook.reminders, lang: lang)
     }
 
-    /// Opens the system folder chooser and keeps the notes file in the
-    /// folder picked, under its usual name. The panel is the app's own, like
+    /// Opens the system folder chooser and keeps the notes in the
+    /// folder picked. The panel is the app's own, like
     /// the one in Settings, and not part of the page.
     private func chooseNotesFolderForTour() {
         let panel = NSOpenPanel()
@@ -478,8 +479,10 @@ extension AppModel {
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
-        panel.directoryURL = nook.notes.fileURL.deletingLastPathComponent()
-        panel.prompt = lang.t("onboarding.notes.file.panelPrompt")
+        panel.directoryURL = NookNoteLocations.pickerStart(
+            home: FileManager.default.homeDirectoryForCurrentUser, current: nook.notes.folderURL
+        )
+        panel.prompt = lang.t("onboarding.notes.folder.panelPrompt")
         // The chooser opens under the island the tour holds open (D52).
         nook.systemPromptBegan()
         let answer = panel.runModal()
@@ -488,11 +491,13 @@ extension AppModel {
         nook.notes.setFolder(folder)
     }
 
-    /// The notes file in Finder, or the Notes app.
+    /// The notes folder in Finder, or the Notes app.
     private func showTourNotes() {
-        switch nook.notes.destination {
-        case .file:
-            NSWorkspace.shared.activateFileViewerSelecting([nook.notes.fileURL])
+        switch nook.notes.saveTo {
+        case .folder, .both:
+            // A folder never made is made, so there is something to show; one
+            // that is gone is not made again silently (N12).
+            nook.notes.revealFolder()
         case .appleNotes:
             NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Notes.app"))
         }

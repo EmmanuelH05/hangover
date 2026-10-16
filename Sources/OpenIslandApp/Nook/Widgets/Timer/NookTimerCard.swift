@@ -15,7 +15,8 @@ struct NookTimerCard: View {
         }
     }
     private static let chips = [15, 25, 50]
-    private static let entryHint = "Type minutes or 1:30 · Return"
+    /// Says what the typed text will start, live, so "1:30" is never a guess.
+    private var entryHint: String { NookTimerEntry.hint(for: entry.text ?? "", isInvalid: entry.isInvalid) }
     private static let idleHint = "Type a number to set your own"
 
     @Environment(\.nookWidgetSize) private var size
@@ -68,7 +69,7 @@ struct NookTimerCard: View {
             }
             Group {
                 if entry.isActive {
-                    hint(Self.entryHint)
+                    hint(entryHint)
                 } else {
                     progressLine
                 }
@@ -81,6 +82,7 @@ struct NookTimerCard: View {
                 }
                 .buttonStyle(NookTimerButtonStyle(prominent: true, width: nil))
                 .accessibilityLabel(timer.isRunning ? "Pause" : "Start")
+                .demoTarget(.timerStart)
                 Button(action: reset) {
                     Image(systemName: timer.pomodoro == nil ? "arrow.counterclockwise" : "stop.fill")
                 }
@@ -117,7 +119,7 @@ struct NookTimerCard: View {
 
             VStack(spacing: 4) {
                 if entry.isActive {
-                    hint(Self.entryHint)
+                    hint(entryHint)
                 } else if let round = timer.pomodoro {
                     roundStatus(round)
                 } else {
@@ -154,7 +156,7 @@ struct NookTimerCard: View {
                 }
                 Spacer(minLength: 0)
             }
-            hint(entry.isActive ? Self.entryHint : Self.idleHint)
+            hint(entry.isActive ? entryHint : Self.idleHint)
                 .opacity(entry.isActive || !timer.isActive ? 1 : 0)
         }
         .padding(.horizontal, 14)
@@ -297,6 +299,7 @@ struct NookTimerCard: View {
     private var textControls: some View {
         Button(timer.isRunning ? "Pause" : "Start", action: toggle)
             .buttonStyle(NookTimerButtonStyle(prominent: true, width: 56))
+            .demoTarget(.timerStart)
         Button(resetTitle, action: reset)
             .buttonStyle(NookTimerButtonStyle(prominent: false, width: 56))
     }

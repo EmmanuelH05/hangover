@@ -21,6 +21,13 @@ enum OnboardingMore: String, CaseIterable, Identifiable, Sendable {
     case booth
     /// The Weather widget, which starts off.
     case weather
+    /// The Record widget, which starts off: the screen, a window or an area,
+    /// with a face cam bubble, saved in Movies and dropped in the tray. The
+    /// page only tells. Nothing on it starts a recording.
+    case record
+    /// Converting a file in the tray: pictures, video and PDF. The tray
+    /// starts on, and the page tells how a file's Convert menu works.
+    case convert
     /// The lights that follow the beat, in depth: the Lasers and their reach.
     case lights
     /// The accent color of the app's selections and switches.
@@ -54,7 +61,8 @@ enum OnboardingMore: String, CaseIterable, Identifiable, Sendable {
     var needsAgents: Bool {
         switch self {
         case .usage, .quiet, .phone: true
-        case .mirror, .booth, .weather, .lights, .accent, .power, .volume, .screens, .sounds, .links, .startup, .updates: false
+        case .mirror, .booth, .weather, .record, .convert, .lights, .accent, .power, .volume, .screens, .sounds, .links, .startup,
+             .updates: false
         }
     }
 
@@ -67,8 +75,8 @@ enum OnboardingMore: String, CaseIterable, Identifiable, Sendable {
     /// macOS asks for, or what the feature leaves open.
     var hasNote: Bool {
         switch self {
-        case .mirror, .weather, .lights, .volume, .usage, .phone, .links: true
-        case .booth, .accent, .power, .quiet, .screens, .sounds, .startup, .updates: false
+        case .mirror, .weather, .record, .lights, .volume, .usage, .phone, .links: true
+        case .booth, .convert, .accent, .power, .quiet, .screens, .sounds, .startup, .updates: false
         }
     }
 
@@ -101,6 +109,8 @@ enum OnboardingMore: String, CaseIterable, Identifiable, Sendable {
         case .mirror: "camera.viewfinder"
         case .booth: "camera.aperture"
         case .weather: "cloud.sun.fill"
+        case .record: "record.circle"
+        case .convert: "arrow.triangle.2.circlepath"
         case .accent: "paintpalette.fill"
         case .lights: "sparkles"
         case .power: "bolt.fill"
@@ -134,6 +144,24 @@ enum OnboardingMore: String, CaseIterable, Identifiable, Sendable {
             + OnboardingAbility.weatherSource.proofs + [
                 .widget("Weather/NookWeatherSettings.swift", "Section(lang.t(\"nook.weather.title\"))"),
             ]
+        // Record stands on the code of the lines the features page tells, and
+        // on what the note says macOS asks: a screen or an area asks for Screen
+        // Recording, a picked window does not, and the voice asks for the
+        // microphone.
+        case .record: OnboardingAbility.recordTargets.proofs + OnboardingAbility.recordFaceCam.proofs
+            + OnboardingAbility.recordSound.proofs + OnboardingAbility.recordSaved.proofs + [
+                .widget("Record/NookRecordSettings.swift", "Section(lang.t(\"nook.record.settings.section\"))"),
+                .widget("Record/NookScreenRecorder.swift", "if target != .pickedWindow { try requireScreenAccess() }"),
+                .widget(
+                    "Record/NookScreenRecorder.swift",
+                    "if !allowed { throw NookRecordFailure.micPermissionDenied }"
+                ),
+            ]
+        case .convert: OnboardingAbility.trayConvert.proofs + [
+            .widget("Tray/NookConvertRules.swift", "static func combineActions(forFilesNamed names: [String])"),
+            .widget("Tray/NookTrayCard.swift", "if flags.contains(.command) {"),
+            .widget("Tray/NookTraySettings.swift", "Section(lang.t(\"nook.tray.settings.section\"))"),
+        ]
         case .accent: [
             .app("Personalization/HangoverAccent.swift", "enum HangoverAccentChoice"),
             .app("Resources/en.lproj/Localizable.strings", "One choice for every display."),
@@ -219,6 +247,8 @@ extension OnboardingPage {
         case .mirror: .mirror
         case .booth: .booth
         case .weatherCard: .weather
+        case .record: .record
+        case .convert: .convert
         case .accent: .accent
         case .lights: .lights
         case .power: .power

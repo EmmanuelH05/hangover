@@ -8,6 +8,11 @@ import SwiftUI
 /// Says in plain words what asks macOS for access and when. Nothing on
 /// this page asks for anything: it has no button at all.
 struct OnboardingPermissionsPage: View {
+    /// A row's vertical padding. Five rows are the most the page held before
+    /// Record joined the list. With the agents on, the pulse on and Record
+    /// listed it holds six, which need less of it to stay above the buttons.
+    static func rowPadding(rowCount: Int) -> CGFloat { rowCount > 5 ? 7 : 13 }
+
     let context: OnboardingPageContext
 
     var body: some View {
@@ -23,7 +28,7 @@ struct OnboardingPermissionsPage: View {
             VStack(spacing: 0) {
                 ForEach(Array(grants.enumerated()), id: \.element) { index, grant in
                     if index > 0 { OnboardingDivider() }
-                    row(grant)
+                    row(grant, padding: Self.rowPadding(rowCount: grants.count))
                 }
             }
             .background(OnboardingCardBackground())
@@ -31,7 +36,7 @@ struct OnboardingPermissionsPage: View {
         }
     }
 
-    private func row(_ grant: OnboardingGrant) -> some View {
+    private func row(_ grant: OnboardingGrant, padding: CGFloat) -> some View {
         HStack(alignment: .top, spacing: 13) {
             OnboardingSymbolPlate(symbol: grant.symbol, size: 32)
             VStack(alignment: .leading, spacing: 3) {
@@ -53,7 +58,7 @@ struct OnboardingPermissionsPage: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 13)
+        .padding(.vertical, padding)
         .accessibilityElement(children: .combine)
     }
 }
@@ -64,6 +69,11 @@ enum OnboardingGrant: String, CaseIterable, Sendable {
     case camera
     case accessibility
     case calendar
+    /// Asked for by Record (D67): Screen Recording the first time the screen
+    /// or an area is recorded, and the microphone the first time Voice is
+    /// recorded. The face cam's camera is the camera row's. Nothing is asked
+    /// before the user presses Record.
+    case record
     /// Asked for when "Pulse with the beat" is switched on (D56): the app
     /// listens to the Mac's sound to find the beat. Listed only while the
     /// switch is on.
@@ -77,6 +87,7 @@ enum OnboardingGrant: String, CaseIterable, Sendable {
         case .camera: "camera.fill"
         case .accessibility: "accessibility"
         case .calendar: "calendar"
+        case .record: "record.circle"
         case .audio: "waveform"
         case .automation: "terminal.fill"
         }
@@ -147,7 +158,7 @@ struct OnboardingTipsPage: View {
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 10)
-            Text(context.t("onboarding.tips.\(name).text"))
+            Text(tip.text(openTrigger: context.state.openTrigger, lang: context.lang))
                 .font(.system(size: 11.5))
                 .foregroundStyle(OnboardingStyle.secondaryText)
                 .lineSpacing(1.5)
@@ -241,7 +252,7 @@ struct OnboardingDonePage: View {
         case .widgets: recapValue(widgetsText)
         case .calendar: recapValue(context.t(OnboardingCalendarLooks.nameKey(state.calendarStyle)))
         case .todos: recapValue(context.t(OnboardingTodoGuide.nameKey(for: state.todoSource)))
-        case .notes: recapValue(context.t(OnboardingNotesGuide.titleKey(for: state.notesDestination)))
+        case .notes: recapValue(context.t(OnboardingNotesGuide.titleKey(for: state.notesSaveTo)))
         case .weather: recapValue(weatherText)
         case .layout: recapValue(layoutText)
         case .opened: recapValue(openedLookText)
@@ -372,7 +383,7 @@ enum OnboardingRecapRow: String, CaseIterable, Sendable {
     case calendar
     /// Where the to-do widget gets its tasks.
     case todos
-    /// Where quick notes go.
+    /// Where notes are saved.
     case notes
     /// Where the user is, for the weather card.
     case weather

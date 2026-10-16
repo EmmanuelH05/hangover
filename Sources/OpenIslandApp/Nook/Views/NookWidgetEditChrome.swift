@@ -44,6 +44,7 @@ struct NookWidgetEditOverlay<Reorder: Gesture>: View {
             resizeGrip
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         }
+        .demoTarget(.widget(placement.kind))
     }
 
     private var insertionHighlight: some View {
@@ -91,6 +92,7 @@ struct NookWidgetEditOverlay<Reorder: Gesture>: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(size.title)
+                .demoTarget(.widgetSize(placement.kind, size))
             }
         }
         .motionAnimation(Motion.selection, value: placement.size)
@@ -207,6 +209,7 @@ struct NookWidgetShelf: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .demoTarget(.editDone)
     }
 
     private func chip(_ kind: NookWidgetKind, showsTitle: Bool) -> some View {
@@ -238,6 +241,7 @@ struct NookWidgetShelf: View {
         .accessibilityLabel("Add \(kind.title)")
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { onAdd(kind) }
+        .demoTarget(.shelfChip(kind))
     }
 
     /// One gesture for both: a release without movement is a click, a

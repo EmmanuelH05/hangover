@@ -18,14 +18,14 @@ private typealias Samples = NookDesignSamples
         }
     }
 
-    /// The widgets page of the tour lists every widget, and says which four
-    /// start switched off: the kit and Link to MP3 among them.
-    @Test func theWelcomeTourOffersEveryWidgetAndFourStartSwitchedOff() {
-        #expect(NookWidgetKind.allCases.count == 10)
-        #expect(NookWidgetKind.allCases.suffix(2) == [.design, .linkAudio], "the new ones come last")
-        #expect(NookWidgetKind.startsOff == [.mirror, .weather, .design, .linkAudio])
+    /// The widgets page of the tour lists every widget, and says which five
+    /// start switched off: Record, the kit and Link to MP3 among them.
+    @Test func theWelcomeTourOffersEveryWidgetAndFiveStartSwitchedOff() {
+        #expect(NookWidgetKind.allCases.count == 11)
+        #expect(NookWidgetKind.allCases.suffix(3) == [.record, .design, .linkAudio], "the new ones come last")
+        #expect(NookWidgetKind.startsOff == [.mirror, .weather, .record, .design, .linkAudio])
         #expect(NookWidgetKind.startsOff == NookWidgetKind.allCases.filter { !NookWidgetKind.defaultEnabled.contains($0) })
-        #expect(NookWidgetKind.tools == [.design, .linkAudio])
+        #expect(NookWidgetKind.tools == [.record, .design, .linkAudio])
     }
 
     @Test @MainActor func aModelThatWasNeverStartedReadsNothingAndOpensNothing() async {

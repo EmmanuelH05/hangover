@@ -22,8 +22,12 @@ enum DemoMode {
     /// level. It is set in one place, `DemoLaunch`, and nowhere else.
     private(set) static var isActive = false
 
+    /// Also makes the registry the controls report their places to and the
+    /// typist the fields listen to (D65). Neither exists on any other launch.
     static func activate() {
         isActive = true
+        _ = DemoTargetRegistry.install()
+        _ = DemoTypist.install()
     }
 
     nonisolated static func isRequested(environment: [String: String]) -> Bool {
@@ -58,6 +62,8 @@ enum DemoWindowLevels {
     static let island = NSWindow.Level.statusBar
     /// The tour, Settings and the ring light.
     static let raised = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
+    /// The drawn pointer (D65), above everything the app shows.
+    static let pointer = NSWindow.Level.screenSaver
 
     static func level(forWindowAt base: NSWindow.Level, isDemo: Bool) -> NSWindow.Level {
         isDemo ? raised : base

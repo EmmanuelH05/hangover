@@ -11,12 +11,20 @@ struct NookPageExtras: Equatable, Sendable {
     /// page's full width (`NookMirrorFit`). Nil fills the page.
     var mirrorWidth: CGFloat? = nil
     var showsEventEditor = false
+    /// True while the tray's GIF options are open for a video.
+    var showsGIFOptions = false
+    /// True while the tray's Convert strip is open for a file. Never at the
+    /// same time as the GIF options.
+    var showsConvertOptions = false
     /// Rows the calendar card adds under its look after "+N more".
     var calendarExtraRows = 0
     /// True while a meeting is about to start or has just started.
     var showsJoinBar = false
     /// True while the decoration picker is up under the mirror.
     var showsMirrorDecorationPicker = false
+    /// True while a note is open and the Notes widget is not on the page
+    /// (`NookNoteEditorPlacement`): the editor sits above the grid.
+    var showsNoteEditor = false
 
     static let none = NookPageExtras()
 
@@ -25,8 +33,11 @@ struct NookPageExtras: Equatable, Sendable {
     var pinnedHeight: CGFloat {
         NookMirrorLayout.pageHeight(mirrorHeight)
             + (showsEventEditor ? NookEventEditorLayout.pageHeight : 0)
+            + (showsGIFOptions ? NookGIFStripLayout.pageHeight : 0)
+            + (showsConvertOptions ? NookConvertStripLayout.pageHeight : 0)
             + (showsJoinBar ? NookJoinBarLayout.pageHeight : 0)
             + (showsMirrorDecorationPicker ? NookMirrorDecorationLayout.pickerPageHeight : 0)
+            + (showsNoteEditor ? NookNoteSizes.pinnedEditorPageHeight : 0)
     }
 }
 

@@ -189,6 +189,7 @@ private struct NookDesignHeader: View {
         .help(title)
         .accessibilityLabel(title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .demoTarget(.designTab(tab))
     }
 }
 

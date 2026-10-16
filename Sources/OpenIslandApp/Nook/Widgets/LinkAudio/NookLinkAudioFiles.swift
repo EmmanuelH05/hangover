@@ -14,6 +14,12 @@ protocol NookLinkAudioFiles: AnyObject {
     func makeFolder(_ folder: URL) throws
     func listing(of folder: URL) -> [NookLinkAudioFileEntry]
     func remove(_ file: URL)
+    func exists(_ file: URL) -> Bool
+    /// Moves a file. Throws when something is already at `destination`: it
+    /// never replaces a file.
+    func move(_ file: URL, to destination: URL) throws
+    /// Puts a file in the Trash, where the user can still find it.
+    func trash(_ file: URL) throws
 }
 
 @MainActor
@@ -35,6 +41,18 @@ final class NookLinkAudioSystemFiles: NookLinkAudioFiles {
 
     func remove(_ file: URL) {
         try? FileManager.default.removeItem(at: file)
+    }
+
+    func exists(_ file: URL) -> Bool {
+        FileManager.default.fileExists(atPath: file.path)
+    }
+
+    func move(_ file: URL, to destination: URL) throws {
+        try FileManager.default.moveItem(at: file, to: destination)
+    }
+
+    func trash(_ file: URL) throws {
+        try FileManager.default.trashItem(at: file, resultingItemURL: nil)
     }
 }
 

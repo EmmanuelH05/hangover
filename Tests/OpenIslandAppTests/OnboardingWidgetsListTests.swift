@@ -4,11 +4,11 @@ import SwiftUI
 import Testing
 @testable import OpenIslandApp
 
-// The widgets page lists every widget, the design kit and Link to MP3 last,
-// with the same row and switch. The two start off and the footnote names them, the
-// switch is Settings' own door for them, a layout picked after one is on
-// keeps it, and ten rows fit the window. Nothing here shows a window or
-// writes the real settings.
+// The widgets page lists every widget, Record, the design kit and Link to MP3
+// last, with the same row and switch. The three start off and the footnote names
+// them, the switch is Settings' own door for them, a layout picked after one is on
+// keeps it, and the rows fit the window (the last one scrolls in the dev copy).
+// Nothing here shows a window or writes the real settings.
 
 // MARK: - A model as the running app has it
 
@@ -25,19 +25,20 @@ private func runningAppModel() -> AppModel {
 // MARK: - The list and its footnote
 
 struct OnboardingWidgetsListTests {
-    @Test func theListIsTheEightOfBeforeThenTheKitThenLinkToMP3() {
+    @Test func theListIsTheEightOfBeforeThenRecordThenTheKitThenLinkToMP3() {
         let all = NookWidgetKind.allCases
-        #expect(all.count == 10)
+        #expect(all.count == 11)
         #expect(all.prefix(8) == [.media, .calendar, .todo, .notes, .tray, .timer, .mirror, .weather])
-        #expect(all[8] == .design && all[9] == .linkAudio)
+        #expect(all[8] == .record && all[9] == .design && all[10] == .linkAudio)
     }
 
-    @Test func fourWidgetsStartSwitchedOffAndTheTwoNewOnesAreAmongThem() {
-        #expect(NookWidgetKind.startsOff == [.mirror, .weather, .design, .linkAudio])
+    @Test func fiveWidgetsStartSwitchedOffAndTheThreeNewOnesAreAmongThem() {
+        #expect(NookWidgetKind.startsOff == [.mirror, .weather, .record, .design, .linkAudio])
+        #expect(!NookWidgetKind.defaultEnabled.contains(.record))
         #expect(!NookWidgetKind.defaultEnabled.contains(.design))
         #expect(!NookWidgetKind.defaultEnabled.contains(.linkAudio))
         let fresh = OnboardingState()
-        #expect(!fresh.showsWidget(.design) && !fresh.showsWidget(.linkAudio))
+        #expect(!fresh.showsWidget(.record) && !fresh.showsWidget(.design) && !fresh.showsWidget(.linkAudio))
     }
 
     /// Every widget that starts off is named in the footnote, in each language,
@@ -299,7 +300,7 @@ struct OnboardingToolPicksTests {
     }
 }
 
-// MARK: - Ten rows fit
+// MARK: - The rows fit
 
 @MainActor
 struct OnboardingWidgetsFitTests {
@@ -333,7 +334,8 @@ struct OnboardingWidgetsFitTests {
 
     /// The page is live: the tour only ever draws it in the narrow window.
     /// That window scrolls the page's choices when the screen is short, and
-    /// at its tallest the ten rows sit in it whole.
+    /// at its tallest the ten rows of the release app sit in it whole, and the
+    /// dev copy's eleventh, Link to MP3, is a scroll away.
     @Test func theWidgetsPageIsLiveAndGetsTheNarrowWindowInEveryLength() {
         #expect(OnboardingPage.widgets.isLive)
         for length in OnboardingLength.allCases {
@@ -354,15 +356,15 @@ struct OnboardingWidgetsFitTests {
     /// the whole page.
     @Test(arguments: OnboardingTestSize.narrowWidths)
     func theLastRowIsDrawnAtEachNarrowWidth(width: CGFloat) throws {
-        let on = try render("07-widgets-ten-on-\(Int(width))", Self.state(allOn: true), width: width)
+        let on = try render("07-widgets-eleven-on-\(Int(width))", Self.state(allOn: true), width: width)
         let withoutLast = try render(
-            "07-widgets-ten-last-off-\(Int(width))",
+            "07-widgets-eleven-last-off-\(Int(width))",
             Self.state(allOn: true, without: .linkAudio),
             width: width
         )
         #expect(on != withoutLast, "the last row did not draw at \(Int(width)) wide")
 
-        let fresh = try render("07-widgets-ten-start-\(Int(width))", Self.state(allOn: false), width: width)
+        let fresh = try render("07-widgets-eleven-start-\(Int(width))", Self.state(allOn: false), width: width)
         #expect(fresh != on)
     }
 }

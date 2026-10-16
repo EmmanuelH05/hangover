@@ -129,10 +129,22 @@ final class FakeReferencePresenter: NookDesignReferencePresenting {
     private(set) var focused: [UUID] = []
     private(set) var closed: [UUID] = []
     private(set) var closeAllCount = 0
+    /// The size each reference carried when its panel was asked for, in
+    /// the order the panels were asked for. A real panel opens at it.
+    private(set) var rememberedSizes: [CGSize?] = []
     private var onClose: [UUID: @MainActor () -> Void] = [:]
+    private var onResize: [UUID: @MainActor (CGSize) -> Void] = [:]
 
-    func present(_ reference: NookDesignReference, image: CGImage, slot: Int, onClose: @escaping @MainActor () -> Void) {
+    func present(
+        _ reference: NookDesignReference,
+        image: CGImage,
+        slot: Int,
+        onResize: @escaping @MainActor (CGSize) -> Void,
+        onClose: @escaping @MainActor () -> Void
+    ) {
         presented.append(Presented(id: reference.id, slot: slot, pixelWidth: image.width))
+        rememberedSizes.append(reference.panelSize)
+        self.onResize[reference.id] = onResize
         self.onClose[reference.id] = onClose
     }
 
@@ -140,6 +152,7 @@ final class FakeReferencePresenter: NookDesignReferencePresenting {
 
     func close(_ id: UUID) {
         closed.append(id)
+        onResize[id] = nil
         onClose.removeValue(forKey: id)?()
     }
 
@@ -147,12 +160,19 @@ final class FakeReferencePresenter: NookDesignReferencePresenting {
         closeAllCount += 1
         let waiting = onClose
         onClose = [:]
+        onResize = [:]
         for close in waiting.values { close() }
     }
 
     /// The user closes a panel with its own button or with Escape.
     func userCloses(_ id: UUID) {
+        onResize[id] = nil
         onClose.removeValue(forKey: id)?()
+    }
+
+    /// The user drags a panel to a new size.
+    func userResizes(_ id: UUID, to size: CGSize) {
+        onResize[id]?(size)
     }
 }
 

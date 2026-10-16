@@ -233,6 +233,58 @@ struct NookDesignRenderTests {
         #expect(state.zoom.percentText == "250%")
     }
 
+    @Test func aPanelDraggedToAnotherShapeCentersThePictureOnBlack() async throws {
+        let image = try #require(Self.picture(width: 480, height: 320))
+        let reference = NookDesignReference(
+            id: UUID(), collectionID: NookDesignCollection.globalID, name: "Landing hero",
+            fileName: "original.png", pixelWidth: 480, pixelHeight: 320, isFavorite: false, addedAt: Samples.day
+        )
+        let bar = NookDesignPanelRules.barHeight
+        let pad: CGFloat = 16
+        // A point of the panel, counted from its top left corner.
+        func isBlack(_ data: Data, x: CGFloat, y: CGFloat) throws -> Bool {
+            let bitmap = try #require(NSBitmapImageRep(data: data))
+            let pixel = try #require(
+                bitmap.colorAt(x: Int((pad + x) * Self.scale), y: Int((pad + y) * Self.scale))?.usingColorSpace(.deviceRGB)
+            )
+            return pixel.redComponent < 0.05 && pixel.greenComponent < 0.05 && pixel.blueComponent < 0.05
+        }
+        // The picture can be see-through, which puts a checkerboard behind it. None of it
+        // may show outside the picture, along a whole edge.
+        func isBlackAlong(_ data: Data, xs: [CGFloat], ys: [CGFloat]) throws -> Bool {
+            for x in xs {
+                for y in ys where try !isBlack(data, x: x, y: y) { return false }
+            }
+            return true
+        }
+        let down = Array(stride(from: CGFloat(2), to: 198, by: 3))
+        let across = Array(stride(from: CGFloat(2), to: 258, by: 3))
+
+        // An area 900 by 200: the picture is 300 wide, centered, with black either side.
+        let wideSize = CGSize(width: 900, height: 200 + bar)
+        let wide = NookDesignPanelState(reference: reference, image: image, panelSize: wideSize)
+        let wideData = try panel("design-panel-free-wide", wide, wideSize)
+        #expect(try isBlack(wideData, x: 100, y: 100), "the left margin is black")
+        #expect(try isBlack(wideData, x: 280, y: 100), "just outside the picture is black")
+        #expect(try !isBlack(wideData, x: 320, y: 100), "just inside the picture is the picture")
+        #expect(try !isBlack(wideData, x: 580, y: 100))
+        #expect(try isBlack(wideData, x: 620, y: 100))
+        #expect(try isBlack(wideData, x: 800, y: 100), "the right margin is black")
+        #expect(try isBlackAlong(wideData, xs: [296, 297, 603, 604], ys: down), "nothing shows beside the picture")
+
+        // An area 260 by 400: the picture is 173 tall, centered, with black above and below.
+        let tallSize = CGSize(width: 260, height: 400 + bar)
+        let tall = NookDesignPanelState(reference: reference, image: image, panelSize: tallSize)
+        let tallData = try panel("design-panel-free-tall", tall, tallSize)
+        #expect(try isBlack(tallData, x: 130, y: 60), "above the picture is black")
+        #expect(try !isBlack(tallData, x: 130, y: 140), "inside the picture is the picture")
+        #expect(try !isBlack(tallData, x: 130, y: 260))
+        #expect(try isBlack(tallData, x: 130, y: 340), "below the picture is black")
+        #expect(try isBlackAlong(tallData, xs: across, ys: [110, 111, 288, 289]), "nothing shows above or below the picture")
+
+        #expect(wideData != tallData)
+    }
+
     @Test func aLongPageIsFittedInsideItsPanel() async throws {
         let page = try #require(Self.picture(width: 200, height: 1600))
         let reference = NookDesignReference(

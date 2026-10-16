@@ -2,10 +2,10 @@ import Foundation
 import Testing
 @testable import OpenIslandApp
 
-// The tour's notes page (D40, D44): where quick notes go. Nothing here opens
-// a window or a panel, runs `osascript`, or writes outside a temporary folder.
-// The services get a `MemoryDefaults`, a stub for Notes and a file in the
-// temporary folder.
+// The tour's notes page (D40, D44, D70): where notes are saved. Nothing here
+// opens a window or a panel, runs `osascript`, or writes outside a temporary
+// folder. The store gets a `MemoryDefaults`, a fake for Notes and folders in
+// the temporary folder.
 
 @MainActor
 struct OnboardingNotesTests {
@@ -40,35 +40,40 @@ struct OnboardingNotesTests {
 
     // MARK: The pick
 
+    @Test func thePageOffersTheThreeChoicesInOrder() {
+        #expect(NookNotesSaveTo.allCases == [.folder, .appleNotes, .both])
+        #expect(NookNotesSaveTo.allCases.map(\.rawValue) == ["folder", "appleNotes", "both"])
+    }
+
     @Test func aPickWritesThePreferenceSettingsWrites() {
-        let harness = NookAppleNotesTests.Harness()
-        let service = harness.makeService()
-        #expect(service.destination == .file)
-        #expect(harness.defaults.string(forKey: NookNotesService.destinationDefaultsKey) == nil)
+        let harness = NookNotesHarness()
+        let store = harness.makeStore()
+        #expect(store.saveTo == .folder)
+        #expect(harness.defaults.string(forKey: NookNotesStore.saveToKey) == nil)
 
-        // What the tour's door does with the pick (`setNotesDestination`).
-        service.setDestination(.appleNotes)
-        #expect(harness.defaults.string(forKey: NookNotesService.destinationDefaultsKey) == "appleNotes")
-        #expect(harness.makeService().destination == .appleNotes)
+        // What the tour's door does with the pick (`setNotesSaveTo`).
+        store.setSaveTo(.both)
+        #expect(harness.defaults.string(forKey: NookNotesStore.saveToKey) == "both")
+        #expect(harness.makeStore(start: false).saveTo == .both)
 
-        service.setDestination(.file)
-        #expect(harness.defaults.string(forKey: NookNotesService.destinationDefaultsKey) == "file")
+        store.setSaveTo(.appleNotes)
+        #expect(harness.defaults.string(forKey: NookNotesStore.saveToKey) == "appleNotes")
     }
 
     @Test func theToursPickReachesTheAppOnce() {
-        var picks: [NookNotesDestination] = []
+        var picks: [NookNotesSaveTo] = []
         let tour = OnboardingTour(
             startingAt: .notes,
             state: { OnboardingState() },
-            actions: OnboardingActions(setNotesDestination: { picks.append($0) })
+            actions: OnboardingActions(setNotesSaveTo: { picks.append($0) })
         )
-        tour.actions.setNotesDestination(.appleNotes)
-        #expect(picks == [.appleNotes])
+        tour.actions.setNotesSaveTo(.both)
+        #expect(picks == [.both])
     }
 
-    @Test func theAppWiresThePageToTheServicesSettingsUses() throws {
+    @Test func theAppWiresThePageToTheStoreSettingsUses() throws {
         let source = try HangoverBrandTests.text(of: "Sources/OpenIslandApp/AppModel+Onboarding.swift")
-        #expect(source.contains("setNotesDestination: { [weak self] in self?.nook.notes.setDestination($0) }"))
+        #expect(source.contains("setNotesSaveTo: { [weak self] in self?.nook.notes.setSaveTo($0) }"))
         #expect(source.contains("nook.notes.setFolder(folder)"))
         #expect(source.contains("await connector.allowReminders()"))
         #expect(source.contains("await connector.connect(token: token)"))
@@ -76,90 +81,91 @@ struct OnboardingNotesTests {
 
     // MARK: The folder
 
-    @Test func aFreshInstallKeepsTheDefaultFileAndStoresNoPath() {
-        let defaults: UserDefaults = MemoryDefaults()
-        let service = NookNotesService(defaults: defaults, appleNotes: StubAppleNotesWriter())
+    @Test func aFreshInstallKeepsNotesInAVisibleFolderAndTheTourPrintsIt() {
+        let harness = NookNotesHarness(folderIsSet: false)
+        let store = harness.makeStore(start: false)
 
-        #expect(service.fileURL.path.hasSuffix("/Library/Application Support/OpenIsland/Notes/Quick Notes.md"))
-        #expect(service.fileURL.lastPathComponent == NookNotesService.folderFileName)
-        #expect(defaults.string(forKey: NookNotesService.pathDefaultsKey) == nil)
+        #expect(store.folderURL.path.hasSuffix("/Documents/Hangover Notes"))
+        let printed = (store.folderURL.path as NSString).abbreviatingWithTildeInPath
+        #expect(printed.hasSuffix("Hangover Notes"))
     }
 
-    @Test func aChosenFolderHoldsTheFileAndIsUsedForEveryNoteAfterIt() throws {
-        let harness = NookAppleNotesTests.Harness()
-        let service = harness.makeService()
-        let vault = harness.directory.appendingPathComponent("Vault", isDirectory: true)
+    @Test func aChosenFolderIsUsedForEveryNoteAfterIt() throws {
+        let harness = NookNotesHarness()
+        let store = harness.makeStore()
+        let vault = harness.home.appendingPathComponent("Vault", isDirectory: true)
         try FileManager.default.createDirectory(at: vault, withIntermediateDirectories: true)
 
-        service.setFolder(vault)
+        store.setFolder(vault)
 
-        let file = vault.appendingPathComponent("Quick Notes.md")
-        #expect(service.fileURL == file)
-        #expect(harness.defaults.string(forKey: NookNotesService.pathDefaultsKey) == file.path)
-        #expect(FileManager.default.fileExists(atPath: file.path), "the file is made at once, so Finder can show it")
+        #expect(store.folderURL == vault)
+        #expect(harness.defaults.string(forKey: NookNotesStore.folderKey) == vault.path)
 
-        service.append("buy milk")
-        let written = try String(contentsOf: file, encoding: .utf8)
-        #expect(written.contains("buy milk"))
-        // A service started later reads the same folder.
-        let later = NookNotesService(defaults: harness.defaults, appleNotes: StubAppleNotesWriter())
-        #expect(later.fileURL.path == file.path)
+        store.beginNewNote()
+        store.edit("buy milk")
+        store.closeEditor()
+        #expect(try FileManager.default.contentsOfDirectory(atPath: vault.path) == ["buy milk.md"])
+        // A store started later reads the same folder.
+        #expect(harness.makeStore(start: false).folderURL == vault)
     }
 
-    @Test func aFolderChosenOverNotesAlreadyThereKeepsThem() throws {
-        let harness = NookAppleNotesTests.Harness()
-        let service = harness.makeService()
-        let vault = harness.directory.appendingPathComponent("Vault", isDirectory: true)
+    @Test func aFolderChosenOverNotesAlreadyThereShowsThem() throws {
+        let harness = NookNotesHarness()
+        let store = harness.makeStore()
+        let vault = harness.home.appendingPathComponent("Vault", isDirectory: true)
         try FileManager.default.createDirectory(at: vault, withIntermediateDirectories: true)
-        let file = vault.appendingPathComponent("Quick Notes.md")
-        try "# Mine\n\nkeep this\n".write(to: file, atomically: true, encoding: .utf8)
+        try "# Mine\n\nkeep this\n".write(to: vault.appendingPathComponent("Mine.md"), atomically: true, encoding: .utf8)
 
-        service.setFolder(vault)
-        service.append("and this")
+        store.setFolder(vault)
 
-        let written = try String(contentsOf: file, encoding: .utf8)
-        #expect(written.hasPrefix("# Mine\n\nkeep this\n"))
-        #expect(written.contains("and this"))
+        #expect(store.notes.map(\.title) == ["Mine"])
     }
 
     // MARK: Try it
 
-    @Test func theSavedCountGrowsWhenANoteIsSavedToTheFile() {
-        let harness = NookAppleNotesTests.Harness()
-        let service = harness.makeService()
-        #expect(service.savedCount == 0)
+    @Test func theSavedCountGrowsWhenANoteIsSaved() {
+        let harness = NookNotesHarness()
+        let store = harness.makeStore()
+        #expect(store.savedCount == 0)
 
-        service.append("one")
-        service.append("two")
-        service.append("   ")
+        store.beginNewNote()
+        store.edit("one")
+        store.flush()
+        store.edit("one two")
+        store.flush()
+        store.beginNewNote()
+        store.edit("   ")
+        store.closeEditor()
 
-        #expect(service.savedCount == 2, "a blank line saves nothing")
+        #expect(store.savedCount == 2, "a blank note saves nothing")
     }
 
-    @Test func theSavedCountGrowsWhenAppleNotesTakesTheNoteButNotBefore() async {
-        let harness = NookAppleNotesTests.Harness()
-        harness.writer.slowDown()
-        let service = harness.makeService()
-        service.setDestination(.appleNotes)
+    @Test func theSavedCountGrowsWhenNotesHasTheNoteForAppleNotesOnly() async {
+        let harness = NookNotesHarness()
+        harness.bridge.slowDown()
+        let store = harness.makeStore(saveTo: .appleNotes)
 
-        service.append("to notes")
-        #expect(service.savedCount == 0, "the note is only on its way")
-        await harness.settle(service)
+        store.beginNewNote()
+        store.edit("to notes")
+        store.flush()
+        #expect(store.savedCount == 0, "the note is only in Hangover's record: the tour must not say Saved yet")
+        await harness.settle(store)
 
-        #expect(service.savedCount == 1)
+        #expect(store.savedCount == 1, "Notes took it")
     }
 
-    @Test func aNoteNotesRefusedStillCountsOnceItIsInTheFile() async {
-        let harness = NookAppleNotesTests.Harness()
-        harness.writer.fail(with: .notPermitted)
-        let service = harness.makeService()
-        service.setDestination(.appleNotes)
+    @Test func aNoteNotesRefusedStillCounts() async {
+        let harness = NookNotesHarness()
+        harness.bridge.fail(with: .notPermitted)
+        let store = harness.makeStore(saveTo: .both)
 
-        service.append("refused")
-        await harness.settle(service)
+        store.beginNewNote()
+        store.edit("refused")
+        store.flush()
+        await harness.settle(store)
 
-        #expect(service.savedCount == 1)
-        #expect(harness.fileText().contains("refused"))
+        #expect(store.savedCount == 1)
+        #expect(harness.fileNames() == ["refused.md"])
     }
 
     @Test func theTryItStepTicksOnlyForANoteSavedWhileThePageIsUp() {
@@ -194,22 +200,34 @@ struct OnboardingNotesTests {
 
     // MARK: Words
 
-    @Test func theNotesPageNamesTheNoteTheAppTitlesAndTheFileItMakes() throws {
+    @Test func theNotesPageNamesTheFolderTheAppMakesInNotesAndTheObsidianFolder() throws {
         let english = try HangoverBrandTests.table("en")
         let appleNotes = try #require(english["onboarding.notes.appleNotes.where"])
         #expect(appleNotes.contains("%@"))
-        #expect(NookAppleNotesLine.noteTitle == "Quick Notes")
-        #expect(try #require(english["onboarding.notes.file.any"]).contains("Obsidian"))
-        #expect(try #require(english["onboarding.notes.file.any"]).contains(NookNotesService.folderFileName))
+        #expect(NookAppleNotesBody.folderName == "Hangover")
+        #expect(appleNotes.contains("do not come back, and are replaced"))
+        #expect(try #require(english["onboarding.notes.folder.any"]).contains("Obsidian"))
         #expect(try #require(english["onboarding.notes.appleNotes.ask"]).contains("asks once"))
+    }
+
+    @Test func theFoldersChooserOpensWhereNotesAreSaved() throws {
+        let source = try HangoverBrandTests.text(of: "Sources/OpenIslandApp/AppModel+Onboarding.swift")
+        #expect(source.contains("NookNoteLocations.pickerStart("))
     }
 
     @Test func theRecapNamesTheChoice() throws {
         let english = try HangoverBrandTests.table("en")
-        for destination in NookNotesDestination.allCases {
-            #expect(english[OnboardingNotesGuide.titleKey(for: destination)] != nil)
+        for choice in NookNotesSaveTo.allCases {
+            #expect(english[OnboardingNotesGuide.titleKey(for: choice)] != nil)
+            #expect(english[OnboardingNotesGuide.textKey(for: choice)] != nil)
+            #expect(english[OnboardingNotesGuide.showKey(for: choice)] != nil)
         }
         #expect(OnboardingRecapRow.notes.rawValue == "notes")
         #expect(english["onboarding.done.recap.notes"] != nil)
+    }
+
+    @Test func eachChoiceHasItsOwnSymbol() {
+        let symbols = NookNotesSaveTo.allCases.map(OnboardingNotesGuide.symbol(for:))
+        #expect(Set(symbols).count == 3)
     }
 }

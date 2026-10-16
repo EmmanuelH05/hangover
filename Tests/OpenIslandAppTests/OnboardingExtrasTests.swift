@@ -20,17 +20,17 @@ struct OnboardingDesignStepTests {
 
     // MARK: The walk
 
-    @Test func theWalkEndsOnTheKitAndLinkToMP3WhetherTheKitIsOnThePageOrNot() {
+    @Test func theWalkEndsOnRecordTheKitAndLinkToMP3WhetherTheKitIsOnThePageOrNot() {
         for kinds in [[NookWidgetKind.media, .timer], [], [.media, .design]] {
             var state = OnboardingState(enabledWidgets: Set(kinds))
             state.nookPlacements = kinds.map { NookWidgetPlacement(kind: $0, size: .medium) }
-            let expected = kinds.filter { $0 != .design } + [.design, .linkAudio]
+            let expected = kinds.filter { $0 != .design } + [.record, .design, .linkAudio]
             #expect(state.featureWalk.kinds == expected, "\(kinds)")
             #expect(state.featureWalk.kinds.filter { $0 == .design }.count == 1)
         }
     }
 
-    @Test func theWalkHoldsEveryWidgetTheTourKnowsAndThenTheTwoTools() {
+    @Test func theWalkHoldsEveryWidgetTheTourKnowsAndThenTheThreeTools() {
         var state = OnboardingState()
         state.enabledWidgets = Set(NookWidgetKind.allCases)
         state.nookPlacements = NookWidgetKind.allCases.map { NookWidgetPlacement(kind: $0, size: .medium) }
@@ -261,7 +261,7 @@ struct OnboardingLightsTests {
         let state = OnboardingState()
         #expect(OnboardingLengthPage.stepCount(.short, in: state) == 8)
         #expect(OnboardingLengthPage.stepCount(.medium, in: state) == 18)
-        #expect(OnboardingLengthPage.stepCount(.long, in: state) == 33)
+        #expect(OnboardingLengthPage.stepCount(.long, in: state) == 35, "the main tour and seventeen pages")
     }
 
     @Test func theNotesUnderTheRowAreAtMostTwoAndTheMostImportantComesFirst() {
@@ -288,7 +288,7 @@ struct OnboardingLightsTests {
     @Test func thePermissionsPageListsTheSoundOnlyWhileThePulseIsOn() {
         #expect(!OnboardingGrant.shown(agentsEnabled: false).contains(.audio))
         #expect(!OnboardingGrant.shown(agentsEnabled: true).contains(.audio))
-        #expect(OnboardingGrant.shown(agentsEnabled: false, beatIsOn: true) == [.camera, .accessibility, .calendar, .audio])
+        #expect(OnboardingGrant.shown(agentsEnabled: false, beatIsOn: true) == [.camera, .accessibility, .calendar, .record, .audio])
         #expect(OnboardingGrant.shown(agentsEnabled: true, beatIsOn: true).contains(.audio))
         #expect(OnboardingGrant.shown(agentsEnabled: true, beatIsOn: true).last == .automation)
         #expect(!OnboardingGrant.audio.isAgentsOnly)

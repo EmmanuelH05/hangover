@@ -95,29 +95,7 @@ private enum TrayTestFiles {
 // MARK: - File work
 
 @Suite struct NookTrayFileActionsTests {
-    // MARK: Names and targets
-
-    @Test func picturesConvertToTheOtherCommonFormat() {
-        #expect(NookTrayFileActions.conversionTarget(forFileNamed: "shot.png") == .jpeg)
-        #expect(NookTrayFileActions.conversionTarget(forFileNamed: "SHOT.PNG") == .jpeg)
-        #expect(NookTrayFileActions.conversionTarget(forFileNamed: "photo.jpg") == .png)
-        #expect(NookTrayFileActions.conversionTarget(forFileNamed: "photo.jpeg") == .png)
-        #expect(NookTrayFileActions.conversionTarget(forFileNamed: "IMG_0001.HEIC") == .jpeg)
-        #expect(NookTrayFileActions.conversionTarget(forFileNamed: "live.heif") == .jpeg)
-    }
-
-    @Test func otherFilesHaveNoConversion() {
-        #expect(NookTrayFileActions.conversionTarget(forFileNamed: "notes.txt") == nil)
-        #expect(NookTrayFileActions.conversionTarget(forFileNamed: "archive.zip") == nil)
-        #expect(NookTrayFileActions.conversionTarget(forFileNamed: "png") == nil)
-        #expect(NookTrayFileActions.conversionTarget(forFileNamed: "") == nil)
-    }
-
-    @Test func convertedNameSwapsTheExtension() {
-        #expect(NookTrayFileActions.convertedName(for: "photo.heic", to: .jpeg) == "photo.jpg")
-        #expect(NookTrayFileActions.convertedName(for: "my.shot.jpeg", to: .png) == "my.shot.png")
-        #expect(NookTrayFileActions.convertedName(for: "bare", to: .png) == "bare.png")
-    }
+    // MARK: Names
 
     @Test func zipNameKeepsTheExtension() {
         #expect(NookTrayFileActions.zipName(for: "notes.txt") == "notes.txt.zip")
@@ -243,8 +221,8 @@ private enum TrayTestFiles {
         #expect(!NookTrayFileActions.isWithinConvertLimit(width: 100, height: -1))
     }
 
-    @Test(arguments: [NookTrayImageFormat.jpeg, .png])
-    func aPictureOverTheLimitIsRefusedAndNothingIsWritten(format: NookTrayImageFormat) throws {
+    @Test(arguments: [NookImageTarget.jpeg, .png])
+    func aPictureOverTheLimitIsRefusedAndNothingIsWritten(format: NookImageTarget) throws {
         let folder = try TrayTestFiles.makeFolder()
         defer { try? FileManager.default.removeItem(at: folder) }
         let source = folder.appendingPathComponent(format == .jpeg ? "wide.png" : "wide.jpg")
@@ -255,13 +233,13 @@ private enum TrayTestFiles {
 
         // 40 by 30 is 1200 pixels. One under that refuses it.
         #expect(throws: NookTrayFileActionError.tooLarge) {
-            try NookTrayFileActions.convertImage(at: source, to: destination, format: format, maxPixels: 1199)
+            try NookTrayFileActions.convertImage(at: source, to: destination, target: format, maxPixels: 1199)
         }
         #expect(!FileManager.default.fileExists(atPath: destination.path))
         #expect(try Data(contentsOf: source) == before)
 
         // At the limit it goes through.
-        try NookTrayFileActions.convertImage(at: source, to: destination, format: format, maxPixels: 1200)
+        try NookTrayFileActions.convertImage(at: source, to: destination, target: format, maxPixels: 1200)
         #expect(FileManager.default.fileExists(atPath: destination.path))
     }
 
@@ -273,7 +251,7 @@ private enum TrayTestFiles {
         let before = try Data(contentsOf: source)
         let destination = folder.appendingPathComponent("shot.jpg")
 
-        try NookTrayFileActions.convertImage(at: source, to: destination, format: .jpeg)
+        try NookTrayFileActions.convertImage(at: source, to: destination, target: .jpeg)
 
         let decoded = try TrayTestFiles.decode(destination)
         #expect(decoded.typeIdentifier == UTType.jpeg.identifier)
@@ -302,7 +280,7 @@ private enum TrayTestFiles {
         ))
         let destination = folder.appendingPathComponent("photo.png")
 
-        try NookTrayFileActions.convertImage(at: source, to: destination, format: .png)
+        try NookTrayFileActions.convertImage(at: source, to: destination, target: .png)
 
         let decoded = try TrayTestFiles.decode(destination)
         #expect(decoded.typeIdentifier == UTType.png.identifier)
@@ -322,7 +300,7 @@ private enum TrayTestFiles {
         }
         let destination = folder.appendingPathComponent("IMG_0001.jpg")
 
-        try NookTrayFileActions.convertImage(at: source, to: destination, format: .jpeg)
+        try NookTrayFileActions.convertImage(at: source, to: destination, target: .jpeg)
 
         let decoded = try TrayTestFiles.decode(destination)
         #expect(decoded.typeIdentifier == UTType.jpeg.identifier)
@@ -339,7 +317,7 @@ private enum TrayTestFiles {
         let destination = folder.appendingPathComponent("fake.jpg")
 
         #expect(throws: NookTrayFileActionError.unreadable) {
-            try NookTrayFileActions.convertImage(at: source, to: destination, format: .jpeg)
+            try NookTrayFileActions.convertImage(at: source, to: destination, target: .jpeg)
         }
         #expect(!FileManager.default.fileExists(atPath: destination.path))
     }
@@ -438,7 +416,7 @@ private enum TrayTestFiles {
         #expect(TrayTestFiles.write(try TrayTestFiles.makeImage(width: 16, height: 16), to: png, type: .png))
         let item = try await fixture.addFile(named: "shot.png", contents: try Data(contentsOf: png))
 
-        await fixture.store.convert(item, to: .jpeg).value
+        await fixture.store.convert(item, action: .image(.jpeg))?.value
 
         let converted = try #require(fixture.store.items.first)
         #expect(converted.originalName == "shot.jpg")
@@ -453,7 +431,7 @@ private enum TrayTestFiles {
         let item = try await fixture.addFile(named: "fake.png", contents: Data("not a picture".utf8))
         let foldersBefore = fixture.subfolderCount
 
-        await fixture.store.convert(item, to: .jpeg).value
+        await fixture.store.convert(item, action: .image(.jpeg))?.value
 
         let expectedCount: Int = 1
         #expect(fixture.store.items.count == expectedCount)
@@ -638,7 +616,11 @@ private enum TrayTestFiles {
         // Defaults keys are not strings to show.
         keys.subtract([NookClipboardMonitor.enabledKey, NookTrayStore.tabKey])
         keys.formUnion(NookTrayTab.allCases.map(\.titleKey))
-        keys.formUnion([NookTrayImageFormat.jpeg, .png].map(\.actionTitleKey))
+        // The Convert menu and the combine bar build theirs from the actions.
+        let everyAction = ["a.png", "a.mov", "a.mp4", "a.m4v", "a.pdf"].flatMap(NookConvertRules.actions(forFileNamed:))
+        keys.formUnion(everyAction.map(\.titleKey))
+        keys.formUnion(NookConvertGroup.allCases.map(\.titleKey))
+        keys.formUnion([NookCombineAction.picturesToPDF, .joinPDFs].map(\.titleKey))
         // The short lines the two smaller cards show, built from the long keys.
         keys.formUnion(["nook.tray.clipboard.asks.short", "nook.tray.clipboard.denied.short"])
         return keys

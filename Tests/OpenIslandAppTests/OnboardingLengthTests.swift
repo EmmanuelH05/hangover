@@ -16,8 +16,8 @@ struct OnboardingLengthPageListTests {
         .todos, .notes, .weather, .opened, .look, .permissions, .integrations, .tips, .done,
     ]
     private static let extras: [OnboardingPage] = [
-        .mirror, .booth, .weatherCard, .lights, .accent, .power, .volume, .usage, .quiet, .phone, .screens, .sounds,
-        .links, .startup, .updates,
+        .mirror, .booth, .weatherCard, .record, .convert, .lights, .accent, .power, .volume, .usage, .quiet, .phone,
+        .screens, .sounds, .links, .startup, .updates,
     ]
 
     @Test func theShortTourIsTheEssentialsInOrder() {
@@ -80,12 +80,12 @@ struct OnboardingLengthPageListTests {
         #expect(OnboardingPage.shown(length: .long, agentsEnabled: true, hasPermissionWidget: false).contains(.permissions))
     }
 
-    @Test func theLongTourIsTheMainTourAndFifteenPagesBeforeTheClosingPages() {
+    @Test func theLongTourIsTheMainTourAndSeventeenPagesBeforeTheClosingPages() {
         let long = OnboardingPage.shown(length: .long, agentsEnabled: true)
         let expected = Array(Self.main.prefix(15)) + Self.extras + Array(Self.main.suffix(4))
         #expect(long == expected)
         #expect(long == OnboardingPage.allCases)
-        #expect(long.count == Self.main.count + 15)
+        #expect(long.count == Self.main.count + 17)
         #expect(Set(Self.main).isSubset(of: long))
         // The main tour's pages keep their order inside the long one.
         #expect(long.filter { !Self.extras.contains($0) } == Self.main)
@@ -94,7 +94,8 @@ struct OnboardingLengthPageListTests {
     @Test func theLongPagesThatAreAboutAgentsLeaveWithTheAgents() {
         let long = OnboardingPage.shown(length: .long, agentsEnabled: false)
         #expect(long.filter(\.isLongOnly) == [
-            .mirror, .booth, .weatherCard, .lights, .accent, .power, .volume, .screens, .sounds, .links, .startup, .updates,
+            .mirror, .booth, .weatherCard, .record, .convert, .lights, .accent, .power, .volume, .screens, .sounds, .links,
+            .startup, .updates,
         ])
         #expect(!long.contains(.agents))
         #expect(OnboardingPage.usage.isAgentsOnly && OnboardingPage.quiet.isAgentsOnly && OnboardingPage.phone.isAgentsOnly)
@@ -230,7 +231,7 @@ struct OnboardingLengthQuestionTests {
     }
 
     @Test func theCounterOfEachPathEndsOnItsTotal() {
-        for (length, total) in [(OnboardingLength.short, 8), (.medium, 18), (.long, 33)] {
+        for (length, total) in [(OnboardingLength.short, 8), (.medium, 18), (.long, 35)] {
             let tour = Self.tour()
             tour.answerQuestion(length)
             #expect(tour.stepCount == total, "\(length)")
@@ -298,7 +299,7 @@ struct OnboardingLengthQuestionTests {
         for kind in OnboardingGrant.widgetsAskingMacOS {
             #expect(pages(widgets: quiet.union([kind]), agents: false).contains(.permissions), "\(kind)")
         }
-        #expect(OnboardingGrant.widgetsAskingMacOS == [.mirror, .calendar, .todo])
+        #expect(OnboardingGrant.widgetsAskingMacOS == [.mirror, .calendar, .todo, .record])
         #expect(pages(widgets: quiet, agents: true).contains(.permissions), "the agents ask too")
 
         // On the display's page counts. Switched on and left off it does not.
@@ -316,12 +317,12 @@ struct OnboardingLengthQuestionTests {
         let state = OnboardingState()
         #expect(OnboardingLengthPage.stepCount(.short, in: state) == 8)
         #expect(OnboardingLengthPage.stepCount(.medium, in: state) == 18)
-        #expect(OnboardingLengthPage.stepCount(.long, in: state) == 33)
+        #expect(OnboardingLengthPage.stepCount(.long, in: state) == 35)
 
         var nookOnly = state
         nookOnly.agentsEnabled = false
         #expect(OnboardingLengthPage.stepCount(.medium, in: nookOnly) == 17)
-        #expect(OnboardingLengthPage.stepCount(.long, in: nookOnly) == 29)
+        #expect(OnboardingLengthPage.stepCount(.long, in: nookOnly) == 31)
         for length in OnboardingLength.allCases {
             var chosen = state
             chosen.length = length
@@ -486,8 +487,8 @@ struct OnboardingCarryOnTests {
         #expect(tour.length == .long)
         #expect(followed == [
             .agents, .features, .layout, .arrange, .todos, .notes, .opened, .look,
-            .mirror, .booth, .weatherCard, .lights, .accent, .power, .volume, .usage, .quiet, .phone, .screens,
-            .sounds, .links, .startup, .updates,
+            .mirror, .booth, .weatherCard, .record, .convert, .lights, .accent, .power, .volume, .usage, .quiet, .phone,
+            .screens, .sounds, .links, .startup, .updates,
             .integrations, .tips,
         ])
         #expect(seenBefore.isDisjoint(with: followed))
@@ -502,8 +503,8 @@ struct OnboardingCarryOnTests {
         #expect(tour.page == .mirror)
         let followed = Self.walkToTheEnd(tour)
         #expect(followed == [
-            .mirror, .booth, .weatherCard, .lights, .accent, .power, .volume, .usage, .quiet, .phone, .screens, .sounds,
-            .links, .startup, .updates,
+            .mirror, .booth, .weatherCard, .record, .convert, .lights, .accent, .power, .volume, .usage, .quiet, .phone,
+            .screens, .sounds, .links, .startup, .updates,
         ])
         #expect(tour.flow.outcome == .finished)
     }

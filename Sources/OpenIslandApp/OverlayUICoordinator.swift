@@ -658,9 +658,9 @@ final class OverlayUICoordinator {
             return false
         }
 
-        // The tray's share picker hangs off the island. Closing under it
-        // would pull away the file being shared.
-        if appModel?.nook.tray.isSharePickerOpen == true {
+        // The tray's share picker and the to-do date popover hang off the
+        // island. Closing under one would pull it away mid-choice.
+        if appModel?.nook.hasOpenPicker == true {
             return false
         }
 

@@ -489,7 +489,7 @@ struct AgentsSwitchTests {
 
     @Test
     func theTourSaysNothingAboutAgentsWhileOff() {
-        #expect(OnboardingGrant.shown(agentsEnabled: false) == [.camera, .accessibility, .calendar])
+        #expect(OnboardingGrant.shown(agentsEnabled: false) == [.camera, .accessibility, .calendar, .record])
         #expect(OnboardingGrant.shown(agentsEnabled: true) == OnboardingGrant.allCases.filter { $0 != .audio })
 
         #expect(OnboardingRecapRow.shown(agentsEnabled: false) == [.opens, .closed, .widgets, .calendar, .todos, .notes, .weather, .layout, .opened, .glow])

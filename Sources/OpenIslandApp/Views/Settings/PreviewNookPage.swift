@@ -316,6 +316,7 @@ struct NookSampleCard: View {
         case .weather: NookWeatherContent.sample(size: size)
         case .design: NookDesignCard.sample(size: size)
         case .linkAudio: NookLinkAudioCard.sample(size: size)
+        case .record: NookRecordCard.sample(size: size)
         }
     }
 

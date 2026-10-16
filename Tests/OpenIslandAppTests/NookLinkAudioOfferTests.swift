@@ -193,19 +193,19 @@ struct NookLinkAudioOfferTourTests {
         return state
     }
 
-    @Test func theWidgetsPageListsNineAndTheWalkEndsOnTheDesignKit() {
+    @Test func theWidgetsPageListsTenAndTheWalkEndsOnTheDesignKit() {
         withoutLinkAudio {
             let state = Self.everythingOn()
-            #expect(NookWidgetKind.offered.count == 9)
+            #expect(NookWidgetKind.offered.count == 10)
             #expect(!state.shownPlacements.contains { $0.kind == .linkAudio })
             #expect(!state.ownLayoutPlacements.contains { $0.kind == .linkAudio })
             #expect(!state.showsWidget(.linkAudio))
 
-            #expect(OnboardingFeatureWalk.everyKind.count == 9)
+            #expect(OnboardingFeatureWalk.everyKind.count == 10)
             #expect(state.featureWalk.kinds.last == .design)
             #expect(!state.featureWalk.kinds.contains(.linkAudio))
-            #expect(NookWidgetKind.tools == [.design])
-            #expect(NookWidgetKind.startsOff == [.mirror, .weather, .design])
+            #expect(NookWidgetKind.tools == [.record, .design])
+            #expect(NookWidgetKind.startsOff == [.mirror, .weather, .record, .design])
         }
     }
 
@@ -236,7 +236,7 @@ struct NookLinkAudioOfferTourTests {
         }
     }
 
-    @Test func theWidgetsPageDrawsNineRowsWhereTenWereDrawn() throws {
+    @Test func theWidgetsPageDrawsTenRowsWhereElevenWereDrawn() throws {
         func png(_ state: OnboardingState) throws -> Data {
             let view = OnboardingView(tour: OnboardingTour(startingAt: .widgets, state: { state }), lang: LanguageManager.shared)
                 .frame(width: 320, height: OnboardingWindowFrame.narrowMaxHeight)
@@ -254,9 +254,9 @@ struct NookLinkAudioOfferTourTests {
     }
 
     /// No string the tour shows with the build not offering the widget says
-    /// MP3, yt-dlp or ffmpeg, and its footnotes name three widgets.
+    /// MP3, yt-dlp or ffmpeg, and its footnotes name four widgets.
     @Test(arguments: HangoverBrandTests.languages)
-    func theFootnotesNameThreeWidgetsAndSayNothingAboutTheWidgetThatIsNotThere(language: String) throws {
+    func theFootnotesNameFourWidgetsAndSayNothingAboutTheWidgetThatIsNotThere(language: String) throws {
         let table = try HangoverBrandTests.table(language)
         withoutLinkAudio {
             #expect(OnboardingWidgetsPage.footnoteKey == "onboarding.widgets.note.release")
@@ -265,13 +265,16 @@ struct NookLinkAudioOfferTourTests {
         #expect(OnboardingWidgetsPage.footnoteKey == "onboarding.widgets.note", "offered, the footnote is what it was")
 
         let widgets = try #require(table["onboarding.widgets.note.release"])
-        for kind: NookWidgetKind in [.mirror, .weather, .design] {
+        for kind: NookWidgetKind in [.mirror, .weather, .record, .design] {
             let name = try #require(table["onboarding.nook.widget.\(kind.rawValue)"])
             #expect(widgets.contains(name), "\(language): \(name)")
         }
         let features = try #require(table["onboarding.features.note.release"])
         let design = try #require(table["onboarding.nook.widget.design"])
         #expect(features.lowercased().contains(design.lowercased()) || language != "en")
+        // The note says Record goes off again, and that the tour never starts a recording.
+        let record = try #require(table["onboarding.nook.widget.record"])
+        #expect(features.lowercased().contains(record.lowercased()), "\(language): \(features)")
         for text in [widgets, features] { #expect(Self.mentionsTheWidget(text) == false, "\(language): \(text)") }
     }
 

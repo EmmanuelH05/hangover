@@ -41,7 +41,8 @@ struct OnboardingPageView: View {
             case .arrange: OnboardingArrangePage(context: context)
             case .opened: OnboardingOpenedPage(context: context)
             case .look: OnboardingGlowPage(context: context)
-            case .mirror, .booth, .weatherCard, .lights, .accent, .power, .volume, .usage, .quiet, .phone, .screens, .sounds, .links, .startup, .updates:
+            case .mirror, .booth, .weatherCard, .record, .convert, .lights, .accent, .power, .volume, .usage, .quiet, .phone, .screens,
+                 .sounds, .links, .startup, .updates:
                 OnboardingMorePage(page: page, context: context)
             case .permissions: OnboardingPermissionsPage(context: context)
             case .integrations: OnboardingIntegrationsPage(context: context)

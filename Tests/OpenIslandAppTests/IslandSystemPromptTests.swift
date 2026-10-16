@@ -169,26 +169,23 @@ struct IslandSystemPromptTests {
             let nook = Self.nook()
             var told: [Bool] = []
             nook.onSystemPromptChange = { told.append($0) }
-            let writer = StubAppleNotesWriter()
-            writer.fail(with: refusal)
-            let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-            let defaults = MemoryDefaults()
-            defaults.set(NookNotesDestination.appleNotes.rawValue, forKey: NookNotesService.destinationDefaultsKey)
-            let notes = NookNotesService(
-                defaults: defaults, appleNotes: writer, fileURL: folder.appendingPathComponent("notes.md")
-            )
+            let harness = NookNotesHarness()
+            harness.bridge.fail(with: refusal)
+            let notes = harness.makeStore(saveTo: .appleNotes, start: false)
             notes.start(nook: nook)
             #expect(notes.hasNotesAnswer == false)
 
-            notes.append("first")
-            await notes.lastSend?.value
+            notes.beginNewNote()
+            notes.edit("first")
+            notes.flush()
+            await notes.lastSync?.value
             #expect(told == [true, false])
             #expect(notes.hasNotesAnswer)
 
-            notes.append("second")
-            await notes.lastSend?.value
+            notes.edit("first and second")
+            notes.flush()
+            await notes.lastSync?.value
             #expect(told == [true, false], "macOS asks no second time")
-            try? FileManager.default.removeItem(at: folder)
         }
     }
 
@@ -197,23 +194,20 @@ struct IslandSystemPromptTests {
         let nook = Self.nook()
         var told: [Bool] = []
         nook.onSystemPromptChange = { told.append($0) }
-        let writer = StubAppleNotesWriter()
-        writer.fail(with: .failed)
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        let defaults = MemoryDefaults()
-        defaults.set(NookNotesDestination.appleNotes.rawValue, forKey: NookNotesService.destinationDefaultsKey)
-        let notes = NookNotesService(
-            defaults: defaults, appleNotes: writer, fileURL: folder.appendingPathComponent("notes.md")
-        )
+        let harness = NookNotesHarness()
+        harness.bridge.fail(with: .failed)
+        let notes = harness.makeStore(saveTo: .appleNotes, start: false)
         notes.start(nook: nook)
 
-        notes.append("first")
-        await notes.lastSend?.value
-        notes.append("second")
-        await notes.lastSend?.value
+        notes.beginNewNote()
+        notes.edit("first")
+        notes.flush()
+        await notes.lastSync?.value
+        notes.edit("first and second")
+        notes.flush()
+        await notes.lastSync?.value
 
         #expect(told == [true, false, true, false])
         #expect(notes.hasNotesAnswer == false)
-        try? FileManager.default.removeItem(at: folder)
     }
 }

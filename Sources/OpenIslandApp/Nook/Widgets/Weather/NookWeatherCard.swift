@@ -261,6 +261,7 @@ struct NookWeatherContent: View {
             }
             .buttonStyle(.plain)
             .accessibilityAddTraits(isSelected ? .isSelected : [])
+            .demoTarget(.weatherMode(option))
         } else {
             label
         }

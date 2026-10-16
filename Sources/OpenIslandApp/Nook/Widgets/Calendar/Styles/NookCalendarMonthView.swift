@@ -232,7 +232,7 @@ struct NookCalendarMonthView: View {
                     .foregroundStyle(.white.opacity(0.35))
             } else {
                 ForEach(events.prefix(limit)) { event in
-                    NookCalendarRow(event: event, now: now, showsWeekday: false) { nook.startNote(for: event) } onJoin: { nook.joinMeeting(event) }
+                    NookCalendarRow(event: event, now: now, showsWeekday: false) { nook.joinMeeting(event) }
                         .frame(height: NookCalendarExpansion.rowHeight)
                 }
                 ForEach(tasks.prefix(max(0, limit - events.count))) { task in

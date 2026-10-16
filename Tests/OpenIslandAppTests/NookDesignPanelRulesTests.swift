@@ -67,11 +67,14 @@ import Testing
     }
 
     @Test func aPictureInRangeFillsItsAreaAndOneOutsideIsFittedInside() {
-        #expect(Rules.fittedFraction(pictureAspect: 1.5) == CGSize(width: 1, height: 1))
+        // A panel in the picture's own shape: the picture fills its area.
+        let landscape = Rules.panelSize(width: 300, pictureAspect: 1.5)
+        #expect(Rules.fittedFraction(pictureAspect: 1.5, panelSize: landscape) == CGSize(width: 1, height: 1))
         // A panorama twice as wide as the widest area covers half its height.
-        #expect(Rules.fittedFraction(pictureAspect: 4.8) == CGSize(width: 1, height: 0.5))
+        let panorama = Rules.panelSize(width: 480, pictureAspect: 4.8)
+        #expect(Rules.fittedFraction(pictureAspect: 4.8, panelSize: panorama) == CGSize(width: 1, height: 0.5))
         // A long page a fifth as wide as the narrowest area covers a fifth of its width.
-        let page = Rules.fittedFraction(pictureAspect: 0.1)
+        let page = Rules.fittedFraction(pictureAspect: 0.1, panelSize: Rules.panelSize(width: 300, pictureAspect: 0.1))
         #expect(near(page.width, 0.2))
         #expect(page.height == 1)
     }
@@ -107,42 +110,205 @@ import Testing
         #expect(size.width == size.height - Rules.barHeight)
     }
 
-    @Test func resizingKeepsThePicturesShape() {
-        let current = Rules.panelSize(width: 400, pictureAspect: 2)
-        let room = CGSize(width: 2000, height: 1200)
+    // MARK: Free resize
 
-        // The right edge was dragged: the height follows the width.
-        let wider = Rules.resizedSize(
-            proposed: CGSize(width: 600, height: current.height), current: current, pictureAspect: 2, available: room
-        )
-        #expect(wider == CGSize(width: 600, height: 300 + Rules.barHeight))
+    private let room = CGSize(width: 2000, height: 1200)
 
-        // The bottom edge was dragged: the width follows the height.
-        let taller = Rules.resizedSize(
-            proposed: CGSize(width: current.width, height: 330), current: current, pictureAspect: 2, available: room
-        )
-        #expect(taller == CGSize(width: 600, height: 300 + Rules.barHeight))
-
-        // A corner drag goes by the edge that moved more.
-        let corner = Rules.resizedSize(
-            proposed: CGSize(width: 500, height: current.height + 10), current: current, pictureAspect: 2, available: room
-        )
-        #expect(corner == CGSize(width: 500, height: 250 + Rules.barHeight))
+    @Test func aWideDragGivesTheWidthAndLeavesTheHeight() {
+        let size = Rules.resizedSize(proposed: CGSize(width: 700, height: 330), available: room)
+        #expect(size == CGSize(width: 700, height: 330))
     }
 
-    @Test func resizingStopsAtTheMinimumAndAtTheScreen() {
-        let current = Rules.panelSize(width: 400, pictureAspect: 2)
-        let room = CGSize(width: 800, height: 600)
+    @Test func aTallDragGivesTheHeightAndLeavesTheWidth() {
+        let size = Rules.resizedSize(proposed: CGSize(width: 400, height: 900), available: room)
+        #expect(size == CGSize(width: 400, height: 900))
+    }
 
-        let tiny = Rules.resizedSize(proposed: CGSize(width: 10, height: 10), current: current, pictureAspect: 2, available: room)
-        #expect(tiny == Rules.panelSize(width: Rules.minimumWidth, pictureAspect: 2))
+    @Test func aCornerDragGivesBothSidesWhateverTheShape() {
+        // Neither side follows the other, and the picture's shape is not asked.
+        let size = Rules.resizedSize(proposed: CGSize(width: 520, height: 410), available: room)
+        #expect(size == CGSize(width: 520, height: 410))
+    }
 
-        let huge = Rules.resizedSize(proposed: CGSize(width: 5000, height: 5000), current: current, pictureAspect: 2, available: room)
-        #expect(huge == Rules.panelSize(width: 800, pictureAspect: 2))
+    @Test func aDragIsRoundedToWholePoints() {
+        let size = Rules.resizedSize(proposed: CGSize(width: 400.4, height: 300.6), available: room)
+        #expect(size == CGSize(width: 400, height: 301))
+    }
 
-        let square = Rules.resizedSize(proposed: CGSize(width: 5000, height: 5000), current: current, pictureAspect: 1, available: room)
-        #expect(square.height <= room.height)
-        #expect(square.width == square.height - Rules.barHeight)
+    @Test func resizingStopsAtTheMinimums() {
+        let strip: CGFloat = 240
+        let height: CGFloat = 120 + Rules.barHeight
+        #expect(Rules.minimumWidth == strip)
+        #expect(Rules.minimumHeight == height)
+
+        let tiny = Rules.resizedSize(proposed: CGSize(width: 10, height: 10), available: room)
+        #expect(tiny == CGSize(width: strip, height: height))
+        // Each side stops on its own.
+        #expect(Rules.resizedSize(proposed: CGSize(width: 100, height: 600), available: room) == CGSize(width: strip, height: 600))
+        #expect(Rules.resizedSize(proposed: CGSize(width: 600, height: 20), available: room) == CGSize(width: 600, height: height))
+    }
+
+    @Test func resizingStopsAtTheScreen() {
+        let screen = CGSize(width: 800, height: 600)
+        #expect(Rules.resizedSize(proposed: CGSize(width: 5000, height: 5000), available: screen) == screen)
+        #expect(Rules.resizedSize(proposed: CGSize(width: 5000, height: 300), available: screen) == CGSize(width: 800, height: 300))
+        #expect(Rules.resizedSize(proposed: CGSize(width: 300, height: 5000), available: screen) == CGSize(width: 300, height: 600))
+    }
+
+    @Test func theMinimumWinsOnAScreenSmallerThanIt() {
+        let size = Rules.resizedSize(proposed: CGSize(width: 500, height: 500), available: CGSize(width: 200, height: 100))
+        #expect(size == CGSize(width: Rules.minimumWidth, height: Rules.minimumHeight))
+    }
+
+    @Test func aSizeThatIsNotARealNumberNeverReachesTheWindow() {
+        let nothing = Rules.resizedSize(proposed: CGSize(width: CGFloat.nan, height: CGFloat.nan), available: room)
+        #expect(nothing == CGSize(width: Rules.minimumWidth, height: Rules.minimumHeight))
+        // Without end is as large as the screen allows.
+        let endless = Rules.resizedSize(proposed: CGSize(width: CGFloat.infinity, height: CGFloat.infinity), available: room)
+        #expect(endless == room)
+    }
+
+    // MARK: Opening at a remembered size
+
+    @Test func aPanelWithNothingRememberedOpensAtTheInitialSize() {
+        let screen = CGSize(width: 1400, height: 880)
+        #expect(
+            Rules.openingSize(remembered: nil, pictureAspect: 2, available: screen)
+                == Rules.initialSize(pictureAspect: 2, available: screen)
+        )
+    }
+
+    @Test func aRememberedSizeIsKeptAsItIsWhateverTheShape() {
+        let screen = CGSize(width: 1400, height: 880)
+        let size = Rules.openingSize(remembered: CGSize(width: 640, height: 250), pictureAspect: 2, available: screen)
+        #expect(size == CGSize(width: 640, height: 250))
+    }
+
+    @Test func aRememberedSizeLargerThanTheScreenIsClamped() {
+        let small = CGSize(width: 700, height: 500)
+        let size = Rules.openingSize(remembered: CGSize(width: 1800, height: 1100), pictureAspect: 2, available: small)
+        #expect(size == small)
+    }
+
+    @Test func aRememberedSizeThatCannotBeUsedFallsBackToTheInitialSize() {
+        let screen = CGSize(width: 1400, height: 880)
+        let initial = Rules.initialSize(pictureAspect: 1, available: screen)
+        for bad in [CGSize.zero, CGSize(width: -5, height: 300), CGSize(width: 300, height: CGFloat.nan), CGSize(width: CGFloat.infinity, height: 300)] {
+            #expect(Rules.openingSize(remembered: bad, pictureAspect: 1, available: screen) == initial, "\(bad)")
+        }
+    }
+
+    // MARK: Back to the picture's shape
+
+    @Test func goingBackToThePicturesShapeKeepsTheWidth() {
+        let size = Rules.matchedSize(current: CGSize(width: 500, height: 700), pictureAspect: 2, available: room)
+        #expect(size == CGSize(width: 500, height: 250 + Rules.barHeight))
+    }
+
+    @Test func goingBackNeverOutgrowsTheScreenOrShrinksPastTheMinimums() {
+        // A tall picture at a wide panel is narrowed until it fits the screen's height.
+        let tall = Rules.matchedSize(
+            current: CGSize(width: 900, height: 300), pictureAspect: 0.5, available: CGSize(width: 1000, height: 800)
+        )
+        #expect(tall == CGSize(width: 385, height: 800))
+
+        let narrow = Rules.matchedSize(current: CGSize(width: 100, height: 300), pictureAspect: 1, available: room)
+        #expect(narrow == CGSize(width: Rules.minimumWidth, height: Rules.minimumWidth + Rules.barHeight))
+
+        // A panorama at the narrowest panel would be shorter than the minimum.
+        let panorama = Rules.matchedSize(current: CGSize(width: 240, height: 400), pictureAspect: 4, available: room)
+        #expect(panorama == CGSize(width: Rules.minimumWidth, height: Rules.minimumHeight))
+    }
+
+    @Test func goingBackToALongPagesShapeStaysWithinTheShapeLimits() {
+        let size = Rules.matchedSize(current: CGSize(width: 300, height: 300), pictureAspect: 0.1, available: room)
+        #expect(size == CGSize(width: 300, height: 600 + Rules.barHeight))
+    }
+
+    @Test func aPanelSentBackToItsShapeKeepsItsTopLeftCorner() {
+        // AppKit counts from the bottom left: this panel's top edge is at 900.
+        let frame = CGRect(x: 100, y: 200, width: 500, height: 700)
+        let size = CGSize(width: 500, height: 280)
+        let moved = Rules.frame(keepingTopLeftOf: frame, resizedTo: size, in: Self.screen)
+        #expect(moved == CGRect(x: 100, y: 620, width: 500, height: 280))
+        #expect(moved.maxY == frame.maxY)
+    }
+
+    @Test func aPanelThatGrowsPastTheScreenIsMovedBackByTheOverflowOnly() {
+        // Growing down past the bottom edge moves it up until its bottom is on the screen.
+        let low = CGRect(x: 100, y: 40, width: 300, height: 200)
+        let taller = Rules.frame(keepingTopLeftOf: low, resizedTo: CGSize(width: 300, height: 400), in: Self.screen)
+        #expect(taller == CGRect(x: 100, y: 0, width: 300, height: 400))
+
+        // Growing right past the right edge moves it left until its right side is on the screen.
+        let right = CGRect(x: 1300, y: 500, width: 200, height: 300)
+        let wider = Rules.frame(keepingTopLeftOf: right, resizedTo: CGSize(width: 400, height: 300), in: Self.screen)
+        #expect(wider == CGRect(x: 1112, y: 500, width: 400, height: 300))
+    }
+
+    @Test func aPanelLeftPartlyOffTheScreenDoesNotJump() {
+        // Its bottom is below the screen already. Getting shorter must not move its top.
+        let hanging = CGRect(x: 100, y: -100, width: 300, height: 400)
+        let shorter = Rules.frame(keepingTopLeftOf: hanging, resizedTo: CGSize(width: 300, height: 300), in: Self.screen)
+        #expect(shorter.maxY == hanging.maxY)
+        #expect(shorter.minX == hanging.minX)
+
+        // Its right side is off the screen already. Staying as wide must not move it.
+        let sideways = CGRect(x: 1400, y: 300, width: 300, height: 300)
+        let same = Rules.frame(keepingTopLeftOf: sideways, resizedTo: CGSize(width: 300, height: 200), in: Self.screen)
+        #expect(same.minX == sideways.minX)
+    }
+
+    // MARK: Fitting inside a free area
+
+    @Test func thePictureIsFittedInsideTheRealAreaWhateverItsShape() {
+        // A picture twice as wide as tall.
+        // An area that is square: the picture fills the width and half the height.
+        let square = CGSize(width: 400, height: 400 + Rules.barHeight)
+        #expect(Rules.fittedFraction(pictureAspect: 2, panelSize: square) == CGSize(width: 1, height: 0.5))
+        // An area twice as wide as the picture's shape is: the picture fills the height and half the width.
+        let wide = CGSize(width: 800, height: 200 + Rules.barHeight)
+        #expect(Rules.fittedFraction(pictureAspect: 2, panelSize: wide) == CGSize(width: 0.5, height: 1))
+        // An area in the picture's own shape is filled.
+        let same = CGSize(width: 400, height: 200 + Rules.barHeight)
+        #expect(Rules.fittedFraction(pictureAspect: 2, panelSize: same) == CGSize(width: 1, height: 1))
+        // A tall area, taller than any shape the old lock allowed.
+        let tall = CGSize(width: 240, height: 1200 + Rules.barHeight)
+        #expect(Rules.fittedFraction(pictureAspect: 2, panelSize: tall) == CGSize(width: 1, height: 0.1))
+    }
+
+    @Test func aPanelWithNoRoomOrNoPictureShapeFitsEverything() {
+        let whole = CGSize(width: 1, height: 1)
+        #expect(Rules.fittedFraction(pictureAspect: 2, panelSize: .zero) == whole)
+        #expect(Rules.fittedFraction(pictureAspect: 2, panelSize: CGSize(width: 300, height: Rules.barHeight)) == whole)
+        #expect(Rules.fittedFraction(pictureAspect: .nan, panelSize: CGSize(width: 300, height: 300)) == whole)
+        #expect(Rules.fittedFraction(pictureAspect: 0, panelSize: CGSize(width: 300, height: 300)) == whole)
+    }
+
+    @Test func thePanLimitsFollowTheAreaNotThePicturesShape() {
+        // A square area holding a picture twice as wide: it covers the width and half the height.
+        let inSquare = Rules.fittedFraction(pictureAspect: 2, panelSize: CGSize(width: 400, height: 400 + Rules.barHeight))
+        let zoomed = NookDesignZoom(scale: 1.5).panned(by: CGSize(width: 5, height: 5), fitted: inSquare)
+        // One and a half times: 1.5 wide, which overflows, and 0.75 tall, which does not.
+        #expect(zoomed.offset == CGSize(width: 0.25, height: 0))
+
+        // A wide area holding the same picture: it covers the height and half the width.
+        let inWide = Rules.fittedFraction(pictureAspect: 2, panelSize: CGSize(width: 800, height: 200 + Rules.barHeight))
+        let other = NookDesignZoom(scale: 1.5).panned(by: CGSize(width: 5, height: 5), fitted: inWide)
+        #expect(other.offset == CGSize(width: 0, height: 0.25))
+        // Three times covers the area's width as well, and the pan opens along it.
+        let more = NookDesignZoom(scale: 3).panned(by: CGSize(width: 5, height: 5), fitted: inWide)
+        #expect(more.offset == CGSize(width: 0.25, height: 1))
+    }
+
+    @Test func thePercentIsRelativeToTheFitWhateverTheAreasShape() {
+        // The fit is 100%, in a wide area as in a square one.
+        #expect(NookDesignZoom.fit.percentText == "100%")
+        let fitted = Rules.fittedFraction(pictureAspect: 2, panelSize: CGSize(width: 800, height: 200 + Rules.barHeight))
+        let zoomed = NookDesignZoom.fit.zoomed(by: NookDesignZoom.step, fitted: fitted)
+        #expect(zoomed.percentText == "125%")
+        // A fit can be reached again from any zoom by zooming out.
+        #expect(zoomed.zoomed(by: 1 / NookDesignZoom.step, fitted: fitted) == .fit)
     }
 
     // MARK: Place
@@ -369,6 +535,70 @@ import Testing
         for size in NookWidgetSize.allCases {
             #expect(NookDesignCardLayout.swatchSide(for: size) >= 26)
             #expect(NookDesignCardLayout.tileSide(for: size) >= 52)
+        }
+    }
+}
+
+// MARK: - The panel's state follows its window
+
+@MainActor
+@Suite struct NookDesignPanelStateTests {
+    private static func picture(width: Int, height: Int) throws -> CGImage {
+        let context = try #require(CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.setFillColor(red: 1, green: 0.5, blue: 0, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        return try #require(context.makeImage())
+    }
+
+    private func state(pictureWidth: Int, pictureHeight: Int, panelSize: CGSize? = nil) throws -> NookDesignPanelState {
+        let reference = NookDesignReference(
+            id: UUID(), collectionID: NookDesignCollection.globalID, name: "Shot",
+            fileName: "original.png", pixelWidth: pictureWidth, pixelHeight: pictureHeight,
+            isFavorite: false, addedAt: NookDesignSamples.day
+        )
+        return NookDesignPanelState(
+            reference: reference, image: try Self.picture(width: 8, height: 4), panelSize: panelSize
+        )
+    }
+
+    @Test func aPanelWithNoSizeGivenIsInThePicturesShape() throws {
+        let state = try state(pictureWidth: 300, pictureHeight: 200)
+        #expect(state.fitted == CGSize(width: 1, height: 1))
+        #expect(state.panelSize == NookDesignPanelRules.panelSize(width: 360, pictureAspect: 1.5))
+    }
+
+    @Test func whatThePictureCoversIsReadFromTheAreaThePanelHas() throws {
+        let state = try state(pictureWidth: 400, pictureHeight: 200, panelSize: CGSize(width: 400, height: 400 + NookDesignPanelRules.barHeight))
+        #expect(state.fitted == CGSize(width: 1, height: 0.5))
+
+        state.resize(to: CGSize(width: 800, height: 200 + NookDesignPanelRules.barHeight))
+        #expect(state.fitted == CGSize(width: 0.5, height: 1))
+    }
+
+    @Test func aZoomedPictureIsPulledBackWhenTheAreaGrowsAroundIt() throws {
+        let bar = NookDesignPanelRules.barHeight
+        let state = try state(pictureWidth: 400, pictureHeight: 200, panelSize: CGSize(width: 400, height: 200 + bar))
+        state.zoom = state.zoom.zoomed(to: 3, fitted: state.fitted).panned(by: CGSize(width: 9, height: 9), fitted: state.fitted)
+        #expect(state.zoom.offset == CGSize(width: 1, height: 1))
+
+        // A third as tall as wide: the zoomed picture no longer overflows the width.
+        state.resize(to: CGSize(width: 1200, height: 200 + bar))
+        #expect(state.zoom.scale == 3)
+        #expect(state.zoom.offset == CGSize(width: 0, height: 1))
+        #expect(state.zoom.percentText == "300%")
+    }
+
+    @Test func aPictureAtTheFitStaysAtTheFitWhateverTheSize() throws {
+        let bar = NookDesignPanelRules.barHeight
+        let state = try state(pictureWidth: 400, pictureHeight: 200, panelSize: CGSize(width: 400, height: 200 + bar))
+        for size in [CGSize(width: 240, height: 900), CGSize(width: 900, height: 150), CGSize(width: 500, height: 330)] {
+            state.resize(to: size)
+            #expect(state.zoom.isFit)
+            #expect(state.zoom.percentText == "100%")
         }
     }
 }

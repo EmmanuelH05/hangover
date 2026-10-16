@@ -43,7 +43,7 @@ private func eventually(_ condition: () -> Bool) async -> Bool {
 
 /// A stand-in for the Notes app that keeps a send waiting until it is told
 /// to go on, and records how many sends came.
-private final class GatedNotesWriter: NookAppleNotesWriting, @unchecked Sendable {
+private final class GatedNotesBridge: NookAppleNotesBridge, @unchecked Sendable {
     private let lock = NSLock()
     private var waiting: [CheckedContinuation<Void, Never>] = []
     private var isReleased = false
@@ -58,7 +58,21 @@ private final class GatedNotesWriter: NookAppleNotesWriting, @unchecked Sendable
         lock.withLock { failure = error }
     }
 
-    func append(lineHTML: String, toNoteTitled title: String) async throws {
+    func create(bodyHTML: String) async throws -> String {
+        try await send()
+        return "gated-\(callCount)"
+    }
+
+    func update(id: String, bodyHTML: String) async throws -> Bool {
+        try await send()
+        return true
+    }
+
+    func delete(id: String) async throws {
+        try await send()
+    }
+
+    private func send() async throws {
         lock.withLock { calls += 1 }
         await withCheckedContinuation { continuation in
             let resumeNow = lock.withLock { () -> Bool in
@@ -415,7 +429,7 @@ struct EdgeCaseSystemPromptRequestTests {
         }
 
         let expected: Set<String> = [
-            "NookCalendarService.swift", "NookRemindersService.swift", "NookNotesService.swift",
+            "NookCalendarService.swift", "NookRemindersService.swift", "NookNotesStore.swift",
             "AppModel+Onboarding.swift", "AppModel.swift",
             // The designer kit's file dialogs (D53).
             "NookDesignEditorPanel.swift",
@@ -438,200 +452,190 @@ struct EdgeCaseSystemPromptRequestTests {
 @MainActor
 @Suite(.noNewWindows)
 struct EdgeCaseSystemPromptNotesTests {
-    @MainActor
-    private final class Harness {
-        let defaults = MemoryDefaults()
-        let folder = FileManager.default.temporaryDirectory
-            .appendingPathComponent("EdgeCaseSystemPromptNotes-\(UUID().uuidString)", isDirectory: true)
-        var fileURL: URL { folder.appendingPathComponent("notes.md") }
-
-        init(destination: NookNotesDestination = .appleNotes) {
-            defaults.set(destination.rawValue, forKey: NookNotesService.destinationDefaultsKey)
-        }
-
-        deinit { try? FileManager.default.removeItem(at: folder) }
-
-        func service(writer: any NookAppleNotesWriting) -> NookNotesService {
-            NookNotesService(defaults: defaults, appleNotes: writer, fileURL: fileURL)
-        }
-    }
-
     private static func nook() -> NookModel {
         NookModel(defaults: MemoryDefaults(), looksForImportedGIF: false)
     }
 
+    /// A note typed and saved, which queues one send to the Notes app.
+    private static func saveNote(_ text: String, in notes: NookNotesStore) {
+        notes.beginNewNote()
+        notes.edit(text)
+        notes.flush()
+    }
+
     @Test func severalNotesSentBeforeTheFirstAnswerRaiseOnePromptBetweenThem() async {
-        let harness = Harness()
-        let writer = GatedNotesWriter()
+        let harness = NookNotesHarness()
+        let bridge = GatedNotesBridge()
         let nook = Self.nook()
         var told: [Bool] = []
         nook.onSystemPromptChange = { told.append($0) }
-        let notes = harness.service(writer: writer)
+        let notes = harness.makeStore(saveTo: .appleNotes, bridge: bridge, start: false)
         notes.start(nook: nook)
 
-        for text in ["one", "two", "three", "four"] { notes.append(text) }
-        #expect(await eventually { writer.callCount == 1 })
+        for text in ["one", "two", "three", "four"] { Self.saveNote(text, in: notes) }
+        #expect(await eventually { bridge.callCount == 1 })
         #expect(nook.isSystemPromptUp, "the first send is waiting on macOS")
         #expect(told == [true])
-        #expect(writer.callCount == 1, "the others wait their turn")
+        #expect(bridge.callCount == 1, "the others wait their turn")
 
-        writer.release()
-        await notes.lastSend?.value
+        bridge.release()
+        await notes.lastSync?.value
 
-        #expect(writer.callCount == 4)
+        #expect(bridge.callCount == 4)
         #expect(told == [true, false], "one trip down for all four")
         #expect(notes.hasNotesAnswer)
         #expect(notes.savedCount == 4)
     }
 
     @Test func notesSentBeforeARefusalAreAllCoveredByTheOnePromptAndTheRefusalIsAnAnswer() async {
-        let harness = Harness()
-        let writer = GatedNotesWriter()
-        writer.fail(with: .notPermitted)
+        let harness = NookNotesHarness()
+        let bridge = GatedNotesBridge()
+        bridge.fail(with: .notPermitted)
         let nook = Self.nook()
         var told: [Bool] = []
         nook.onSystemPromptChange = { told.append($0) }
-        let notes = harness.service(writer: writer)
+        let notes = harness.makeStore(saveTo: .both, bridge: bridge, start: false)
         notes.start(nook: nook)
 
-        for text in ["one", "two", "three"] { notes.append(text) }
-        #expect(await eventually { writer.callCount == 1 })
-        writer.release()
-        await notes.lastSend?.value
+        for text in ["one", "two", "three"] { Self.saveNote(text, in: notes) }
+        #expect(await eventually { bridge.callCount == 1 })
+        bridge.release()
+        await notes.lastSync?.value
 
         #expect(told == [true, false])
         #expect(notes.hasNotesAnswer)
-        // Each refused note went to the file.
-        let file = (try? String(contentsOf: harness.fileURL, encoding: .utf8)) ?? ""
-        for text in ["one", "two", "three"] { #expect(file.contains(text), "\(text) was dropped") }
+        // Each refused note is a file.
+        #expect(harness.fileNames() == ["one.md", "three.md", "two.md"], "a note was dropped")
     }
 
     @Test func sendsThatKeepFailingForAnotherReasonEachRaiseTheirOwnPromptOneAtATime() async {
-        let harness = Harness()
-        let writer = GatedNotesWriter()
-        writer.fail(with: .failed)
-        writer.release()
+        let harness = NookNotesHarness()
+        let bridge = GatedNotesBridge()
+        bridge.fail(with: .failed)
+        bridge.release()
         let nook = Self.nook()
         var told: [Bool] = []
         nook.onSystemPromptChange = { told.append($0) }
-        let notes = harness.service(writer: writer)
+        let notes = harness.makeStore(saveTo: .appleNotes, bridge: bridge, start: false)
         notes.start(nook: nook)
 
-        for text in ["one", "two", "three"] { notes.append(text) }
-        await notes.lastSend?.value
+        for text in ["one", "two", "three"] { Self.saveNote(text, in: notes) }
+        await notes.lastSync?.value
 
         #expect(told == [true, false, true, false, true, false], "one at a time, never merged into a single long prompt")
         #expect(notes.hasNotesAnswer == false)
     }
 
     @Test func aRefusalThenAnAllowKeepsTheAnswerAndNeverAsksAgain() async {
-        let harness = Harness()
-        let writer = GatedNotesWriter()
-        writer.fail(with: .notPermitted)
-        writer.release()
+        let harness = NookNotesHarness()
+        let bridge = GatedNotesBridge()
+        bridge.fail(with: .notPermitted)
+        bridge.release()
         let nook = Self.nook()
         var told: [Bool] = []
         nook.onSystemPromptChange = { told.append($0) }
-        let notes = harness.service(writer: writer)
+        let notes = harness.makeStore(saveTo: .appleNotes, bridge: bridge, start: false)
         notes.start(nook: nook)
 
-        notes.append("refused")
-        await notes.lastSend?.value
+        Self.saveNote("refused", in: notes)
+        await notes.lastSync?.value
         #expect(told == [true, false])
 
         // The user turned Notes on in System Settings.
-        writer.fail(with: nil)
-        notes.append("allowed")
-        await notes.lastSend?.value
-        notes.append("allowed again")
-        await notes.lastSend?.value
+        bridge.fail(with: nil)
+        notes.edit("refused, then allowed")
+        notes.flush()
+        await notes.lastSync?.value
+        notes.edit("refused, then allowed, again")
+        notes.flush()
+        await notes.lastSync?.value
 
         #expect(told == [true, false], "macOS asked its one question")
         #expect(notes.hasNotesAnswer)
     }
 
     @Test func theAnswerSurvivesARelaunchAndAFreshInstallAsksAgain() async {
-        let harness = Harness()
-        let writer = GatedNotesWriter()
-        writer.release()
+        let harness = NookNotesHarness()
+        let bridge = GatedNotesBridge()
+        bridge.release()
         let nook = Self.nook()
-        let notes = harness.service(writer: writer)
+        let notes = harness.makeStore(saveTo: .appleNotes, bridge: bridge, start: false)
         notes.start(nook: nook)
-        notes.append("first")
-        await notes.lastSend?.value
+        Self.saveNote("first", in: notes)
+        await notes.lastSync?.value
         #expect(notes.hasNotesAnswer)
 
-        // A new service on the same store: the app launched again.
-        let relaunched = harness.service(writer: writer)
+        // A new store on the same settings: the app launched again.
+        let relaunched = harness.makeStore(bridge: bridge, start: false)
         #expect(relaunched.hasNotesAnswer)
         var told: [Bool] = []
         nook.onSystemPromptChange = { told.append($0) }
         relaunched.start(nook: nook)
-        relaunched.append("second")
-        await relaunched.lastSend?.value
+        Self.saveNote("second", in: relaunched)
+        await relaunched.lastSync?.value
         #expect(told.isEmpty)
 
-        // A store that has never been asked.
-        let fresh = Harness()
-        let freshNotes = fresh.service(writer: writer)
+        // Settings that have never been asked.
+        let fresh = NookNotesHarness()
+        let freshNotes = fresh.makeStore(saveTo: .appleNotes, bridge: bridge, start: false)
         #expect(freshNotes.hasNotesAnswer == false)
         freshNotes.start(nook: nook)
-        freshNotes.append("third")
-        await freshNotes.lastSend?.value
+        Self.saveNote("third", in: freshNotes)
+        await freshNotes.lastSync?.value
         #expect(told == [true, false])
     }
 
-    @Test func aNoteSavedToTheFileNeverTouchesThePromptCountOrTheAnswer() async {
-        let harness = Harness(destination: .file)
-        let writer = GatedNotesWriter()
+    @Test func aNoteSavedToTheFolderNeverTouchesThePromptCountOrTheAnswer() async {
+        let harness = NookNotesHarness()
+        let bridge = GatedNotesBridge()
         let nook = Self.nook()
         var told: [Bool] = []
         nook.onSystemPromptChange = { told.append($0) }
-        let notes = harness.service(writer: writer)
+        let notes = harness.makeStore(saveTo: .folder, bridge: bridge, start: false)
         notes.start(nook: nook)
 
-        notes.append("kept in the file")
+        Self.saveNote("kept in the folder", in: notes)
 
         #expect(told.isEmpty)
-        #expect(writer.callCount == 0)
+        #expect(bridge.callCount == 0)
         #expect(notes.hasNotesAnswer == false)
-        #expect(notes.lastSend == nil)
+        #expect(notes.lastSync == nil)
     }
 
-    @Test func aNotesServiceNeverStartedStillTakesTheNoteAndTellsTheIslandNothing() async {
-        let harness = Harness()
-        let writer = GatedNotesWriter()
-        writer.release()
+    @Test func aNotesStoreNeverStartedStillTakesTheNoteAndTellsTheIslandNothing() async {
+        let harness = NookNotesHarness()
+        let bridge = GatedNotesBridge()
+        bridge.release()
         let nook = Self.nook()
         var told: [Bool] = []
         nook.onSystemPromptChange = { told.append($0) }
-        let notes = harness.service(writer: writer)
+        let notes = harness.makeStore(saveTo: .appleNotes, bridge: bridge, start: false)
 
-        notes.append("unstarted")
-        await notes.lastSend?.value
+        Self.saveNote("unstarted", in: notes)
+        await notes.lastSync?.value
 
-        #expect(writer.callCount == 1)
+        #expect(bridge.callCount == 1)
         #expect(notes.savedCount == 1)
         #expect(told.isEmpty)
         #expect(nook.isSystemPromptUp == false)
     }
 
     /// Every begin has an end that reaches the same model, whatever happens
-    /// to the service in between. The service lives as long as the app, which
+    /// to the store in between. The store lives as long as the app, which
     /// means this cannot happen there.
-    @Test func aNotesServiceThatGoesAwayWhileItsSendWaitsStillEndsThePromptItBegan() async {
-        let harness = Harness()
-        let writer = GatedNotesWriter()
+    @Test func aNotesStoreThatGoesAwayWhileItsSendWaitsStillEndsThePromptItBegan() async {
+        let harness = NookNotesHarness()
+        let bridge = GatedNotesBridge()
         let nook = Self.nook()
-        var notes: NookNotesService? = harness.service(writer: writer)
+        var notes: NookNotesStore? = harness.makeStore(saveTo: .appleNotes, bridge: bridge, start: false)
         notes?.start(nook: nook)
-        notes?.append("going away")
-        #expect(await eventually { writer.callCount == 1 })
+        if let notes { Self.saveNote("going away", in: notes) }
+        #expect(await eventually { bridge.callCount == 1 })
         #expect(nook.isSystemPromptUp)
 
         notes = nil
-        writer.release()
-        _ = await eventually { writer.finishedCount == 1 }
+        bridge.release()
+        _ = await eventually { bridge.finishedCount == 1 }
         for _ in 0..<20 { await Task.yield() }
 
         let isStillUp = nook.isSystemPromptUp

@@ -98,7 +98,8 @@ struct OnboardingCalendarLooksTourTests {
 
         init() {
             state.nookPlacements = [.calendar, .media].map { NookWidgetPlacement(kind: $0, size: .medium) }
-            state.enabledWidgets = Set(NookWidgetKind.allCases)
+            // Every switch is on but Record's, which starts off like the app's.
+            state.enabledWidgets = Set(NookWidgetKind.allCases).subtracting([.record])
         }
 
         var actions: OnboardingActions {

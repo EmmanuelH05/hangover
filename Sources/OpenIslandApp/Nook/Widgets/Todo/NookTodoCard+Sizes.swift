@@ -108,19 +108,27 @@ extension NookTodoCard {
             .onSubmit { submitAdd(source) }
             .onExitCommand(perform: closeAdd)
             .onAppear { isAddFocused = true }
-        Text("Return adds, Esc cancels")
-            .font(.system(size: 10))
-            .foregroundStyle(.white.opacity(0.35))
+            .demoTyping(.todo, text: $draft, focus: $isAddFocused) { submitAdd(source) }
+        // A task the source refused stays in the field, and the line says why.
+        if let notice = source.errorMessage {
+            noticeLabel(notice)
+        } else {
+            Text("Return adds, Esc cancels")
+                .font(.system(size: 10))
+                .foregroundStyle(.white.opacity(0.35))
+        }
         Spacer(minLength: 0)
     }
 
-    /// Return: adds a non-empty title and goes back to the list.
+    /// Return: adds a non-empty title and goes back to the list once the
+    /// source took it. A refused task stays in the open field (D2).
     private func submitAdd(_ source: any NookTodoSource) {
         let title = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        if source.canAdd, !title.isEmpty {
-            source.add(draft)
+        guard source.canAdd, !title.isEmpty else {
+            closeAdd()
+            return
         }
-        closeAdd()
+        sendTyped(source, whenAdded: closeAdd)
     }
 
     /// Escape, the close button, or after an add: back to the list.

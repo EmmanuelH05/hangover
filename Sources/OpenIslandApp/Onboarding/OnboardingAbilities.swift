@@ -14,10 +14,11 @@ enum OnboardingAbility: String, CaseIterable, Identifiable, Sendable {
     case mediaNow, mediaControl, mediaSpeaker, mediaGlow, mediaGif
     case calendarLooks, calendarAdd, calendarEdit, calendarNext
     case todoCheck, todoNotes, todoDue, todoSources
-    case notesAdd, notesRecent, notesDelete, notesWhere
-    case trayDrag, trayActions, trayClipboard, trayPrivate
+    case notesAdd, notesShortcut, notesRecent, notesDelete, notesWhere
+    case trayDrag, trayActions, trayConvert, trayClipboard, trayPrivate
     case timerSet, timerPomodoro, timerPause, timerClosed
     case weatherForecast, weatherCity, weatherClosed, weatherSource
+    case recordTargets, recordFaceCam, recordSound, recordNotch, recordShortcut, recordSaved
     case designColors, designEyedropper, designKeep, designShortcut, designLinks, designReferences, designPrivate
     case linkAudioSave, linkAudioTools, linkAudioQueue, linkAudioFolder, linkAudioRights
 
@@ -32,10 +33,11 @@ enum OnboardingAbility: String, CaseIterable, Identifiable, Sendable {
         case .mediaNow, .mediaControl, .mediaSpeaker, .mediaGlow, .mediaGif: .media
         case .calendarLooks, .calendarAdd, .calendarEdit, .calendarNext: .calendar
         case .todoCheck, .todoNotes, .todoDue, .todoSources: .todo
-        case .notesAdd, .notesRecent, .notesDelete, .notesWhere: .notes
-        case .trayDrag, .trayActions, .trayClipboard, .trayPrivate: .tray
+        case .notesAdd, .notesShortcut, .notesRecent, .notesDelete, .notesWhere: .notes
+        case .trayDrag, .trayActions, .trayConvert, .trayClipboard, .trayPrivate: .tray
         case .timerSet, .timerPomodoro, .timerPause, .timerClosed: .timer
         case .weatherForecast, .weatherCity, .weatherClosed, .weatherSource: .weather
+        case .recordTargets, .recordFaceCam, .recordSound, .recordNotch, .recordShortcut, .recordSaved: .record
         case .designColors, .designEyedropper, .designKeep, .designShortcut, .designLinks, .designReferences,
              .designPrivate: .design
         case .linkAudioSave, .linkAudioTools, .linkAudioQueue, .linkAudioFolder, .linkAudioRights: .linkAudio
@@ -129,7 +131,7 @@ enum OnboardingAbility: String, CaseIterable, Identifiable, Sendable {
         ]
         case .todoCheck: [
             .widget("Todo/NookTodoCard.swift", "source.complete(item.id)"),
-            .widget("Todo/NookTodoCard.swift", "source.add(draft)"),
+            .widget("Todo/NookTodoCard.swift", "source.addConfirmed(draft, due: day)"),
         ]
         case .todoNotes: [
             .widget("Todo/NookTodoCard.swift", "open(item)"),
@@ -137,7 +139,7 @@ enum OnboardingAbility: String, CaseIterable, Identifiable, Sendable {
         ]
         case .todoDue: [
             .widget("Todo/NookTodoCard.swift", "Self.dueLabel(due)"),
-            .widget("Todo/NookTodoCard.swift", "Self.isOverdue(due)"),
+            .widget("Todo/NookTodoCard.swift", "Self.isOverdue(item.overdueDate ?? due)"),
         ]
         case .todoSources: [
             .widget("Todo/NookTodoSource.swift", "case reminders"),
@@ -145,19 +147,31 @@ enum OnboardingAbility: String, CaseIterable, Identifiable, Sendable {
             .widget("Todo/NookTodoSource.swift", "case tickTick"),
         ]
         case .notesAdd: [
-            .widget("Notes/NookNotesCard.swift", "service.append(draft)"),
+            .widget("Notes/NookNoteEditor.swift", "store.edit(typed)"),
+            .widget("Notes/NookNotesStore.swift", "func edit(_ text: String)"),
+            .widget("Notes/NookNote.swift", "static let saveDelay: Duration = .seconds(1)"),
+        ]
+        case .notesShortcut: [
+            .widget("Notes/NookNoteHotkey.swift", "static let defaultCombo = AgentHotkeyCombo(keyCode: UInt16(kVK_ANSI_J), modifiers: [.control, .option])"),
+            .widget("Notes/AppModel+Notes.swift", "func openNewNoteFromShortcut()"),
         ]
         case .notesRecent: [
-            .widget("Notes/NookNotesCard.swift", "service.entries.prefix(visibleEntryCount)"),
+            .widget("Notes/NookNotesCard.swift", "ForEach(isStill ? Array(store.notes.prefix(rows)) : store.notes)"),
+            .widget("Notes/NookNotesCard.swift", "withMotion(Motion.reflow) { store.open(note.id) }"),
+            .widget("Notes/NookNoteListRules.swift", "case .small: 3"),
+            .widget("Notes/NookNoteListRules.swift", "case .medium: 4"),
+            .widget("Notes/NookNoteListRules.swift", "case .large: 7"),
         ]
         case .notesDelete: [
-            .widget("Notes/NookNotesCard.swift", "service.delete(entry.id)"),
-            .widget("Notes/NookNotesService.swift", "var canDelete: Bool { destination == .file }"),
+            .widget("Notes/NookNotesCard.swift", "store.delete(note.id)"),
+            .widget("Notes/NookFolderDestination.swift", "try trash(url)"),
+            .widget("Notes/NookAppleNotesDestination.swift", "try await link.remove(erasure)"),
         ]
         case .notesWhere: [
-            .widget("Notes/NookAppleNotes.swift", "case file"),
-            .widget("Notes/NookAppleNotes.swift", "case appleNotes"),
-            .widget("Notes/NookNotesSettings.swift", "chooseFile(service)"),
+            .widget("Notes/NookNote.swift", "case folder"),
+            .widget("Notes/NookNote.swift", "case appleNotes"),
+            .widget("Notes/NookNote.swift", "case both"),
+            .widget("Notes/NookNotesSettings.swift", "chooseFolder(store)"),
         ]
         case .trayDrag: [
             .app("Views/IslandPanelView.swift", "model.nook.tray.handleDrop(providers)"),
@@ -168,6 +182,13 @@ enum OnboardingAbility: String, CaseIterable, Identifiable, Sendable {
             .widget("Tray/NookTrayCard.swift", "store.airDrop(item)"),
             .widget("Tray/NookTrayCard.swift", "store.compress(item)"),
             .widget("Tray/NookTrayCard.swift", "store.copyPath(of: item)"),
+        ]
+        case .trayConvert: [
+            .widget("Tray/NookTrayCard.swift", "Menu(LanguageManager.shared.t(\"nook.tray.convert.menu\"))"),
+            .widget("Tray/NookConvertRules.swift", "case \"mov\": return [.video(.mp4), .smallerVideo(.p1080)"),
+            .widget("Tray/NookConvertRules.swift", "case \"pdf\": return [.pdfPages(.png), .pdfPages(.jpeg)]"),
+            .widget("Tray/NookConvertRules.swift", "return formats + resizes + [.smallerImage]"),
+            .widget("Tray/NookConvertRules.swift", "static func resultName(for source: String, action: NookConvertAction, taken: Set<String>)"),
         ]
         case .trayClipboard: [
             .widget("Tray/NookClipboardViews.swift", "store.clipboard.setEnabled(true)"),
@@ -180,7 +201,7 @@ enum OnboardingAbility: String, CaseIterable, Identifiable, Sendable {
             .widget("Tray/NookClipboardHistory.swift", "Kept in memory only"),
         ]
         case .timerSet: [
-            .widget("Timer/NookTimerCard.swift", "Type minutes or 1:30"),
+            .widget("Timer/NookTimerEntry.swift", "1:30 = 1 min 30 sec"),
             .widget("Timer/NookTimerCard.swift", "chips = [15, 25, 50]"),
         ]
         case .timerPomodoro: [
@@ -212,6 +233,39 @@ enum OnboardingAbility: String, CaseIterable, Identifiable, Sendable {
         case .weatherSource: [
             .widget("Weather/NookWeatherClient.swift", "api.open-meteo.com"),
             .widget("Weather/NookWeatherSettings.swift", "nook.weather.settings.privacy"),
+        ]
+        case .recordTargets: [
+            .widget("Record/NookRecordTypes.swift", "case fullScreen"),
+            .widget("Record/NookRecordTypes.swift", "case window"),
+            .widget("Record/NookRecordTypes.swift", "case area"),
+            .widget("Record/NookScreenRecorder.swift", "let picker = SCContentSharingPicker.shared"),
+        ]
+        case .recordFaceCam: [
+            .widget("Record/NookRecordCard.swift", "titleKey: \"nook.record.toggle.faceCam\""),
+            .widget("Record/NookFaceCamBubble.swift", "styleMask: [.borderless, .nonactivatingPanel]"),
+            .widget("Record/NookFaceCamBubble.swift", "panel.level = .floating"),
+            .widget("Record/NookFaceCamBubble.swift", "view.onResize = { [weak self] diameter in self?.resize(to: diameter) }"),
+        ]
+        case .recordSound: [
+            .widget("Record/NookRecordCard.swift", "titleKey: \"nook.record.toggle.voice\""),
+            .widget("Record/NookRecordCard.swift", "titleKey: \"nook.record.toggle.macSound\""),
+        ]
+        case .recordNotch: [
+            .widget("Record/NookRecordTypes.swift", "var includeIsland = true"),
+            .widget("Record/NookRecordRules.swift", "includeIsland ? [] : island"),
+            .widget("Record/NookRecordSettings.swift", "lang.t(\"nook.record.settings.includeIsland\")"),
+        ]
+        case .recordShortcut: [
+            .widget(
+                "Record/NookRecordHotkey.swift",
+                "static let defaultCombo = AgentHotkeyCombo(keyCode: UInt16(kVK_ANSI_R), modifiers: [.control, .option])"
+            ),
+            .widget("Record/NookRecordSettings.swift", "shortcutRow(record.hotkey)"),
+        ]
+        case .recordSaved: [
+            .widget("Record/NookRecordFiles.swift", "home.appendingPathComponent(\"Movies\", isDirectory: true)"),
+            .widget("Record/NookRecordFiles.swift", ".appendingPathComponent(\"Hangover\", isDirectory: true)"),
+            .nook("NookModel.swift", "onFinished: { trayStore.add(fileAt: $0, linking: true) }"),
         ]
         case .designColors: [
             .widget("Design/NookDesignColor.swift", "case hex"),

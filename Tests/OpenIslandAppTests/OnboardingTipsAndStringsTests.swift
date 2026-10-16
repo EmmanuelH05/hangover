@@ -13,7 +13,7 @@ struct OnboardingTipTests {
     @Test func aFullSetupWithAgentsFillsThePage() {
         let tips = OnboardingTip.shown(agentsEnabled: true, widgets: Self.everyWidget)
 
-        #expect(tips == [.keepOpen, .dropFiles, .rearrange, .switchPages, .jump, .todoNotes, .quickNotes, .settings])
+        #expect(tips == [.keepOpen, .dropFiles, .convertFiles, .rearrange, .switchPages, .jump, .todoNotes, .settings])
         #expect(tips.count == OnboardingTip.pageLimit)
     }
 
@@ -21,7 +21,7 @@ struct OnboardingTipTests {
     /// it is on, second in the list.
     @Test func theSwipeTipShowsOnlyWhileTheSwipeIsOn() {
         let on = OnboardingTip.shown(agentsEnabled: true, widgets: Self.everyWidget, swipeEnabled: true)
-        #expect(on == [.keepOpen, .swipeAway, .dropFiles, .rearrange, .switchPages, .jump, .todoNotes, .settings])
+        #expect(on == [.keepOpen, .swipeAway, .dropFiles, .convertFiles, .rearrange, .switchPages, .jump, .settings])
 
         for agentsEnabled in [true, false] {
             let off = OnboardingTip.shown(agentsEnabled: agentsEnabled, widgets: Self.everyWidget)
@@ -32,7 +32,7 @@ struct OnboardingTipTests {
     @Test func withTheAgentsOffNoTipIsAboutAgents() {
         let tips = OnboardingTip.shown(agentsEnabled: false, widgets: Self.everyWidget)
 
-        #expect(tips == [.keepOpen, .dropFiles, .rearrange, .todoNotes, .quickNotes, .speaker, .volume, .settings])
+        #expect(tips == [.keepOpen, .dropFiles, .convertFiles, .rearrange, .todoNotes, .quickNotes, .speaker, .settings])
         #expect(tips.allSatisfy { !$0.needsAgents })
     }
 
@@ -86,13 +86,15 @@ struct OnboardingTipTests {
         ("Sources/OpenIslandApp/Island/IslandOpenTrigger.swift", "static func swipeAction("),
         ("Sources/OpenIslandApp/Island/IslandOpenTrigger.swift", "? .toggleClosedContent : .none"),
         ("Sources/OpenIslandApp/Views/IslandPanelView.swift", "model.nook.tray.handleDrop(providers)"),
+        ("Sources/OpenIslandApp/Nook/Widgets/Tray/NookConvertRules.swift", "static func actions(forFileNamed name: String) -> [NookConvertAction]"),
+        ("Sources/OpenIslandApp/Nook/Widgets/Tray/NookTrayCard.swift", "Menu(LanguageManager.shared.t(\"nook.tray.convert.menu\"))"),
         ("Sources/OpenIslandApp/Nook/Views/NookWidgetGrid.swift", "LongPressGesture(minimumDuration: Self.longPressDuration).onEnded { _ in onBeginEditing() }"),
         ("Sources/OpenIslandApp/Nook/Views/NookWidgetGrid.swift", "Button(\"Edit Widgets\") { onBeginEditing() }"),
         ("Sources/OpenIslandApp/Views/IslandPanelView.swift", "model.toggleNookPage()"),
         ("Sources/OpenIslandApp/Views/IslandPanelView.swift", "onJump: { model.jumpToSession(session) }"),
         ("Sources/OpenIslandApp/Nook/Widgets/Todo/NookTodoCard.swift", "open(item)"),
         ("Sources/OpenIslandApp/Nook/Widgets/Todo/NookTodoCard.swift", "source.complete(item.id)"),
-        ("Sources/OpenIslandApp/Nook/Widgets/Notes/NookNotesCard.swift", "service.append(draft)"),
+        ("Sources/OpenIslandApp/Nook/Widgets/Notes/NookNotesCard.swift", "withMotion(Motion.reflow) { store.beginNewNote() }"),
         ("Sources/OpenIslandApp/Nook/Views/NookMediaViews.swift", "nook.audioOutputs.beginPicking()"),
         ("Sources/OpenIslandApp/Views/IslandPanelView.swift", "headerIconButton(systemName: \"gearshape.fill\""),
         ("Sources/OpenIslandApp/Views/SettingsView.swift", "model.showWelcomeTour()"),
@@ -149,8 +151,8 @@ struct OnboardingStringsTests {
             "onboarding.todos.keychain", "onboarding.todos.checkAgain", "onboarding.todos.account",
             "onboarding.todos.settings", "nook.todo.notion.token.placeholder", "nook.todo.ticktick.token.placeholder",
             "nook.todo.notion.connect", "nook.todo.ticktick.connect", "nook.todo.ticktick.token.saved",
-            "onboarding.notes.title", "onboarding.notes.body", "onboarding.notes.note", "onboarding.notes.file.where",
-            "onboarding.notes.file.choose", "onboarding.notes.file.panelPrompt", "onboarding.notes.file.any",
+            "onboarding.notes.title", "onboarding.notes.body", "onboarding.notes.note", "onboarding.notes.folder.where",
+            "onboarding.notes.folder.choose", "onboarding.notes.folder.panelPrompt", "onboarding.notes.folder.any",
             "onboarding.notes.appleNotes.where", "onboarding.notes.appleNotes.ask",
             "onboarding.notes.try", "onboarding.notes.try.done",
             "onboarding.weather.title", "onboarding.weather.body", "onboarding.weather.note",
@@ -163,7 +165,7 @@ struct OnboardingStringsTests {
             "nook.weather.settings.unit.celsius", "nook.weather.failed.offline", "nook.weather.failed.server",
         ]
         keys += [0, 1, 2].map { OnboardingTodoChecklist.loadedKey(count: $0) }
-        for destination in NookNotesDestination.allCases {
+        for destination in NookNotesSaveTo.allCases {
             keys += [
                 OnboardingNotesGuide.titleKey(for: destination),
                 OnboardingNotesGuide.textKey(for: destination),

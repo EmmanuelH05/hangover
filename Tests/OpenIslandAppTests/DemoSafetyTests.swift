@@ -157,7 +157,7 @@ struct DemoSafetyTests {
         fixture.startSampleServices()
 
         #expect(fixture.session.folder.path.hasPrefix(fixture.root.path))
-        #expect(fixture.nook.notes.fileURL.path.hasPrefix(fixture.root.path))
+        #expect(fixture.nook.notes.folderURL.path.hasPrefix(fixture.root.path))
         #expect(fixture.nook.tray.folderURL.path.hasPrefix(fixture.root.path))
         #expect(!fixture.root.path.contains("Application Support"))
         #expect(!fixture.root.path.contains("/Library/"))

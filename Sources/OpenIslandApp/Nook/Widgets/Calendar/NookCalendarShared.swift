@@ -84,16 +84,15 @@ enum NookCalendarError: Error, Equatable {
 }
 
 /// One event line: color dot, title, time. Shared by every calendar style.
-/// A tap starts a note for the event. An event with a meeting link carries
-/// a small join mark. The row opens nothing itself: the mark calls
-/// `onJoin`, which every look hands to `NookModel.joinMeeting`, the one
-/// place that opens a meeting and puts the Join bar away.
+/// An event with a meeting link carries a small join mark. The row opens
+/// nothing itself: the mark calls `onJoin`, which every look hands to
+/// `NookModel.joinMeeting`, the one place that opens a meeting and puts the
+/// Join bar away.
 struct NookCalendarRow: View {
     let event: NookCalendarEvent
     let now: Date
     /// False when the row sits under a picked day and the weekday is known.
     var showsWeekday: Bool = true
-    var onTap: (() -> Void)? = nil
     /// Nil leaves the join mark off the row.
     var onJoin: (() -> Void)? = nil
 
@@ -115,8 +114,6 @@ struct NookCalendarRow: View {
                 .foregroundStyle(.white.opacity(0.6))
                 .lineLimit(1)
         }
-        .contentShape(Rectangle())
-        .onTapGesture { onTap?() }
     }
 
     static func timeText(for event: NookCalendarEvent, now: Date, showsWeekday: Bool = true) -> String {

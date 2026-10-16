@@ -46,7 +46,7 @@ struct NookCalendarUpNextView: View {
                     .frame(height: Self.rowHeight)
             } else {
                 ForEach(events) { event in
-                    NookCalendarRow(event: event, now: now) { nook.startNote(for: event) } onJoin: { nook.joinMeeting(event) }
+                    NookCalendarRow(event: event, now: now) { nook.joinMeeting(event) }
                         .frame(height: Self.rowHeight)
                 }
             }

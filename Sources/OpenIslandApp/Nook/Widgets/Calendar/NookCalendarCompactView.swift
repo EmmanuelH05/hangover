@@ -52,40 +52,33 @@ struct NookCalendarCompactView: View {
         }
     }
 
-    /// A click on the row starts a note. An event with a meeting link also
-    /// carries the join mark, beside the row and not inside its button.
+    /// An event with a meeting link also carries the join mark, beside the line.
     private func row(_ event: NookCalendarEvent, now: Date) -> some View {
         HStack(spacing: 4) {
-            noteButton(event, now: now)
+            eventLine(event, now: now)
             if event.meetingURL != nil {
                 NookJoinMark { nook.joinMeeting(event) }
             }
         }
     }
 
-    private func noteButton(_ event: NookCalendarEvent, now: Date) -> some View {
-        Button {
-            nook.startNote(for: event)
-        } label: {
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(event.calendarColor)
-                    .frame(width: 7, height: 7)
-                Text(event.title)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.85))
-                    .lineLimit(1)
-                Spacer(minLength: 4)
-                Text(Self.timeText(for: event, now: now))
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.6))
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-            .frame(height: Self.rowHeight)
-            .contentShape(Rectangle())
+    private func eventLine(_ event: NookCalendarEvent, now: Date) -> some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(event.calendarColor)
+                .frame(width: 7, height: 7)
+            Text(event.title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.white.opacity(0.85))
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            Text(Self.timeText(for: event, now: now))
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.6))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
-        .buttonStyle(.plain)
+        .frame(height: Self.rowHeight)
     }
 
     /// The next unfinished events, soonest first.

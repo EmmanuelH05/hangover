@@ -18,6 +18,9 @@ private typealias Samples = NookDesignSamples
         let kinds = withDesign ? NookWidgetKind.allCases : NookWidgetKind.allCases.filter { $0 != .design }
         state.enabledWidgets = Set(kinds)
         state.nookPlacements = kinds.map { NookWidgetPlacement(kind: $0, size: .medium) }
+        // What the app reads for the kit, which the last page's recap row stands on.
+        // The widgets row of that page is one line and cuts a long list short.
+        state.features.design = OnboardingDesignReading(isOn: withDesign)
         return state
     }
 

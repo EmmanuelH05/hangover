@@ -165,8 +165,6 @@ struct NookCalendarStripView: View {
             } else {
                 ForEach(events.prefix(shown)) { event in
                     NookCalendarRow(event: event, now: now, showsWeekday: false) {
-                        nook.startNote(for: event)
-                    } onJoin: {
                         nook.joinMeeting(event)
                     }
                     .frame(height: NookCalendarExpansion.rowHeight)

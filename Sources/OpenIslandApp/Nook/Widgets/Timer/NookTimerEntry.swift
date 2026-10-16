@@ -5,7 +5,9 @@ import Observation
 ///
 /// Accepted forms, ignoring case and any spaces:
 /// - a plain number is minutes: `25`, `90`
-/// - `h:mm` with minutes 0 to 59: `1:30`, `0:45`
+/// - `m:ss` the way a phone timer reads, seconds 0 to 59: `1:30` is a
+///   minute and a half, `25:00` is 25 minutes
+/// - `h:mm:ss`, the way the clock shows an hour or more: `1:30:00`
 /// - units in order hours, minutes, seconds, each at most once: `1h`, `45m`,
 ///   `90s`, `2h 15m`, `1h 5m 30s`. A bare number right after hours is
 ///   minutes 0 to 59: `1h30`.
@@ -48,16 +50,38 @@ enum NookTimerEntry {
 
     // MARK: Forms
 
-    /// `h:mm`, minutes 0 to 59.
+    /// `m:ss` or `h:mm:ss`, read the way the clock shows them. Every part
+    /// after the first is at most two digits and 0 to 59.
     private static func clockSeconds(_ text: String) -> Int? {
         let parts = text.split(separator: ":", omittingEmptySubsequences: false)
-        guard parts.count == 2,
-              parts[1].count <= 2,
-              let hours = number(parts[0]),
-              let minutes = number(parts[1]),
-              minutes <= 59
+        guard parts.count == 2 || parts.count == 3,
+              let first = number(parts[0])
         else { return nil }
-        return hours * 3600 + minutes * 60
+        var total = first
+        for part in parts.dropFirst() {
+            guard part.count <= 2, let value = number(part), value <= 59 else { return nil }
+            total = total * 60 + value
+        }
+        return total
+    }
+
+    // MARK: Hint
+
+    /// What the line under the clock says while a length is typed: how to
+    /// type one, what the typed text will start, or how to fix it.
+    static func hint(for text: String, isInvalid: Bool) -> String {
+        if isInvalid { return "Try 25, 1:30 or 1h 30m" }
+        guard let length = parse(text) else { return "25 = 25 min · 1:30 = 1 min 30 sec" }
+        return "\(reading(length)) · Return to start"
+    }
+
+    /// "1 hr 30 min", "1 min 30 sec", "45 sec". Parts that are zero are left out.
+    static func reading(_ length: TimeInterval) -> String {
+        let total = Int(length.rounded())
+        let parts = [(total / 3600, "hr"), (total % 3600 / 60, "min"), (total % 60, "sec")]
+            .filter { $0.0 > 0 }
+            .map { "\($0.0) \($0.1)" }
+        return parts.isEmpty ? "0 sec" : parts.joined(separator: " ")
     }
 
     /// Hours, minutes and seconds in that order, each at most once.

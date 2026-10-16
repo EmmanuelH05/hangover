@@ -40,7 +40,7 @@ enum OnboardingPage: Int, CaseIterable, Identifiable, Sendable {
     /// Where the to-do widget gets its tasks, and how to connect that
     /// place. Shown only while the to-do widget is on the page.
     case todos
-    /// Where quick notes go, and a note saved to try it. Shown only while
+    /// Where notes are saved, and a note saved to try it. Shown only while
     /// the notes widget is on the page.
     case notes
     /// Where the user is, for the weather card and the closed island's
@@ -53,12 +53,14 @@ enum OnboardingPage: Int, CaseIterable, Identifiable, Sendable {
     /// A page for each feature the main tour does not teach, walked by the
     /// long tour only (`OnboardingMore`). They sit after the pages of the
     /// choices and before the closing pages, in the order the island shows
-    /// them: the widgets that start off first (the mirror, its photo booth and
-    /// the weather), then its closed lights and notices, then the open island,
-    /// then the Mac.
+    /// them: the widgets that start off first (the mirror, its photo booth,
+    /// the weather and Record), then converting files in the tray, then its
+    /// closed lights and notices, then the open island, then the Mac.
     case mirror
     case booth
     case weatherCard
+    case record
+    case convert
     case lights
     case accent
     case power
@@ -87,7 +89,8 @@ enum OnboardingPage: Int, CaseIterable, Identifiable, Sendable {
         switch self {
         case .welcome, .length, .purpose, .opening: .basics
         case .closed, .agents, .widgets, .features, .layout, .arrange, .todos, .notes, .weather, .opened, .look: .yours
-        case .mirror, .booth, .weatherCard, .lights, .accent, .power, .volume, .usage, .quiet, .phone, .screens, .sounds, .links, .startup, .updates: .know
+        case .mirror, .booth, .weatherCard, .record, .convert, .lights, .accent, .power, .volume, .usage, .quiet, .phone, .screens, .sounds,
+             .links, .startup, .updates: .know
         case .permissions, .integrations, .tips, .done: .know
         }
     }
@@ -180,6 +183,8 @@ enum OnboardingPage: Int, CaseIterable, Identifiable, Sendable {
         case .mirror: "mirror"
         case .booth: "booth"
         case .weatherCard: "weather-card"
+        case .record: "record"
+        case .convert: "convert"
         case .lights: "lights"
         case .accent: "accent"
         case .power: "power"

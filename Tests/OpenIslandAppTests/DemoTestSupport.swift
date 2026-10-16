@@ -58,9 +58,20 @@ struct DemoFixture {
 @MainActor
 final class RecordingDoors: DemoDoors {
     private(set) var actions: [DemoAction] = []
+    /// Each key press, with what the field held after it.
+    private(set) var keys: [(text: String, field: DemoTypingField)] = []
+    private(set) var returns: [DemoTypingField] = []
 
     func perform(_ action: DemoAction) {
         actions.append(action)
+    }
+
+    func type(_ text: String, into field: DemoTypingField) {
+        keys.append((text, field))
+    }
+
+    func submit(_ field: DemoTypingField) {
+        returns.append(field)
     }
 }
 

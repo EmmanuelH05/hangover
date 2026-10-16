@@ -98,6 +98,7 @@ struct NookSettingsPane: View {
             NookPhotoBoothSettings(nook: nook)
             NookWeatherSettings(nook: nook)
             NookDesignSettings(nook: nook)
+            NookRecordSettings(nook: nook)
             if nook.offersLinkAudio { NookLinkAudioSettings(nook: nook) }
             NookPowerSettings(nook: nook)
             NookVolumeSettings(nook: nook)

@@ -24,15 +24,22 @@ struct OnboardingMoreCardsTests {
     @Test func theCardsAreOnTheLongTourWhateverTheWidgetsPageSays() {
         for hasWeather in [true, false] {
             let pages = OnboardingPage.shown(length: .long, agentsEnabled: true, hasWeatherWidget: hasWeather)
-            for page in [OnboardingPage.mirror, .booth, .weatherCard, .accent] { #expect(pages.contains(page), "\(page)") }
+            for page in [OnboardingPage.mirror, .booth, .weatherCard, .record, .convert, .accent] {
+                #expect(pages.contains(page), "\(page)")
+            }
             #expect(pages.contains(.weather) == hasWeather, "the weather page is for a weather widget that is on")
         }
         for length in [OnboardingLength.short, .medium] {
             let pages = OnboardingPage.shown(length: length, agentsEnabled: true)
-            for page in [OnboardingPage.mirror, .booth, .weatherCard, .accent] { #expect(!pages.contains(page)) }
+            for page in [OnboardingPage.mirror, .booth, .weatherCard, .record, .convert, .accent] {
+                #expect(!pages.contains(page))
+            }
         }
         let order = OnboardingPage.shown(length: .long, agentsEnabled: true).compactMap(\.more)
-        #expect(order.prefix(5) == [.mirror, .booth, .weather, .lights, .accent], "the widgets first, then the lights and looks")
+        #expect(
+            order.prefix(7) == [.mirror, .booth, .weather, .record, .convert, .lights, .accent],
+            "the widgets first, then converting in the tray, then the lights and looks"
+        )
         #expect(order.suffix(2) == [.startup, .updates], "the system last")
     }
 

@@ -89,7 +89,7 @@ struct OnboardingFlowTests {
         #expect(OnboardingPage.todos.snapshotName == "11-todos")
         #expect(OnboardingPage.notes.snapshotName == "12-notes")
         #expect(OnboardingPage.weather.snapshotName == "13-weather")
-        #expect(OnboardingPage.done.snapshotName == "34-done")
+        #expect(OnboardingPage.done.snapshotName == "36-done")
     }
 
     // MARK: The pages and their chapters (D43)

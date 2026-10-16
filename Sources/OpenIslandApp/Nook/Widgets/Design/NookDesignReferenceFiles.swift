@@ -25,7 +25,11 @@ struct NookDesignReferenceLoad: Equatable, Sendable {
 /// - `index.json`: `{ "version": 1, "items": [ … ] }`, the pictures in
 ///   the order the shelf shows them. Each item carries its id, its
 ///   collection's id, a name, the file's name, the pixel size, the
-///   favorite mark and the date it was added.
+///   favorite mark and the date it was added. An item the user has
+///   resized the floating panel of also carries `panelWidth` and
+///   `panelHeight`, in points. They are optional and the version stays 1.
+///   A copy of the app that does not know them reads the list as it
+///   always did and drops them the next time it writes it.
 /// - one folder per picture, named by the picture's id, holding the copy
 ///   (`original.png`, with the ending of its real type) and
 ///   `thumbnail.png`.

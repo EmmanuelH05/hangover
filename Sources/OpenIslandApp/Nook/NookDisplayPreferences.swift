@@ -362,19 +362,34 @@ extension NookDisplayPreferences {
 
 extension NookClosedActivity {
     /// Picks what the closed island shows from what is live right now and
-    /// what this display allows. Priority: a notice, a running timer, music.
+    /// what this display allows. Priority: a recording, a notice, a running
+    /// timer, music.
     /// `timerLeading` is the symbol beside the countdown: the timer by
     /// default, a round number or a cup during a pomodoro.
     /// `isHidden` is the swipe's hidden state (D46): a notice still shows
     /// through, and the timer and the music do not.
+    /// `recording` is the count and then the elapsed time of a recording
+    /// (D67). It outranks everything, shows with notices turned off, and
+    /// the swipe never hides it: a screen that is being recorded must say so.
     static func resolve(
         transient: NookTransientActivity?,
         timerText: String?,
         timerLeading: NookClosedActivity.Leading = .symbol("timer", .orange),
         media: NookClosedMediaActivity?,
         preferences: NookDisplayPreferences,
-        isHidden: Bool = false
+        isHidden: Bool = false,
+        recording: (text: String, isPaused: Bool)? = nil
     ) -> NookClosedActivity? {
+        if let recording {
+            return NookClosedActivity(
+                leading: .symbol(
+                    recording.isPaused ? "pause.circle.fill" : "record.circle.fill",
+                    recording.isPaused ? .yellow : .red
+                ),
+                trailing: .text(recording.text),
+                yieldsToAgents: false
+            )
+        }
         if preferences.showsNotices {
             if let transient {
                 return NookClosedActivity(

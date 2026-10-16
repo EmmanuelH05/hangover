@@ -23,12 +23,12 @@ struct OnboardingMoreProofTests {
         }
     }
 
-    @Test func theLongTourAddsFifteenPagesAndEachHasItsOwn() {
-        #expect(OnboardingMore.allCases.count == 15, "the mirror, its booth and the weather, the accent, and ten more")
+    @Test func theLongTourAddsSeventeenPagesAndEachHasItsOwn() {
+        #expect(OnboardingMore.allCases.count == 17, "the mirror, its booth, the weather, Record, Convert, the accent, and ten more")
         #expect(OnboardingMore.allCases.map(\.page) == OnboardingPage.allCases.filter(\.isLongOnly))
         #expect(Set(OnboardingMore.allCases.map(\.page)).count == OnboardingMore.allCases.count)
         #expect(OnboardingPage.shown(length: .long, agentsEnabled: true).compactMap(\.more) == OnboardingMore.allCases)
-        #expect(OnboardingPage.shown(length: .long, agentsEnabled: false).compactMap(\.more).count == 12)
+        #expect(OnboardingPage.shown(length: .long, agentsEnabled: false).compactMap(\.more).count == 14)
         #expect(OnboardingMore.allCases.filter(\.needsAgents) == [.usage, .quiet, .phone])
     }
 
@@ -37,13 +37,13 @@ struct OnboardingMoreProofTests {
     /// then the Mac around it.
     @Test func theyAreToldWhatTheIslandShowsFirstAndTheMacLast() {
         #expect(OnboardingMore.allCases == [
-            .mirror, .booth, .weather, .lights, .accent, .power, .volume, .usage, .quiet, .phone, .screens, .sounds,
-            .links, .startup, .updates,
+            .mirror, .booth, .weather, .record, .convert, .lights, .accent, .power, .volume, .usage, .quiet, .phone,
+            .screens, .sounds, .links, .startup, .updates,
         ])
     }
 
     @Test func thePagesWithANoteAreTheOnesWithSomethingToKnowFirst() {
-        #expect(OnboardingMore.allCases.filter(\.hasNote) == [.mirror, .weather, .lights, .volume, .usage, .phone, .links])
+        #expect(OnboardingMore.allCases.filter(\.hasNote) == [.mirror, .weather, .record, .lights, .volume, .usage, .phone, .links])
     }
 
     /// A page only tells. The one button opens Settings through the door the

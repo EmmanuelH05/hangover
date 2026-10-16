@@ -42,8 +42,8 @@ import Testing
 
         #expect(sizes[.media] == .large)
         #expect(sizes[.calendar] == .large)
-        // Every widget but the mirror, the weather, the design kit and Link to MP3, which are in no template.
-        #expect(Set(widgets.map(\.kind)) == Set(NookWidgetKind.allCases).subtracting([.mirror, .weather, .design, .linkAudio]))
+        // Every widget but the mirror, the weather, Record, the design kit and Link to MP3, which are in no template.
+        #expect(Set(widgets.map(\.kind)) == Set(NookWidgetKind.allCases).subtracting([.mirror, .weather, .record, .design, .linkAudio]))
         #expect(widgets.dropFirst(2).allSatisfy { $0.size != .large })
         #expect(Set(widgets.map(\.size)).count >= 2)
     }
@@ -126,8 +126,8 @@ import Testing
         // sizes and their order relative to each other.
         #expect(applied.widgetSizes[.notes] == .large)
         #expect(applied.widgetSizes[.tray] == .small)
-        #expect(applied.widgetOrder == [.calendar, .todo, .notes, .media, .tray, .timer, .mirror, .weather, .design, .linkAudio])
-        #expect(applied.hiddenWidgets == [.media, .notes, .tray, .timer, .mirror, .weather, .design, .linkAudio])
+        #expect(applied.widgetOrder == [.calendar, .todo, .notes, .media, .tray, .timer, .mirror, .weather, .record, .design, .linkAudio])
+        #expect(applied.hiddenWidgets == [.media, .notes, .tray, .timer, .mirror, .weather, .record, .design, .linkAudio])
     }
 
     @Test func applyingSetsEveryChoiceTheTemplateOwns() {

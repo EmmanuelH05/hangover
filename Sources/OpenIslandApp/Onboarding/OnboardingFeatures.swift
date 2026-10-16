@@ -20,8 +20,8 @@ struct OnboardingFeatureWalk: Equatable, Sendable {
         self.current = current.flatMap { kinds.contains($0) ? $0 : nil } ?? kinds.first
     }
 
-    /// Every widget the list can hold: all of them, with the design kit and
-    /// Link to MP3, the two the walk always ends on, last.
+    /// Every widget the list can hold: all of them, with Record, the design kit
+    /// and Link to MP3, the tools the walk always ends on, last.
     static var everyKind: [NookWidgetKind] { NookWidgetKind.offered }
 
     var count: Int { kinds.count }
@@ -99,6 +99,15 @@ struct OnboardingLinkAudioReading: Equatable, Sendable {
 
 /// What the buttons read from the app, in plain values.
 struct OnboardingFeatureReading: Equatable, Sendable {
+    /// The Record widget's switch is on, whether or not a layout left its card
+    /// off the page. The tour fills it from the switch
+    /// (`OnboardingState.featureReading`), and a state handed in with it set
+    /// is kept.
+    var isRecordOn = false
+    /// A recording is counting down, running, paused or saving. It is the
+    /// user's own, because the tour never starts one, and leaving the Record
+    /// step must not switch the widget off under it (`OnboardingTrials`).
+    var isRecordBusy = false
     var isMirrorOn = false
     var isRingLightOn = false
     var camera: OnboardingCameraAccess = .undecided
@@ -145,6 +154,7 @@ enum OnboardingTry: String, CaseIterable, Identifiable, Sendable {
     case trayCopy
     case notesLine
     case calendarShow
+    case recordOn
     case designOn, designPick
     case linkAudioOn
 
@@ -158,6 +168,7 @@ enum OnboardingTry: String, CaseIterable, Identifiable, Sendable {
         case .trayCopy: .tray
         case .notesLine: .notes
         case .calendarShow: .calendar
+        case .recordOn: .record
         case .designOn, .designPick: .design
         case .linkAudioOn: .linkAudio
         }
@@ -195,7 +206,7 @@ enum OnboardingTry: String, CaseIterable, Identifiable, Sendable {
         case .trayCopy: "copySampleLine"
         case .notesLine: "showNotes"
         case .calendarShow: "showCalendar"
-        case .designOn, .linkAudioOn: "setWidget"
+        case .recordOn, .designOn, .linkAudioOn: "setWidget"
         case .designPick: "pickDesignColor"
         }
     }
@@ -274,6 +285,11 @@ extension OnboardingTry {
             case .undecided: return make(note: titleKey + ".note")
             case .refused: return make(enabled: false, note: titleKey + ".refused")
             }
+        case .recordOn:
+            // The button switches the widget on and shows its card, and that
+            // is all: the note says so before the click. It is off again when
+            // the user leaves the step (`OnboardingTrials`).
+            return make(enabled: !reading.isRecordOn, note: titleKey + ".note")
         case .designOn:
             // It stays on once the user turned it on here: a choice, like a
             // widget picked on the widgets page. Settings switches it off.
@@ -345,6 +361,7 @@ struct OnboardingFeatureProgress: Equatable, Sendable {
         // the shelves are still being read, and the newest color on them is
         // an old one, not a pick.
         if reading.design.isOn { done.insert(.designOn) }
+        if reading.isRecordOn { done.insert(.recordOn) }
         if reading.linkAudio.isOn { done.insert(.linkAudioOn) }
         guard reading.design.isReady else { return }
         if !hasDesignBaseline {
@@ -395,7 +412,9 @@ struct OnboardingFeatureBaseline: Equatable, Sendable {
 /// baseline is taken once, when the page comes up (D49): a mirror that was
 /// on then is left exactly as it is, a mirror that was off goes off, and the
 /// ring light setting goes back to its baseline value when a tour button
-/// changed it. Nothing here ever switches a camera on.
+/// changed it. Record goes off again only when the tour's own button switched
+/// it on: a Record that was on already is the user's. Nothing here ever
+/// switches a camera on or starts a recording.
 struct OnboardingTrials: Equatable, Sendable {
     /// Nil until the features page is up, and nothing is released without it.
     var baseline: OnboardingFeatureBaseline?
@@ -408,17 +427,23 @@ struct OnboardingTrials: Equatable, Sendable {
     var booth = false
     /// The tour's countdown is the active timer.
     var timer = false
+    /// The tour's button switched the Record widget on, and it is still on.
+    var record = false
 
     enum Release: Equatable, Sendable {
         case boothCancel
         /// Writes the ring light setting back to this value.
         case ringLight(Bool)
         case mirrorOff, timerOff
+        /// Switches the Record widget off. Nothing is recorded by then: the
+        /// tour never started a recording, and a widget that goes off takes
+        /// its own recording with it.
+        case recordOff
     }
 
     /// What to put back now, given what is on. `kind` is the widget being
     /// left, or nil for every one (the page or the tour is closing). The
-    /// order is the booth, the ring light, the mirror, the timer.
+    /// order is the booth, the ring light, the mirror, the timer, Record.
     func releases(leaving kind: NookWidgetKind?, reading: OnboardingFeatureReading) -> [Release] {
         guard let baseline else { return [] }
         var list: [Release] = []
@@ -431,6 +456,11 @@ struct OnboardingTrials: Equatable, Sendable {
             if !baseline.isMirrorOn, reading.isMirrorOn { list.append(.mirrorOff) }
         }
         if kind == nil || kind == .timer, timer, reading.isTourTimer { list.append(.timerOff) }
+        // A recording in progress is the user's: the widget going off would
+        // end it.
+        if kind == nil || kind == .record, record, reading.isRecordOn, !reading.isRecordBusy {
+            list.append(.recordOff)
+        }
         return list
     }
 
@@ -441,16 +471,21 @@ struct OnboardingTrials: Equatable, Sendable {
         var next = self
         if kind == .mirror { next.booth = false; next.ringLight = nil }
         if kind == .timer { next.timer = false }
+        if kind == .record { next.record = false }
         return next
     }
 
     /// The same trials after looking at the app: a session that is gone, a
-    /// timer that stopped or is no longer the tour's countdown, and a ring
-    /// light the user changed by hand are no longer the tour's to put back.
+    /// timer that stopped or is no longer the tour's countdown, a ring
+    /// light the user changed by hand and a Record that was switched off since
+    /// or has a recording of the user's running are no longer the tour's to put back.
     func observing(_ reading: OnboardingFeatureReading) -> OnboardingTrials {
         var next = self
         if booth, !reading.isBoothShowing { next.booth = false }
         if timer, !reading.isTourTimer { next.timer = false }
+        // A recording the user started makes Record their own choice, and it
+        // stays theirs after the recording ends.
+        if record, !reading.isRecordOn || reading.isRecordBusy { next.record = false }
         if let written = ringLight, written != reading.isRingLightOn { next.ringLight = nil }
         return next
     }
@@ -482,6 +517,9 @@ extension OnboardingTry {
         case .trayCopy: _ = actions.copySampleLine(sample)
         case .notesLine: actions.showNotes()
         case .calendarShow: actions.showCalendar()
+        // The widget's switch and nothing else: no recording, no area or window
+        // picker and no face cam starts from the tour.
+        case .recordOn: actions.setWidget(.record, true)
         // The widgets page's switch, which also takes the kit off the display's
         // hidden list. Nothing puts it back off.
         case .designOn: actions.setWidget(.design, true)

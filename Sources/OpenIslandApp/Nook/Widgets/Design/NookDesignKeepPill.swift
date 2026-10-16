@@ -42,6 +42,7 @@ struct NookDesignKeepPill: View {
         }
         .buttonStyle(.plain)
         .motionAnimation(Motion.hover, value: isOn)
+        .demoTarget(.designKeepPill)
         .help(help)
         .accessibilityLabel(help)
         .accessibilityValue(text)

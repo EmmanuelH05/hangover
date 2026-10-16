@@ -17,7 +17,7 @@ struct OnboardingWidgetsPage: View {
     private static let rowHeight: CGFloat = 38
 
     /// The footnote names the widgets that start off. Where the build does not
-    /// offer Link to MP3 it names three, and says nothing about that one.
+    /// offer Link to MP3 it names four, and says nothing about that one.
     static var footnoteKey: String {
         NookLinkAudioOffer.isOffered ? "onboarding.widgets.note" : "onboarding.widgets.note.release"
     }
@@ -78,6 +78,7 @@ struct OnboardingWidgetsPage: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(PressableButtonStyle())
+            .demoTarget(.tourWidgetSwitch(kind))
             .accessibilityLabel(context.lang.t("onboarding.widgets.switch", name))
             .accessibilityValue(context.t(isOn ? "onboarding.widgets.switch.on" : "onboarding.widgets.switch.off"))
         }
@@ -128,7 +129,7 @@ struct OnboardingLayoutPage: View {
     }
 
     /// The page a layout makes for this user: its own widgets that are
-    /// switched on, then the design kit and Link to MP3 when they are on the
+    /// switched on, then Record, the design kit and Link to MP3 when they are on the
     /// page, which the tour keeps there after a layout.
     static func page(of template: PersonalizationTemplate, keeping state: OnboardingState) -> [NookWidgetPlacement] {
         let own = template.widgets.filter { state.enabledWidgets.contains($0.kind) }
@@ -180,6 +181,7 @@ struct OnboardingLayoutPage: View {
             }
         }
         .frame(height: Self.cardHeight)
+        .demoTarget(.tourTemplate(template.id))
         .accessibilityLabel(text.spokenSummary)
     }
 

@@ -7,6 +7,8 @@ enum NookLinkAudioLine: Equatable, Sendable {
     /// which `ffmpeg` makes the MP3. `fileName` is the file being written.
     case progress(fraction: Double?, isDownloadDone: Bool, fileName: String?)
     case title(String)
+    /// The video's description, as the uploader wrote it, line breaks and all.
+    case description(String)
     /// The finished file's path.
     case file(String)
     /// One of `yt-dlp`'s own error lines, without its `ERROR:` mark.
@@ -18,10 +20,11 @@ enum NookLinkAudioLine: Equatable, Sendable {
 /// is not one of them, or one that is cut short, is `.other` and changes
 /// nothing: a template `yt-dlp` read differently must not break a job.
 ///
-/// The title and the paths come as JSON strings. A title is the site's to
-/// write, and a newline in it would otherwise end the line and let the rest
-/// pass for a line of `yt-dlp`'s own. In JSON it is the two characters `\n`.
-/// A value that is not a JSON string is read as nothing.
+/// The title, the description and the paths come as JSON strings. A title is
+/// the site's to write, and a newline in it would otherwise end the line and let
+/// the rest pass for a line of `yt-dlp`'s own. In JSON it is the two characters
+/// `\n`. A value that is not a JSON string is read as nothing, `NA` (what
+/// `yt-dlp` prints for a video with no description) and `null` included.
 enum NookLinkAudioOutput {
     static func parse(_ rawLine: String) -> NookLinkAudioLine {
         let line = rawLine.trimmingCharacters(in: CharacterSet(charactersIn: "\r\n"))
@@ -32,6 +35,11 @@ enum NookLinkAudioOutput {
             guard let title = text(fromJSON: rest) else { return .other }
             let shown = oneLine(title)
             return shown.isEmpty ? .other : .title(shown)
+        }
+        if let rest = value(of: line, after: NookLinkAudioArguments.descriptionMarker) {
+            guard let description = text(fromJSON: rest) else { return .other }
+            let kept = String(description.prefix(maxDescriptionLength))
+            return kept.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .other : .description(kept)
         }
         if let rest = value(of: line, after: NookLinkAudioArguments.fileMarker) {
             guard let path = text(fromJSON: rest), !path.isEmpty else { return .other }
@@ -46,14 +54,18 @@ enum NookLinkAudioOutput {
 
     private static let errorMark = "ERROR:"
 
+    /// A description is kept to this many characters. It is read for a key
+    /// and a tempo and shown nowhere.
+    static let maxDescriptionLength = 20_000
+
     /// The text after `marker` and one space, when the line starts with it.
     private static func value(of line: String, after marker: String) -> String? {
         guard line.hasPrefix(marker + " ") else { return nil }
         return String(line.dropFirst(marker.count + 1))
     }
 
-    /// The string a JSON string stands for. Nil for anything else, `null`
-    /// (what `yt-dlp` prints for a value it does not have) included.
+    /// The string a JSON string stands for. Nil for anything else, `NA`
+    /// (what `yt-dlp` prints for a value it does not have) and `null` included.
     private static func text(fromJSON json: some StringProtocol) -> String? {
         let trimmed = json.trimmingCharacters(in: .whitespaces)
         return try? JSONDecoder().decode(String.self, from: Data(trimmed.utf8))

@@ -169,3 +169,47 @@ struct NookLinkAudioRenderTests {
             .deletingLastPathComponent()
     }
 }
+
+// MARK: - The key and tempo on a finished row
+
+extension NookLinkAudioRenderTests {
+    /// One finished job whose analysis answered with `findings`.
+    private func finished(with findings: NookLinkAudioFindings) async -> LinkAudioFixture {
+        let path = "/Users/tester/Music/Hangover/Morning run mix [k7Qp2x].mp3"
+        let fixture = LinkAudioFixture()
+        fixture.files.present = [path]
+        fixture.analyzer.answer(with: findings)
+        fixture.submit(1)
+        fixture.finishRunningJob(title: "Morning run mix", file: path)
+        await fixture.service.finishAnalyses()
+        return fixture
+    }
+
+    @Test func aFinishedRowThatFoundAKeyAndTempoIsDrawnWithThem() async throws {
+        let nothing = await finished(with: NookLinkAudioFindings())
+        let found = await finished(with: NookLinkAudioFindings(
+            key: NookLinkAudioFound(value: NookMusicalKey(tonic: 1, mode: .minor), isGuess: true),
+            bpm: NookLinkAudioFound(value: 127, isGuess: false)
+        ))
+        #expect(found.service.jobs.first?.findings?.shownText?.hasSuffix(", 127 BPM") == true)
+        #expect(nothing.service.jobs.first?.findings == nil)
+
+        for size in NookWidgetSize.allCases {
+            let without = try card("without-\(size.rawValue)", nothing, size)
+            let with = try card("with-\(size.rawValue)", found, size, writes: true)
+            #expect(without != with, "\(size)")
+        }
+    }
+
+    @Test func aGuessAndAWrittenValueAreDrawnApart() async throws {
+        func fixture(guess: Bool) async -> LinkAudioFixture {
+            await finished(with: NookLinkAudioFindings(
+                key: NookLinkAudioFound(value: NookMusicalKey(tonic: 1, mode: .minor), isGuess: guess),
+                bpm: NookLinkAudioFound(value: 127, isGuess: guess)
+            ))
+        }
+        let guessed = try card("guessed", await fixture(guess: true), .large)
+        let written = try card("written", await fixture(guess: false), .large)
+        #expect(guessed != written)
+    }
+}

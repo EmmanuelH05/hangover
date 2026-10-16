@@ -12,6 +12,9 @@ import Observation
 final class NookDesignReferenceStore {
     /// How many decoded thumbnails are kept in memory at most.
     nonisolated static let thumbnailCacheLimit = 96
+    /// A panel size at or past this, in points, is not kept. No screen is
+    /// that large, and the number must fit the list.
+    nonisolated static let panelSizeLimit: CGFloat = 100_000
 
     private(set) var items: [NookDesignReference] = []
     private(set) var isLoaded = false
@@ -204,6 +207,23 @@ final class NookDesignReferenceStore {
         guard beginChange() else { return }
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         move(id, to: index + offset)
+    }
+
+    /// Remembers the size a picture's floating panel was left at, which the
+    /// panel opens at next time. A shelf that takes no change keeps what it
+    /// has without a word: a panel the user dragged larger is no reason to
+    /// say the shelf is locked.
+    func rememberPanelSize(_ id: UUID, _ size: CGSize) {
+        guard isLoaded, size.width.isFinite, size.height.isFinite,
+              size.width > 0, size.height > 0, size.width < Self.panelSizeLimit, size.height < Self.panelSizeLimit else { return }
+        refreshIfChanged()
+        guard lock == nil else { return }
+        let width = Int(size.width.rounded())
+        let height = Int(size.height.rounded())
+        update(id) {
+            $0.panelWidth = width
+            $0.panelHeight = height
+        }
     }
 
     /// Takes a picture off the shelf and deletes its copy and thumbnail.

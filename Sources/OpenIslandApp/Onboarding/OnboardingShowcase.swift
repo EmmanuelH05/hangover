@@ -86,8 +86,9 @@ enum OnboardingIntegration: String, CaseIterable, Identifiable, Sendable {
             .widget("Todo/NookRemindersService.swift", "predicateForIncompleteReminders"),
         ]
         case .appleNotes: [
-            .widget("Notes/NookAppleNotes.swift", "case appleNotes"),
-            .widget("Notes/NookNotesSettings.swift", "Text(\"Apple Notes\").tag(NookNotesDestination.appleNotes)"),
+            .widget("Notes/NookNote.swift", "case appleNotes"),
+            .widget("Notes/NookAppleNotes.swift", "struct NookAppleNotesScriptBridge"),
+            .widget("Notes/NookNotesSettings.swift", "ForEach(NookNotesSaveTo.allCases)"),
         ]
         case .notion: [
             .widget("Todo/Notion/NotionClient.swift", "api.notion.com"),

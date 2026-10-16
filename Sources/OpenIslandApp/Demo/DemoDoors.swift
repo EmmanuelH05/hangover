@@ -11,13 +11,21 @@ final class AppDemoDoors: DemoDoors {
     private let openTour: () -> Void
     /// The tour that is up, if any.
     private let currentTour: () -> OnboardingTour?
+    /// Hands typing to the field on screen (D65).
+    let typist: DemoTypist
+    var log: (String) -> Void = { line in
+        print(line)
+        fflush(stdout)
+    }
 
     init(
         model: AppModel,
+        typist: DemoTypist = DemoTypist.current ?? DemoTypist(),
         openTour: (() -> Void)? = nil,
         currentTour: @escaping () -> OnboardingTour? = { OnboardingWindowController.shared.currentTour }
     ) {
         self.model = model
+        self.typist = typist
         self.openTour = openTour ?? { [unowned model] in model.showWelcomeTour() }
         self.currentTour = currentTour
     }
@@ -34,7 +42,9 @@ final class AppDemoDoors: DemoDoors {
         case .previousTrack: nook.media.previousTrack()
         case .checkOffTodo(let position): checkOffTodo(at: position)
         case .addTodo(let title): nook.todo.source(reminders: nook.reminders).add(title)
-        case .saveNote(let text): nook.notes.append(text)
+        case .saveNote(let text): saveNote(text)
+        case .typeTodo: typist.focus(.todo)
+        case .typeNote: typeNote()
         case .startTimer(let minutes): model.perform(.startTimer(minutes: minutes))
         case .stopTimer: model.perform(.stopTimer)
         case .applyTemplate(let id): applyTemplate(id)
@@ -63,6 +73,52 @@ final class AppDemoDoors: DemoDoors {
         case .tourPickWidget(let kind): currentTour()?.actions.pickArrangeWidget(kind)
         case .tourMoveWidget(let kind, let index): move(kind, to: index)
         case .tourPutBack: currentTour()?.actions.resetArrangement()
+        case .designTab(let tab): nook.design.tab = tab
+        case .copySwatch(let position): copySwatch(at: position)
+        case .toggleKeepPicking: nook.design.toggleKeepsPicking()
+        case .typeColor: typist.focus(.designColor)
+        case .addTypedColor: submit(.designColor)
+        }
+    }
+
+    // MARK: Typing
+
+    func type(_ text: String, into field: DemoTypingField) {
+        typist.type(text, into: field)
+    }
+
+    /// Return, which the field on screen takes through its own submit. With
+    /// no such field on screen the text goes to the service the field
+    /// saves to, and the log says it.
+    func submit(_ field: DemoTypingField) {
+        guard !typist.submit(field) else { return }
+        let text = typist.line(field).text
+        guard !text.isEmpty else { return }
+        log("DEMO no \(field.rawValue) field on screen, its service took the text")
+        switch field {
+        case .note: saveNote(text)
+        case .todo: nook.todo.source(reminders: nook.reminders).add(text)
+        case .designColor: nook.design.addColor(text: text)
+        }
+    }
+
+    // MARK: Notes
+
+    /// The New note button, which opens the editor on a blank note. The
+    /// editor takes the cursor by itself; the typist's focus is for a field
+    /// that is already on screen.
+    private func typeNote() {
+        withMotion(Motion.reflow) { nook.notes.beginNewNote() }
+        typist.focus(.note)
+    }
+
+    /// A whole note at once: the button, the text, and the editor closed.
+    private func saveNote(_ text: String) {
+        let notes = nook.notes
+        withMotion(Motion.reflow) {
+            notes.beginNewNote()
+            notes.edit(text)
+            notes.closeEditor()
         }
     }
 
@@ -74,6 +130,15 @@ final class AppDemoDoors: DemoDoors {
         let source = nook.todo.source(reminders: nook.reminders)
         guard source.items.indices.contains(position) else { return }
         source.complete(source.items[position].id)
+    }
+
+    /// A swatch on the card, by its place in the order the card shows.
+    private func copySwatch(at position: Int) {
+        let kit = nook.design
+        let swatches = NookDesignLibrary.compactOrder(kit.palettes.activePalette?.swatches ?? [])
+        guard swatches.indices.contains(position) else { return }
+        let swatch = swatches[position]
+        withMotion(Motion.selection) { _ = kit.copy(swatch.color, from: swatch.id) }
     }
 
     private func applyTemplate(_ id: PersonalizationTemplate.ID) {

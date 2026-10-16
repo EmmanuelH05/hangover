@@ -9,8 +9,8 @@ struct OnboardingFeaturesPage: View {
 
     private var state: OnboardingState { context.state }
 
-    /// The footnote says which tools stay on. Where the build does not offer
-    /// Link to MP3 it names the design kit alone.
+    /// The footnote says what goes off again (Record included) and which tools stay on.
+    /// Where the build does not offer Link to MP3 it leaves that one out.
     static var footnoteKey: String {
         NookLinkAudioOffer.isOffered ? "onboarding.features.note" : "onboarding.features.note.release"
     }
@@ -70,6 +70,7 @@ struct OnboardingFeaturesPage: View {
                     stepButton("onboarding.features.next", symbol: "chevron.right", enabled: walk.next != nil) {
                         context.actions.nextFeature()
                     }
+                    .demoTarget(.tourNextFeature)
                 }
             }
             Text(context.t("onboarding.widgets.\(kind.rawValue)"))
@@ -170,6 +171,7 @@ struct OnboardingFeaturesPage: View {
                 .buttonStyle(OnboardingSecondaryButtonStyle(height: 30))
                 .disabled(!button.isEnabled)
                 .opacity(button.isEnabled ? 1 : 0.45)
+                .demoTarget(.tourTry(step))
                 .accessibilityValue(context.t(isDone ? "onboarding.arrange.done" : "onboarding.arrange.todo"))
                 Spacer(minLength: 0)
             }

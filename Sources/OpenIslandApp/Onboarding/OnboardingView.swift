@@ -126,6 +126,7 @@ struct OnboardingView: View {
                     .disabled(!tour.canGoNext)
                     .opacity(tour.canGoNext ? 1 : 0.35)
                     .keyboardShortcut(OnboardingKeyRule.shortcut(for: .returnKey, takesKeys: takesKeys))
+                    .demoTarget(.tourNext)
             }
         }
         .padding(.horizontal, isCompact ? OnboardingStyle.compactSidePadding : OnboardingStyle.sidePadding)

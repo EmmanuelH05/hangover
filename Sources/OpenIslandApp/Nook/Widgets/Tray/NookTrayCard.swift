@@ -2,11 +2,17 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// File tray card. Its header holds two tabs: the files, and the clipboard
-/// history. For the files, small shows the count and up to three icons,
-/// medium the original row of six tiles, large a two row grid with names.
-/// The whole card is a drop target at every size, on either tab, and every
-/// tile drags out.
+/// File tray card. Its header holds two tabs (`NookTrayHeader`): the files,
+/// and the clipboard history. For the files, small shows the count and up to
+/// three icons, medium the original row of six tiles, large a two row grid
+/// with names. The whole card is a drop target at every size, on either tab,
+/// and every tile drags out. A tile's right click lists what the tray can do
+/// with it, Convert included. On the medium and large card the Convert chip
+/// after FILES does the same: it turns on picking, and a click on a tile
+/// then opens the Convert strip for that file. Command-click and Shift-click
+/// choose several files, and a bar over the bottom of the card offers to
+/// combine them. The GIF options and the Convert strip open above the cards
+/// (`NookGIFStrip`, `NookConvertStrip`) and leave the files in view here.
 struct NookTrayCard: View {
     var store: NookTrayStore
     private let takesDrops: Bool
@@ -42,6 +48,8 @@ struct NookTrayCard: View {
             NookTrayHeader(store: store)
             switch store.tab {
             case .files:
+                // The GIF options and the Convert strip open in a strip above
+                // the cards, which leaves the files in view here.
                 if store.items.isEmpty {
                     emptyState
                 } else {
@@ -67,19 +75,33 @@ struct NookTrayCard: View {
             }
         }
         .overlay(alignment: .bottom) {
-            if let notice = store.notice {
-                NookTrayNoticeBar(notice: notice)
-                    .padding(.horizontal, 10)
-                    .padding(.bottom, 8)
-                    .transition(.opacity)
+            VStack(spacing: 4) {
+                if store.tab == .files, store.gifSourceItem == nil, store.convertSourceItem == nil,
+                   !store.combineActions.isEmpty {
+                    NookTrayCombineBar(store: store)
+                        .transition(.opacity)
+                }
+                if let notice = store.notice {
+                    NookTrayNoticeBar(notice: notice)
+                        .transition(.opacity)
+                }
             }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 8)
         }
         .motionAnimation(Motion.hover, value: store.isFileDragOverIsland)
         .motionAnimation(Motion.hover, value: store.notice)
+        .motionAnimation(Motion.hover, value: store.selection)
+        .motionAnimation(Motion.hover, value: store.isPickingToConvert)
         .modifier(NookTrayDropTarget(store: store, isOn: takesDrops))
         // With the card gone there is nothing for a share picker to hang
-        // off, and nothing to hold the island open for.
-        .onDisappear { store.sharePickerDidClose() }
+        // off, and nothing to hold the island open for. Picking a file to
+        // convert is over too, which would otherwise be waiting when the
+        // card comes back.
+        .onDisappear {
+            store.sharePickerDidClose()
+            store.cancelPickingToConvert()
+        }
     }
 
     @ViewBuilder
@@ -123,71 +145,6 @@ struct NookTrayCard: View {
     }
 }
 
-// MARK: - Header
-
-/// The card's title row. The two tab names stand where the title was: the
-/// one being shown is bright, and a click on the other switches to it.
-private struct NookTrayHeader: View {
-    var store: NookTrayStore
-
-    var body: some View {
-        HStack(spacing: 10) {
-            ForEach(NookTrayTab.allCases) { tab in
-                tabButton(tab)
-            }
-            Spacer(minLength: 0)
-            trailing
-        }
-        .motionAnimation(Motion.selection, value: store.tab)
-    }
-
-    private func tabButton(_ tab: NookTrayTab) -> some View {
-        let isSelected = store.tab == tab
-        return Button {
-            store.tab = tab
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: tab.symbol)
-                    .font(.system(size: 10, weight: .semibold))
-                Text(LanguageManager.shared.t(tab.titleKey).uppercased())
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(0.6)
-                    .lineLimit(1)
-            }
-            .foregroundStyle(.white.opacity(isSelected ? 0.8 : 0.3))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-
-    @ViewBuilder
-    private var trailing: some View {
-        switch store.tab {
-        case .files:
-            if !store.items.isEmpty {
-                Text("\(store.items.count)")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.35))
-            }
-        case .clipboard:
-            if !store.clipboard.history.entries.isEmpty {
-                Button {
-                    withMotion(Motion.selection) { store.clipboard.clear() }
-                } label: {
-                    Image(systemName: "trash")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.45))
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(LanguageManager.shared.t("nook.tray.clipboard.clear"))
-                .accessibilityLabel(LanguageManager.shared.t("nook.tray.clipboard.clear"))
-            }
-        }
-    }
-}
-
 /// A line over the bottom of the card that says what an action did, or
 /// why it could not.
 private struct NookTrayNoticeBar: View {
@@ -225,6 +182,49 @@ private struct NookTrayNoticeBar: View {
         .background(Capsule().fill(Color.black.opacity(0.82)))
         .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5))
         .allowsHitTesting(false)
+    }
+}
+
+/// Offers to make one PDF of the chosen files, when they can be. A
+/// choice that cannot be combined shows no bar, and a plain click on a
+/// file clears it.
+private struct NookTrayCombineBar: View {
+    var store: NookTrayStore
+
+    var body: some View {
+        // A conversion still reading one of the chosen files would make
+        // Combine do nothing, so the buttons go dim and say what they wait for.
+        let blocker = store.combineBlocker
+        let help = blocker.map { NookConvertRules.waitText(forBusyFileNamed: $0.originalName) } ?? ""
+        HStack(spacing: 10) {
+            ForEach(store.combineActions, id: \.self) { action in
+                Button {
+                    store.combine(store.selectedItems, action: action)
+                } label: {
+                    Text(LanguageManager.shared.t(action.titleKey))
+                        .font(.system(size: 11, weight: .semibold))
+                        .lineLimit(1)
+                        .foregroundStyle(.white.opacity(0.95))
+                }
+                .buttonStyle(.plain)
+                .disabled(blocker != nil)
+                .opacity(blocker == nil ? 1 : 0.4)
+                .help(help)
+            }
+            Button {
+                store.clearSelection()
+            } label: {
+                Text(LanguageManager.shared.t("nook.tray.convert.combine.clear"))
+                    .font(.system(size: 11))
+                    .lineLimit(1)
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Capsule().fill(Color.black.opacity(0.82)))
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5))
     }
 }
 
@@ -382,19 +382,63 @@ private struct NookTrayTile: View {
     @State private var isHovering = false
     /// The view the share picker hangs off.
     @State private var anchor = NookTrayAnchorBox()
+    @Environment(\.hangoverAccent) private var accent
+    @Environment(\.nookWidgetSize) private var size
+
+    /// True while the Convert chip waits for a file, on every card size.
+    private var takesPicks: Bool {
+        store.isPickingToConvert
+    }
+
+    /// While picking, a click chooses this file to convert, or does nothing
+    /// when it has no conversions. Otherwise Command-click chooses or drops
+    /// this file, Shift-click chooses a range, and a plain click lets go of
+    /// a choice already made.
+    private func handleTap() {
+        if takesPicks {
+            store.pickToConvert(item)
+            return
+        }
+        let flags = NSEvent.modifierFlags
+        if flags.contains(.command) {
+            store.toggleSelection(of: item)
+        } else if flags.contains(.shift) {
+            store.extendSelection(to: item)
+        } else if !store.selection.isEmpty {
+            store.clearSelection()
+        }
+    }
 
     var body: some View {
         let url = store.storedURL(for: item)
         let isWorking = store.workingIDs.contains(item.id)
+        let job = store.jobs[item.id]
+        let isSelected = store.selection.contains(item.id)
+        let isPicking = takesPicks
+        let isPickable = isPicking && store.canPickToConvert(item)
         VStack(spacing: metrics.gap) {
             Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
                 .resizable()
                 .frame(width: metrics.icon, height: metrics.icon)
-                .opacity(isWorking ? 0.4 : 1)
+                .opacity(isWorking || job != nil ? 0.4 : 1)
                 .overlay {
                     if isWorking {
                         ProgressView()
                             .controlSize(.small)
+                    }
+                }
+                .overlay(alignment: .bottom) {
+                    if let job {
+                        NookTrayJobBar(fraction: job.fraction)
+                            .frame(width: max(12, metrics.icon - 8))
+                            .padding(.bottom, 2)
+                    }
+                }
+                .overlay(alignment: .bottom) {
+                    let actions = NookTrayRecordingAction.offered(for: item, size: size)
+                    if isHovering, !isPicking, job == nil, !isWorking, !actions.isEmpty {
+                        NookTrayRecordingButtons(store: store, item: item, actions: actions)
+                            .padding(.bottom, 1)
                     }
                 }
             if let nameSize = metrics.nameSize {
@@ -406,11 +450,34 @@ private struct NookTrayTile: View {
             }
         }
         .frame(width: metrics.width)
+        // A file with nothing to convert steps back while picking.
+        .opacity(isPicking && !isPickable ? 0.3 : 1)
+        .background {
+            // The files that can be picked are outlined in the accent.
+            if isPickable {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(accent.highlight(.orange), lineWidth: 1.5)
+                    .padding(-3)
+            }
+        }
+        .background {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(accent.highlight(.orange).opacity(0.22))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(accent.highlight(.orange).opacity(0.8), lineWidth: 1)
+                    )
+                    .padding(-3)
+            }
+        }
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityAddTraits(isPickable ? .isButton : [])
         // The anchor is only a place to hang the picker. It takes no clicks,
         // which leaves dragging the tile as it was.
         .background(NookTrayShareAnchor(box: anchor).allowsHitTesting(false).accessibilityHidden(true))
         .overlay(alignment: .topLeading) {
-            if isHovering {
+            if isHovering, !isPicking {
                 Button {
                     store.share(item, from: anchor.view)
                 } label: {
@@ -424,7 +491,20 @@ private struct NookTrayTile: View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            if isHovering {
+            if job != nil {
+                // A running conversion shows its stop button without a
+                // hover, because it is what the tile is doing right now.
+                Button {
+                    store.cancelJob(for: item)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.85), .black.opacity(0.6))
+                }
+                .buttonStyle(.plain)
+                .help(LanguageManager.shared.t("nook.tray.convert.cancel"))
+                .accessibilityLabel(LanguageManager.shared.t("nook.tray.convert.cancel"))
+            } else if isHovering, !isPicking {
                 Button {
                     store.remove(item)
                 } label: {
@@ -437,6 +517,7 @@ private struct NookTrayTile: View {
             }
         }
         .contentShape(Rectangle())
+        .onTapGesture { handleTap() }
         .onHover { isHovering = $0 }
         .help(metrics.nameSize == nil ? item.originalName : "")
         .onDrag {
@@ -447,8 +528,8 @@ private struct NookTrayTile: View {
             Button(LanguageManager.shared.t("nook.tray.action.airDrop")) { store.airDrop(item) }
             Divider()
             Button(LanguageManager.shared.t("nook.tray.action.compress")) { store.compress(item) }
-            if let format = NookTrayFileActions.conversionTarget(forFileNamed: item.originalName) {
-                Button(LanguageManager.shared.t(format.actionTitleKey)) { store.convert(item, to: format) }
+            if !NookConvertRules.actions(forFileNamed: item.originalName).isEmpty {
+                NookTrayConvertMenu(store: store, item: item, url: url)
             }
             Button(LanguageManager.shared.t("nook.tray.action.copyPath")) { store.copyPath(of: item) }
             // A picture can go to the design kit's references while that
@@ -463,6 +544,57 @@ private struct NookTrayTile: View {
             Button(LanguageManager.shared.t("nook.tray.action.reveal")) { store.revealInFinder(item) }
             Button(LanguageManager.shared.t("nook.tray.action.remove")) { store.remove(item) }
         }
+    }
+}
+
+/// A thin bar on a tile whose file is being converted. A conversion that
+/// cannot say how far it has got shows a bar that keeps moving.
+private struct NookTrayJobBar: View {
+    let fraction: Double?
+
+    var body: some View {
+        Group {
+            if let fraction {
+                ProgressView(value: fraction)
+            } else {
+                ProgressView()
+            }
+        }
+        .progressViewStyle(.linear)
+        .controlSize(.mini)
+        .tint(.white)
+    }
+}
+
+/// The Convert submenu of a file's right click: only what fits the file,
+/// in groups. A GIF with several pictures says that only the first one is
+/// converted.
+private struct NookTrayConvertMenu: View {
+    var store: NookTrayStore
+    let item: NookTrayItem
+    let url: URL
+
+    var body: some View {
+        let actions = NookConvertRules.actions(forFileNamed: item.originalName, at: url)
+        Menu(LanguageManager.shared.t("nook.tray.convert.menu")) {
+            if NookConvertRules.isAnimatedGIF(at: url) {
+                Button(LanguageManager.shared.t("nook.tray.convert.firstFrameOnly")) {}
+                    .disabled(true)
+            }
+            ForEach(NookConvertGroup.allCases, id: \.self) { group in
+                let inGroup = actions.filter { $0.group == group }
+                if !inGroup.isEmpty {
+                    Section {
+                        ForEach(inGroup, id: \.self) { action in
+                            Button(action.menuTitle) { store.convert(item, action: action) }
+                        }
+                    } header: {
+                        Text(LanguageManager.shared.t(group.titleKey))
+                    }
+                }
+            }
+        }
+        .disabled(store.jobs[item.id] != nil)
     }
 }
 

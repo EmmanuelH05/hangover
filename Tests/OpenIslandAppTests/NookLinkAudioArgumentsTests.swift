@@ -35,6 +35,7 @@ import Testing
             "--ffmpeg-location", "/opt/homebrew/bin",
             "-o", "/Users/tester/Music/Hangover/%(title)s [%(id)s].%(ext)s",
             "--print", "before_dl:hangover-title %(title)j",
+            "--print", "before_dl:hangover-description %(description)j",
             "--print", "after_move:hangover-file %(filepath)j",
             "--",
             "https://example.com/watch?v=abc",
@@ -146,10 +147,25 @@ import Testing
         #expect(at < end, "before the double dash, where options are read")
     }
 
-    @Test func theTitleAndTheFinishedFileArePrintedAsJSON() throws {
+    @Test func theTitleTheDescriptionAndTheFinishedFileArePrintedAsJSON() throws {
         let list = try arguments()
         let prints = list.indices.filter { list[$0] == "--print" }.map { list[$0 + 1] }
-        #expect(prints == ["before_dl:hangover-title %(title)j", "after_move:hangover-file %(filepath)j"])
+        #expect(prints == [
+            "before_dl:hangover-title %(title)j",
+            "before_dl:hangover-description %(description)j",
+            "after_move:hangover-file %(filepath)j",
+        ])
+    }
+
+    @Test func theDescriptionIsAskedForBeforeTheDownloadAndAsJSONSoItsLineBreaksStayInsideTheLine() throws {
+        let list = try arguments()
+        let print = try #require(list.first { $0.hasPrefix("before_dl:\(NookLinkAudioArguments.descriptionMarker) ") })
+        #expect(print.hasSuffix("%(description)j"))
+        // The marker is its own word, not a part of the other two.
+        #expect(Set([NookLinkAudioArguments.titleMarker, NookLinkAudioArguments.descriptionMarker, NookLinkAudioArguments.fileMarker, NookLinkAudioArguments.progressMarker]).count == 4)
+        // Before the double dash, where options are read.
+        let at = try #require(list.firstIndex(of: print))
+        #expect(at < (try #require(list.firstIndex(of: "--"))))
     }
 
     @Test func nothingInTheListIsAShellAndNoCommandStringIsBuilt() throws {

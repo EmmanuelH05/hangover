@@ -34,7 +34,7 @@ struct DemoOffTests {
         #expect(model.nook.reminders.items.isEmpty)
         #expect(model.nook.weather.place == nil)
         #expect(model.nook.tray.items.isEmpty)
-        #expect(model.nook.notes.entries.isEmpty)
+        #expect(model.nook.notes.notes.isEmpty)
         // Its panel stays off screen, as it always did for a store of its own.
         #expect(!DemoMode.isActive)
     }
@@ -304,24 +304,51 @@ struct DemoSampleListsTests {
         #expect(parts.hour == 17 && parts.minute == 0)
     }
 
-    @Test func theNotesFileHoldsFiveLinesAndSavingALineWorks() {
+    @Test func theNotesFolderHoldsFiveNotesAndSavingANoteWorks() {
         let fixture = DemoFixture()
         defer { fixture.remove() }
         fixture.startSampleServices()
         let notes = fixture.nook.notes
 
-        #expect(notes.entries.count == 5)
-        #expect(notes.entries.first?.text == "Read chapter 6", "newest first")
-        #expect(notes.fileURL.path.hasPrefix(fixture.session.folder.path), "the file is in the demo's own folder")
+        #expect(notes.notes.count == 5)
+        #expect(notes.notes.first?.title == "Read chapter 6", "newest first")
+        #expect(notes.notes.last?.title == "Try the new cache key")
+        #expect(notes.folderURL.path.hasPrefix(fixture.session.folder.path), "the folder is in the demo's own folder")
 
-        notes.append("Pick up groceries")
-        #expect(notes.entries.count == 6)
-        #expect(notes.entries.first?.text == "Pick up groceries")
+        notes.beginNewNote()
+        notes.edit("Pick up groceries")
+        notes.closeEditor()
+        #expect(notes.notes.count == 6)
+        #expect(notes.notes.first?.title == "Pick up groceries")
         #expect(notes.savedCount == 1)
     }
 
-    @Test func theNotesWriterForAppleNotesWritesNowhere() async throws {
-        try await DemoNotesWriter().append(lineHTML: "<div>x</div>", toNoteTitled: "Quick Notes")
+    @Test func theSampleNotesAreDatedFromTheLaunch() {
+        let fixture = DemoFixture()
+        defer { fixture.remove() }
+        fixture.startSampleServices()
+
+        let newest = fixture.nook.notes.notes.first
+        #expect(newest?.updated == DemoFixture.now.addingTimeInterval(-25 * 60))
+        #expect(fixture.nook.notes.notes.last?.updated == DemoFixture.now.addingTimeInterval(-300 * 60))
+    }
+
+    @Test func theDemoNeverReachesTheNotesApp() async throws {
+        let fixture = DemoFixture()
+        defer { fixture.remove() }
+        fixture.startSampleServices()
+        let notes = fixture.nook.notes
+
+        // A switch of destination in a recording sends to a Notes app that is not there.
+        notes.setSaveTo(.both)
+        notes.beginNewNote()
+        notes.edit("Goes nowhere")
+        notes.closeEditor()
+        await notes.lastSync?.value
+
+        let made = try await NookInertAppleNotesBridge().create(bodyHTML: "<div>x</div>")
+        #expect(!made.isEmpty)
+        #expect(notes.savedCount == 1)
     }
 
     @Test func theWeatherIsLosAngelesFromACannedReport() throws {

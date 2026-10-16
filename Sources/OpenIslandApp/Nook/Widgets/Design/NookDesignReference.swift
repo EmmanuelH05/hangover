@@ -17,16 +17,28 @@ struct NookDesignReference: Identifiable, Hashable, Sendable {
     var pixelHeight: Int
     var isFavorite: Bool
     var addedAt: Date
+    /// The size, in points, the picture's floating panel was last left at,
+    /// whole panel with its strip of controls. Nil until the user resizes
+    /// the panel, and for a list saved before this was kept.
+    var panelWidth: Int?
+    var panelHeight: Int?
 
     /// Width over height. A picture with no size counts as square.
     var aspectRatio: CGFloat {
         pixelWidth > 0 && pixelHeight > 0 ? CGFloat(pixelWidth) / CGFloat(pixelHeight) : 1
+    }
+
+    /// The remembered size of the floating panel, if there is a usable one.
+    var panelSize: CGSize? {
+        guard let panelWidth, let panelHeight, panelWidth > 0, panelHeight > 0 else { return nil }
+        return CGSize(width: panelWidth, height: panelHeight)
     }
 }
 
 extension NookDesignReference: Codable {
     private enum CodingKeys: String, CodingKey {
         case id, collectionID, name, fileName, pixelWidth, pixelHeight, isFavorite, addedAt
+        case panelWidth, panelHeight
     }
 
     /// The id and the file name are what find the picture on disk. An
@@ -42,6 +54,9 @@ extension NookDesignReference: Codable {
         pixelHeight = container.lenient(Int.self, forKey: .pixelHeight, fallback: 0, counter: counter)
         isFavorite = container.lenient(Bool.self, forKey: .isFavorite, fallback: false, counter: counter)
         addedAt = container.lenient(Date.self, forKey: .addedAt, fallback: Date(timeIntervalSince1970: 0), counter: counter)
+        // Lists saved before the panel size was kept have neither key.
+        panelWidth = container.lenientOptional(Int.self, forKey: .panelWidth, counter: counter)
+        panelHeight = container.lenientOptional(Int.self, forKey: .panelHeight, counter: counter)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -54,6 +69,10 @@ extension NookDesignReference: Codable {
         try container.encode(pixelHeight, forKey: .pixelHeight)
         try container.encode(isFavorite, forKey: .isFavorite)
         try container.encode(addedAt, forKey: .addedAt)
+        // Written only once there is a size, which keeps a list that never
+        // had one as it was.
+        try container.encodeIfPresent(panelWidth, forKey: .panelWidth)
+        try container.encodeIfPresent(panelHeight, forKey: .panelHeight)
     }
 }
 

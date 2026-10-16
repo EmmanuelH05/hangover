@@ -267,8 +267,13 @@ extension NookTickTickTodoService {
         track { await $0.performComplete(id) }
     }
 
-    func add(_ title: String) {
-        track { await $0.performAdd(title) }
+    func add(_ title: String, due: DateComponents?) {
+        track { _ = await $0.performAdd(title, due: due) }
+    }
+
+    /// Waits for TickTick's answer: true once it has the task.
+    func addConfirmed(_ title: String, due: DateComponents?) async -> Bool {
+        await performAdd(title, due: due)
     }
 
     func setNotes(_ notes: String, for id: String) {
@@ -363,6 +368,7 @@ extension NookTickTickTodoService {
                     rows[current].item.notes = confirmed
                 }
                 reportWriteFailure(TickTickClient.classify(error), fallback: .notesFailed)
+                notesSaveFailed = true
                 onNotesWriteFinished?(id, unsaved, false)
                 return
             }
@@ -378,42 +384,57 @@ extension NookTickTickTodoService {
     }
 
     /// Creates an open task with this title in the selected list.
-    func performAdd(_ title: String) async {
+    /// True once TickTick has the task.
+    @discardableResult
+    func performAdd(_ title: String, due: DateComponents? = nil) async -> Bool {
         let trimmed = String(title.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.maxTitleLength))
-        guard isActive, canAdd, !trimmed.isEmpty, let client = makeClient() else { return }
+        guard isActive, canAdd, !trimmed.isEmpty, let client = makeClient() else { return false }
         guard !isRateLimited else {
             actionError = .rateLimited
-            return
+            return false
         }
         let startEpoch = epoch
         actionError = nil
+        let day = NookTodoDay.normalized(due)
         // The inbox goes by its real ID once a load has shown it. Before
         // that no list is named, and TickTick files the task in the inbox.
         let isInbox = selectedListID == TickTickClient.inboxID
         let projectID = isInbox ? inboxProjectID : selectedListID
         let created: TickTickTask?
         do {
-            created = try await client.createTask(title: trimmed, projectID: projectID)
+            created = try await client.createTask(title: trimmed, projectID: projectID, due: day)
         } catch {
-            guard epoch == startEpoch else { return }
+            guard epoch == startEpoch else { return false }
             reportWriteFailure(TickTickClient.classify(error), fallback: .addFailed)
-            return
+            return false
         }
-        guard epoch == startEpoch else { return }
+        // TickTick has the task even when the source changed meanwhile.
+        guard epoch == startEpoch else { return true }
         guard let created else {
-            // TickTick said yes and its answer could not be read. Look for
-            // the task before calling it added.
-            let known = Set(rows.map(\.item.id))
+            // TickTick said yes and its answer could not be read. The task
+            // is there, which makes this a yes: the card clears the typed
+            // title on a yes and keeps it on a no, and a no would add the
+            // task twice on the next Return. The reload puts the row in
+            // place when it can. When it cannot (a wait on the rate limit, a
+            // dropped network, a list of more than the card loads), the next
+            // load does.
             await performRefresh()
-            guard epoch == startEpoch else { return }
-            if Set(rows.map(\.item.id)).isSubset(of: known) { actionError = .addFailed }
-            return
+            return true
+        }
+        // The row shows the date TickTick stored, not the day that was sent:
+        // a server that kept no date, or another one, must not be hidden
+        // behind the local day until the next load (D4).
+        let storedDue = TickTickTaskMapper.dueDate(of: created)
+        if day != nil, storedDue == nil {
+            nookTodoDueLog.error("TickTick created a task and kept no date for the day that was sent")
+            actionError = .addedWithoutDate
         }
         if !rows.contains(where: { $0.item.id == created.id }) {
             if isInbox, inboxProjectID == nil { inboxProjectID = created.projectID }
             rows.append(TickTickRow(
                 item: NookTodoItem(
-                    id: created.id, title: trimmed, dueDate: nil, isCompleted: false, listName: displayName
+                    id: created.id, title: trimmed, dueDate: storedDue,
+                    isCompleted: false, listName: displayName
                 ),
                 projectID: created.projectID ?? projectID ?? selectedListID,
                 notesField: TickTickTaskMapper.notesField(of: created)
@@ -421,6 +442,7 @@ extension NookTickTickTodoService {
         }
         // Puts the new row in its sorted place.
         reloadAfterWrite()
+        return true
     }
 
     /// A load that asked TickTick before the write landed would bring the
@@ -432,6 +454,11 @@ extension NookTickTickTodoService {
     }
 
     private func reportWriteFailure(_ error: TickTickAPIError, fallback: TickTickTodoActionError) {
+        if error != .cancelled {
+            nookTodoDueLog.error(
+                "TickTick write failed (\(String(describing: fallback), privacy: .public)): \(String(describing: error), privacy: .public)"
+            )
+        }
         switch error {
         case .cancelled:
             return
@@ -503,6 +530,13 @@ extension NookTickTickTodoService: NookTodoSource {
         if canEditNotes { return nil }
         if !mayWrite { return lang.t("nook.todo.ticktick.error.readOnly") }
         return lang.t("nook.todo.notes.unavailable")
+    }
+
+    /// A date goes with the task when the task can be added at all.
+    var canSetDue: Bool { canAdd }
+
+    var dueUnavailableReason: String? {
+        canSetDue ? nil : lang.t("nook.todo.due.unavailable")
     }
 
     var addPlaceholder: String {

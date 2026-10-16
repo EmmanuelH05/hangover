@@ -15,17 +15,49 @@ struct NookTimerEntryTests {
         #expect(seconds(text) == expected)
     }
 
-    // MARK: h:mm
+    // MARK: m:ss and h:mm:ss, read like the clock shows them
 
-    @Test(arguments: [("1:30", 5400.0), ("0:45", 2700.0), ("2:00", 7200.0), ("12:05", 43500.0),
-                      ("1:05", 3900.0), ("1:5", 3900.0), ("0:01", 60.0), ("24:00", 86400.0), ("0:59", 3540.0)])
-    func hourMinuteForm(text: String, expected: TimeInterval) {
+    @Test(arguments: [("1:30", 90.0), ("0:45", 45.0), ("2:00", 120.0), ("12:05", 725.0), ("1:05", 65.0),
+                      ("1:5", 65.0), ("0:01", 1.0), ("25:00", 1500.0), ("90:00", 5400.0), ("0:59", 59.0),
+                      ("1440:00", 86400.0)])
+    func minuteSecondForm(text: String, expected: TimeInterval) {
         #expect(seconds(text) == expected)
     }
 
-    @Test(arguments: ["1:75", "1:60", "0:99", "1:", ":30", ":", "1:30:00", "1::30", "25:00", "24:01", "0:00", "1:3x", "1:123"])
-    func badHourMinuteFormIsNil(text: String) {
+    @Test(arguments: [("0:01:30", 90.0), ("1:30:00", 5400.0), ("1:05:09", 3909.0), ("24:00:00", 86400.0),
+                      ("0:25:00", 1500.0)])
+    func hourMinuteSecondForm(text: String, expected: TimeInterval) {
+        #expect(seconds(text) == expected)
+    }
+
+    @Test(arguments: ["1:75", "1:60", "0:99", "1:", ":30", ":", "1::30", "0:00", "1:3x", "1:123", "1:60:00",
+                      "1:00:60", "1:2:3:4", "24:00:01", "1441:00", "0:00:00", "1:30:", ":1:30"])
+    func badClockFormIsNil(text: String) {
         #expect(seconds(text) == nil)
+    }
+
+    // MARK: Hint
+
+    @Test func theHintSaysWhatTheTypedTextWillStart() {
+        #expect(NookTimerEntry.hint(for: "1:30", isInvalid: false) == "1 min 30 sec · Return to start")
+        #expect(NookTimerEntry.hint(for: "1:30:00", isInvalid: false) == "1 hr 30 min · Return to start")
+        #expect(NookTimerEntry.hint(for: "25", isInvalid: false) == "25 min · Return to start")
+        #expect(NookTimerEntry.hint(for: "90s", isInvalid: false) == "1 min 30 sec · Return to start")
+    }
+
+    @Test func theHintTeachesTheFormsUntilTheTextReads() {
+        #expect(NookTimerEntry.hint(for: "", isInvalid: false) == "25 = 25 min · 1:30 = 1 min 30 sec")
+        #expect(NookTimerEntry.hint(for: "1:", isInvalid: false) == "25 = 25 min · 1:30 = 1 min 30 sec")
+    }
+
+    @Test func theHintAfterABadReturnSaysWhatWorks() {
+        #expect(NookTimerEntry.hint(for: "1:75", isInvalid: true) == "Try 25, 1:30 or 1h 30m")
+    }
+
+    @Test func readingLeavesOutZeroParts() {
+        #expect(NookTimerEntry.reading(45) == "45 sec")
+        #expect(NookTimerEntry.reading(3600) == "1 hr")
+        #expect(NookTimerEntry.reading(3630) == "1 hr 30 sec")
     }
 
     // MARK: Unit forms
@@ -46,8 +78,8 @@ struct NookTimerEntryTests {
 
     // MARK: Case and spaces
 
-    @Test(arguments: [("1H30M", 5400.0), (" 25 ", 1500.0), ("  1:30\n", 5400.0), ("2 h 15 m", 8100.0),
-                      ("1 H 5 M 30 S", 3930.0), ("\t45m", 2700.0), ("1 : 30", 5400.0), ("2 5", 1500.0)])
+    @Test(arguments: [("1H30M", 5400.0), (" 25 ", 1500.0), ("  1:30\n", 90.0), ("2 h 15 m", 8100.0),
+                      ("1 H 5 M 30 S", 3930.0), ("\t45m", 2700.0), ("1 : 30", 90.0), ("2 5", 1500.0)])
     func ignoresCaseAndSpaces(text: String, expected: TimeInterval) {
         #expect(seconds(text) == expected)
     }

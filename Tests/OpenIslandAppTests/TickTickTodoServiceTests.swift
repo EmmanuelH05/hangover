@@ -693,21 +693,53 @@ import Testing
         #expect(harness.service.actionError == .addFailed)
     }
 
-    @Test func aYesThatCannotBeReadIsCheckedAgainstTheList() async {
+    @Test func aYesThatCannotBeReadIsStillAYesWhenTheReloadDoesNotShowTheTask() async {
         let harness = TickTickHarness()
         harness.serve(inbox: Self.inbox, written: "")
         await harness.activate()
+        // The reload that looks for the task fails (a rate gate, a dropped network).
+        harness.transport.setResponder { request, _ in
+            request.httpMethod == "POST" ? StubTodoResponse(status: 200, body: "") : StubTodoResponse(status: 500)
+        }
 
-        // The task is not in the list afterwards: it was not added.
-        await harness.service.performAdd("Buy milk")
-        #expect(harness.service.actionError == .addFailed)
-        #expect(harness.service.items.count == 3)
+        let added = await NookTodoAdding.submit(draft: "Buy milk", due: nil, to: harness.service)
 
-        // The task is in the list afterwards: it was.
+        #expect(added, "TickTick answered with success, which means it has the task")
+        #expect(harness.service.actionError != .addFailed)
+        let kept = NookTodoAdding.fields(afterAdding: added, sent: "Buy milk", sentDue: nil, draft: "Buy milk", dueDraft: nil)
+        #expect(kept.draft.isEmpty, "the card does not keep the title, which would add the task twice")
+    }
+
+    @Test func aYesThatCannotBeReadPlacesTheRowWhenTheReloadShowsTheTask() async {
+        let harness = TickTickHarness()
+        harness.serve(inbox: Self.inbox, written: "")
+        await harness.activate()
         harness.serve(inbox: Self.inbox + [TickTickFixtures.task(id: "d", title: "Buy milk", sortOrder: 3)], written: "")
-        await harness.service.performAdd("Buy milk")
+
+        let added = await harness.service.performAdd("Buy milk")
+
+        #expect(added)
         #expect(harness.service.actionError == nil)
         #expect(harness.service.items.map(\.id).contains("d"))
+    }
+
+    @Test func aYesThatCannotBeReadIsStillAYesWhenTheListChangesDuringTheReload() async {
+        let harness = TickTickHarness()
+        harness.serve(inbox: Self.inbox, projects: Self.projects, work: Self.workData, written: "")
+        await harness.activate()
+        let gate = AsyncStream<Void>.makeStream()
+        harness.transport.setHold { request in
+            guard request.httpMethod == "GET", request.url?.path.hasSuffix("/project/inbox/data") == true else { return }
+            for await _ in gate.stream { break }
+        }
+
+        let adding = Task { await harness.service.performAdd("Buy milk") }
+        while harness.transport.requests(endingWith: "/project/inbox/data").count < 2 { await Task.yield() }
+        await harness.service.selectList(TickTickFixtures.workID)
+        gate.continuation.yield()
+        let added = await adding.value
+
+        #expect(added, "TickTick has the task whatever list is showing now")
     }
 
     @Test func anEmptyTitleIsNotSentAndALongOneIsCut() async {
@@ -793,6 +825,49 @@ import Testing
         #expect(finished.first?.2 == false)
         #expect(harness.service.pendingNotes.isEmpty)
         #expect(harness.service.notesInFlight.isEmpty)
+    }
+
+    @Test func aFailedNoteSaveIsOneForTheNotesPageUntilTheNextWrite() async {
+        let harness = TickTickHarness()
+        harness.serve(inbox: Self.inbox)
+        await harness.activate()
+        harness.transport.setResponder { _, _ in StubTodoResponse(status: 500) }
+
+        await harness.service.performSetNotes("ten pages", for: "a")
+        #expect(harness.service.notesSaveFailed)
+
+        harness.serve(inbox: Self.inbox)
+        await harness.service.performAdd("Buy milk")
+        #expect(!harness.service.notesSaveFailed)
+    }
+
+    @Test func aNoteSaveThatHitTheRateLimitIsOneForTheNotesPageToo() async {
+        let harness = TickTickHarness()
+        harness.serve(inbox: Self.inbox)
+        await harness.activate()
+        harness.transport.setResponder { request, _ in
+            request.httpMethod == "POST"
+                ? StubTodoResponse(status: 429, headers: ["Retry-After": "90"])
+                : .json(TickTickFixtures.storedTask(id: "a"))
+        }
+
+        await harness.service.performSetNotes("ten pages", for: "a")
+
+        #expect(harness.service.actionError == .rateLimited)
+        #expect(harness.service.items.first { $0.id == "a" }?.notes == "five pages")
+        #expect(harness.service.notesSaveFailed, "the row went back, and the page keeps the draft")
+    }
+
+    @Test func aFailedAddIsNotOneForTheNotesPage() async {
+        let harness = TickTickHarness()
+        harness.serve(inbox: Self.inbox)
+        await harness.activate()
+        harness.transport.setResponder { _, _ in StubTodoResponse(status: 500) }
+
+        await harness.service.performAdd("Buy milk")
+
+        #expect(harness.service.actionError == .addFailed)
+        #expect(!harness.service.notesSaveFailed)
     }
 
     @Test func aNoteSavedWhileAnotherIsOnTheWireGoesOutNext() async {

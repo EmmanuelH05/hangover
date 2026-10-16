@@ -17,6 +17,10 @@ enum OnboardingTip: String, CaseIterable, Identifiable, Sendable {
     /// `IslandPanelView`: files dropped on the closed or the opened island
     /// go to `nook.tray.handleDrop`.
     case dropFiles
+    /// `NookConvertRules.actions(forFileNamed:)`: a file in the tray has a
+    /// Convert menu with the choices that fit it. The tip shows the choices a
+    /// video gets as its example (`convertExample`).
+    case convertFiles
     /// `NookWidgetGrid`: a long press or the Edit Widgets menu item starts
     /// editing, a drag reorders, the corner grip resizes.
     case rearrange
@@ -29,7 +33,7 @@ enum OnboardingTip: String, CaseIterable, Identifiable, Sendable {
     /// `NookTodoCard`: the task's name opens its notes page, the circle
     /// completes it.
     case todoNotes
-    /// `NookNotesCard`: Return in the field appends the line.
+    /// `NookNotesCard`: the New note button opens an editor that saves itself.
     case quickNotes
     /// `NookMediaCard`: the speaker button opens the list of outputs.
     case speaker
@@ -44,12 +48,21 @@ enum OnboardingTip: String, CaseIterable, Identifiable, Sendable {
     /// The most tips a page holds: two rows of four.
     static let pageLimit = 8
 
+    /// The file the Convert tip uses as its example.
+    static let convertExampleFile = "clip.mov"
+
+    /// What the tray offers for the example file, in the menu's order. It is
+    /// read from the rules, which keeps the tip true when they change.
+    static var convertExample: [NookConvertAction] {
+        NookConvertRules.actions(forFileNamed: convertExampleFile)
+    }
+
     var needsAgents: Bool { self == .switchPages || self == .jump }
 
     /// The widget the tip is about, which has to be on the page.
     var widget: NookWidgetKind? {
         switch self {
-        case .dropFiles: .tray
+        case .dropFiles, .convertFiles: .tray
         case .todoNotes: .todo
         case .quickNotes: .notes
         case .speaker: .media
@@ -62,6 +75,7 @@ enum OnboardingTip: String, CaseIterable, Identifiable, Sendable {
         case .keepOpen: "pin.fill"
         case .swipeAway: "hand.draw.fill"
         case .dropFiles: "arrow.down.doc.fill"
+        case .convertFiles: "arrow.triangle.2.circlepath"
         case .rearrange: "square.grid.2x2.fill"
         case .switchPages: "arrow.left.arrow.right"
         case .jump: "terminal.fill"
@@ -77,6 +91,15 @@ enum OnboardingTip: String, CaseIterable, Identifiable, Sendable {
     /// in the words of the way the island opens.
     func keyName(openTrigger: IslandOpenTrigger) -> String {
         self == .keepOpen ? "keepOpen.\(openTrigger.rawValue)" : rawValue
+    }
+
+    /// The sentence under the tip's name. The Convert tip names the choices
+    /// the tray gives a video such as clip.mov, read from the rules.
+    func text(openTrigger: IslandOpenTrigger, lang: LanguageManager) -> String {
+        let key = "onboarding.tips.\(keyName(openTrigger: openTrigger)).text"
+        guard self == .convertFiles else { return lang.t(key) }
+        let choices = Self.convertExample.map { lang.t($0.titleKey) }.joined(separator: " \u{00B7} ")
+        return lang.t(key, Self.convertExampleFile, choices)
     }
 
     /// The tips a page shows, in the order above, with where Settings is

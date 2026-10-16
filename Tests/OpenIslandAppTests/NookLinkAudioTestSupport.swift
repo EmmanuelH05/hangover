@@ -89,6 +89,12 @@ final class FakeLinkAudioFiles: NookLinkAudioFiles {
     var entries: [String: Date] = [:]
     var failsToMakeFolder = false
     private(set) var listedFolders: [URL] = []
+    /// The paths of the files that exist, for `exists`, `move` and `trash`.
+    var present: Set<String> = []
+    private(set) var moves: [(from: URL, to: URL)] = []
+    private(set) var trashed: [URL] = []
+    var failsToMove = false
+    var failsToTrash = false
 
     func makeFolder(_ folder: URL) throws {
         if failsToMakeFolder { throw Failure() }
@@ -103,6 +109,96 @@ final class FakeLinkAudioFiles: NookLinkAudioFiles {
     func remove(_ file: URL) {
         removed.append(file)
         entries[file.lastPathComponent] = nil
+    }
+
+    func exists(_ file: URL) -> Bool {
+        present.contains(file.path)
+    }
+
+    func move(_ file: URL, to destination: URL) throws {
+        guard !failsToMove, present.contains(file.path), !present.contains(destination.path) else { throw Failure() }
+        present.remove(file.path)
+        present.insert(destination.path)
+        moves.append((file, destination))
+    }
+
+    func trash(_ file: URL) throws {
+        guard !failsToTrash, present.contains(file.path) else { throw Failure() }
+        present.remove(file.path)
+        trashed.append(file)
+    }
+}
+
+/// An analyzer that answers with what the test sets, and can hold its answer
+/// back until the test lets it go. It reads no file.
+final class FakeLinkAudioAnalyzer: NookLinkAudioAnalyzing, @unchecked Sendable {
+    struct Call: Equatable, Sendable {
+        var file: URL
+        var title: String?
+        var description: String?
+    }
+
+    private let lock = NSLock()
+    private var recorded: [Call] = []
+    private var held: [CheckedContinuation<Void, Never>] = []
+    private var answer = NookLinkAudioFindings()
+    private var holdsAnswers = false
+    private var open = 0
+    private var mostOpen = 0
+    private var cancelled = 0
+
+    var calls: [Call] { lock.withLock { recorded } }
+    var heldCount: Int { lock.withLock { held.count } }
+    /// The most calls that were open (called and not yet answered) at one time.
+    var mostAtOnce: Int { lock.withLock { mostOpen } }
+    /// How many calls were cancelled by the time they answered.
+    var cancelledCount: Int { lock.withLock { cancelled } }
+
+    /// What every later call answers.
+    func answer(with findings: NookLinkAudioFindings, holding: Bool = false) {
+        lock.withLock {
+            answer = findings
+            holdsAnswers = holding
+        }
+    }
+
+    /// Lets every held call answer.
+    func release() {
+        let waiting = lock.withLock { () -> [CheckedContinuation<Void, Never>] in
+            holdsAnswers = false
+            let all = held
+            held = []
+            return all
+        }
+        for continuation in waiting { continuation.resume() }
+    }
+
+    func analyze(file: URL, title: String?, description: String?) async -> NookLinkAudioFindings {
+        let call = Call(file: file, title: title, description: description)
+        let mustWait = lock.withLock { () -> Bool in
+            recorded.append(call)
+            open += 1
+            mostOpen = max(mostOpen, open)
+            return holdsAnswers
+        }
+        if mustWait {
+            await withCheckedContinuation { continuation in
+                // A `release()` may have come since the check above. A call is
+                // held only while answers are still held, and goes on at once
+                // when they are not.
+                let isHeld = lock.withLock { () -> Bool in
+                    guard holdsAnswers else { return false }
+                    held.append(continuation)
+                    return true
+                }
+                if !isHeld { continuation.resume() }
+            }
+        }
+        return lock.withLock {
+            open -= 1
+            if Task.isCancelled { cancelled += 1 }
+            return answer
+        }
     }
 }
 
@@ -129,6 +225,7 @@ final class LinkAudioFixture {
     let runner = FakeLinkAudioRunner()
     let files = FakeLinkAudioFiles()
     let clipboard = FakeLinkAudioClipboard()
+    let analyzer = FakeLinkAudioAnalyzer()
     let defaults = MemoryDefaults()
     /// What the service listens for a quit on. A test posts to it and never to the real one.
     let notifications = NotificationCenter()
@@ -163,6 +260,7 @@ final class LinkAudioFixture {
             runner: runner,
             files: files,
             clipboard: clipboard,
+            analyzer: analyzer,
             isExecutable: { state.executables.contains($0) },
             showInFinder: { state.shown.append($0) },
             environment: environment,
@@ -199,6 +297,11 @@ final class LinkAudioFixture {
         "\(NookLinkAudioArguments.titleMarker) \(json(title))"
     }
 
+    /// The line `yt-dlp` writes when the description is known.
+    nonisolated static func descriptionLine(_ description: String) -> String {
+        "\(NookLinkAudioArguments.descriptionMarker) \(json(description))"
+    }
+
     /// The line `yt-dlp` writes for the finished file.
     nonisolated static func fileLine(_ path: String) -> String {
         "\(NookLinkAudioArguments.fileMarker) \(json(path))"
@@ -212,6 +315,19 @@ final class LinkAudioFixture {
     /// The progress line that closes the download.
     nonisolated static func downloadDoneLine(file: String = "Song [a1b2].webm") -> String {
         "\(NookLinkAudioArguments.progressMarker) finished 100 100 NA \(json("\(mediaFolder)/\(file)"))"
+    }
+
+    /// Lets the other tasks run until `count` calls to the analyzer are being
+    /// held, which is when a search is "out". False when that never came. A test
+    /// expects on the answer, which keeps a search that never started from
+    /// passing for one that was stopped.
+    func waitForHeldAnalysis(_ count: Int = 1) async -> Bool {
+        var turns = 0
+        while analyzer.heldCount < count, turns < 1_000 {
+            await Task.yield()
+            turns += 1
+        }
+        return analyzer.heldCount >= count
     }
 
     /// Plays a whole good run on the running job: a title, some progress, the end of the download,

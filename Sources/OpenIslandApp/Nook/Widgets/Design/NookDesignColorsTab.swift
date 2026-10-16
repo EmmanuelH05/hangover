@@ -63,6 +63,7 @@ private struct NookDesignSwatchRow: View {
             HStack(spacing: NookDesignCardLayout.spacing) {
                 ForEach(row.shown) { swatch in
                     NookDesignSwatchButton(kit: kit, swatch: swatch, side: side, showsName: false)
+                        .demoTarget(.designSwatch(position: row.shown.firstIndex(of: swatch) ?? -1))
                 }
                 if row.hidden > 0 {
                     NookDesignMoreButton(kit: kit, count: row.hidden, side: side)
@@ -95,6 +96,7 @@ private struct NookDesignSwatchGrid: View {
                             case let .swatch(swatch):
                                 NookDesignSwatchButton(kit: kit, swatch: swatch, side: Self.side, showsName: true)
                                     .frame(width: Self.tileWidth)
+                                    .demoTarget(.designSwatch(position: grid.shown.firstIndex(of: swatch) ?? -1))
                             case let .more(count):
                                 NookDesignMoreButton(kit: kit, count: count, side: Self.side)
                                     .frame(width: Self.tileWidth, alignment: .top)
@@ -272,6 +274,8 @@ private struct NookDesignQuickAdd: View {
         HStack(spacing: 6) {
             NookDesignField(text: $text, prompt: lang.t("nook.design.add.prompt"), onSubmit: add)
                 .focused($isFocused)
+                .demoTarget(.designColorField)
+                .demoTyping(.designColor, text: $text, focus: $isFocused, submit: add)
             if let parsed {
                 NookDesignSwatchChip(color: parsed, side: 18, isRound: true)
                     .accessibilityHidden(true)
@@ -282,6 +286,7 @@ private struct NookDesignQuickAdd: View {
             .buttonStyle(.plain)
             .disabled(parsed == nil)
             .help(lang.t("nook.design.add.help"))
+            .demoTarget(.designAddColor)
         }
         // The island stays open while a color is typed and not added (D20).
         // A focused field with nothing in it holds nothing.

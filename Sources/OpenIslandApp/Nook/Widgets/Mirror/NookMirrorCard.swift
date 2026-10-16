@@ -317,6 +317,9 @@ struct NookMirrorCard: View {
 
     var body: some View {
         let isOn = nook.isMirrorOn
+        // The face cam bubble of a recording has the camera. The Mirror cannot
+        // be turned on until it is gone.
+        let isTaken = nook.record.isFaceCamUp
         Button {
             // A long press enters edit mode before the button lets go. That
             // release must not also flip the switch.
@@ -325,9 +328,9 @@ struct NookMirrorCard: View {
         } label: {
             Group {
                 if size == .small {
-                    compactBody(isOn)
+                    compactBody(isOn, isTaken: isTaken)
                 } else {
-                    wideBody(isOn)
+                    wideBody(isOn, isTaken: isTaken)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -336,11 +339,12 @@ struct NookMirrorCard: View {
             .contentShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
         }
         .buttonStyle(PressableButtonStyle())
+        .disabled(isTaken)
         .motionAnimation(Motion.selection, value: isOn)
         .accessibilityLabel(isOn ? "Turn the mirror off" : "Turn the mirror on")
     }
 
-    private func compactBody(_ isOn: Bool) -> some View {
+    private func compactBody(_ isOn: Bool, isTaken: Bool) -> some View {
         VStack(spacing: 8) {
             HStack(spacing: 6) {
                 cameraIcon(isOn, size: 13)
@@ -348,17 +352,17 @@ struct NookMirrorCard: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.85))
             }
-            Text(isOn ? "On, above your widgets" : "Camera is off")
+            Text(isTaken ? LanguageManager.shared.t("nook.record.mirror.cameraInUse") : (isOn ? "On, above your widgets" : "Camera is off"))
                 .font(.system(size: 11))
                 .foregroundStyle(.white.opacity(0.5))
-                .lineLimit(1)
+                .lineLimit(isTaken ? 2 : 1)
                 .minimumScaleFactor(0.9)
-            switchLabel(isOn)
+            if !isTaken { switchLabel(isOn) }
         }
         .padding(.horizontal, 10)
     }
 
-    private func wideBody(_ isOn: Bool) -> some View {
+    private func wideBody(_ isOn: Bool, isTaken: Bool) -> some View {
         HStack(spacing: 12) {
             cameraIcon(isOn, size: 16)
                 .frame(width: 36, height: 36)
@@ -370,14 +374,14 @@ struct NookMirrorCard: View {
                 Text("Mirror")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.85))
-                Text(isOn ? "Showing above your widgets until you turn it off." : "The camera stays off until you turn it on.")
+                Text(isTaken ? LanguageManager.shared.t("nook.record.mirror.cameraInUse") : (isOn ? "Showing above your widgets until you turn it off." : "The camera stays off until you turn it on."))
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.5))
                     .lineLimit(size == .large ? 2 : 1)
                     .minimumScaleFactor(0.9)
             }
             Spacer(minLength: 8)
-            switchLabel(isOn)
+            if !isTaken { switchLabel(isOn) }
         }
         .padding(.horizontal, 14)
     }

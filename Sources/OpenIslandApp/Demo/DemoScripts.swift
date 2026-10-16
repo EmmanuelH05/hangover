@@ -1,10 +1,12 @@
 import Foundation
 
-/// The four scripts of the demo mode (D51). The content is fixed; the
+/// The five scripts of the demo mode (D51, D65). The content is fixed; the
 /// timings are tuned to read like a person: one to two and a half seconds
-/// between small actions, longer where something should be read.
+/// between small actions, longer where something should be read. A step's
+/// pause holds the drawn pointer's glide to the control, which ends the
+/// pause with the click.
 enum DemoScripts {
-    static let all = [tour, use, closed, looks]
+    static let all = [tour, use, closed, looks, kit]
 
     static let names = all.map(\.name)
 
@@ -78,7 +80,8 @@ enum DemoScripts {
 
     // MARK: use
 
-    /// The island in everyday use, from opening it to closing it again.
+    /// The island in everyday use, from opening it to closing it again. The
+    /// pointer presses each control, and the to-do and the note are typed.
     static let use = DemoScript(
         name: "use",
         startsPlaying: false,
@@ -89,13 +92,13 @@ enum DemoScripts {
             DemoStep(1.8, .playOrPause),
             DemoStep(2.2, .nextTrack),
             DemoStep(2.5, .checkOffTodo(position: 0)),
-            DemoStep(2.0, .addTodo("Call home")),
+            DemoStep(2.0, .typeTodo("Call home")),
             DemoStep(2.5, .startTimer(minutes: 25)),
             // The timer runs a few seconds, then the closed pill shows the
             // time left and the music.
             DemoStep(4.5, .closeIsland),
             DemoStep(5.0, .openIsland),
-            DemoStep(2.0, .saveNote("Pick up groceries on the way back")),
+            DemoStep(2.0, .typeNote("Pick up groceries on the way back")),
             DemoStep(3.0, .applyTemplate(.focus)),
             DemoStep(3.5, .undoTemplate),
             DemoStep(3.0, .beginEditing),
@@ -170,6 +173,34 @@ enum DemoScripts {
             DemoStep(3.5, .applyTemplate(.study)),
             DemoStep(3.5, .applyTemplate(.nowPlaying)),
             DemoStep(3.5, .closeIsland),
+        ]
+    )
+}
+
+extension DemoScripts {
+    // MARK: kit
+
+    /// The design kit (D53, D65), on the demo's own sample palettes and
+    /// links: a few swatches copied as HEX, the links tab and back, the
+    /// pill switched on, and a new color typed in and kept with the Add
+    /// pill. The copies go to the demo's own pasteboard, never the Mac's,
+    /// and the eyedropper is never pressed: its loupe shows the real screen.
+    static let kit = DemoScript(
+        name: "kit",
+        startsPlaying: true,
+        steps: [
+            DemoStep(2.5, .openIsland),
+            DemoStep(2.4, .copySwatch(position: 0)),
+            DemoStep(2.0, .copySwatch(position: 2)),
+            DemoStep(1.8, .copySwatch(position: 5)),
+            DemoStep(2.5, .designTab(.links)),
+            DemoStep(3.0, .designTab(.colors)),
+            DemoStep(2.2, .toggleKeepPicking),
+            DemoStep(2.2, .typeColor("#7B61FF")),
+            DemoStep(1.4, .addTypedColor),
+            // The new color, last on the palette.
+            DemoStep(2.5, .copySwatch(position: DemoDesign.brand.count)),
+            DemoStep(3.0, .closeIsland),
         ]
     )
 }

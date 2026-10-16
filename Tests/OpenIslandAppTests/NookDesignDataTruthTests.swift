@@ -94,6 +94,34 @@ private func text(_ key: String, _ arguments: any CVarArg...) -> String {
         #expect(try Data(contentsOf: index) == original, "the list was written over")
     }
 
+    /// A panel resize remembered on a list that could not be kept must not
+    /// write over it: that list is the only copy of the names and the order.
+    @Test func aPanelSizeIsNotWrittenOverAListThatCannotBeKept() async throws {
+        let root = try folder()
+        defer { writable(root); try? FileManager.default.removeItem(at: root) }
+        let sources = try Samples.temporaryFolder("truth-sources")
+        defer { try? FileManager.default.removeItem(at: sources) }
+        let first = NookDesignReferenceStore(folder: root)
+        await first.load()
+        _ = await first.add(fileAt: try Samples.writePNG(named: "a.png", in: sources)).value
+        _ = await first.add(fileAt: try Samples.writePNG(named: "b.png", in: sources)).value
+        await first.flush()
+        let index = NookDesignReferenceFiles.indexURL(in: root)
+        try FileManager.default.removeItem(at: NookDesignReferenceFiles.folderURL(for: first.items[0].id, in: root))
+        let original = try Data(contentsOf: index)
+        try readOnly(root)
+
+        let store = NookDesignReferenceStore(folder: root)
+        await store.load()
+        #expect(store.lock == .copyNotKept)
+        let shown = try #require(store.items.first)
+        writable(root)
+        store.rememberPanelSize(shown.id, CGSize(width: 520, height: 300))
+        await store.flush()
+
+        #expect(try Data(contentsOf: index) == original, "a remembered size wrote over the list")
+    }
+
     @Test func aMissingListIsNotSaidToHaveBeenMovedAside() async throws {
         let problem = NookDesignStoreProblem(tab: .references, problem: .indexMissing(recovered: 3))
         let moved = NookDesignStoreProblem(tab: .references, problem: .unreadable)

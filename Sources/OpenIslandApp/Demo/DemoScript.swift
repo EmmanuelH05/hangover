@@ -15,6 +15,12 @@ enum DemoAction: Equatable, Sendable {
     case checkOffTodo(position: Int)
     case addTodo(String)
     case saveNote(String)
+    /// Clicks into the field, types the text one key at a time and presses
+    /// Return, through the field's own draft and submit (D65). A note has no
+    /// Return: `typeNote` opens a new note with the New note button, types
+    /// into the editor, and its last beat is the one in which the note saves.
+    case typeTodo(String)
+    case typeNote(String)
     // The timer
     case startTimer(minutes: Int)
     case stopTimer
@@ -47,6 +53,14 @@ enum DemoAction: Equatable, Sendable {
     case tourPickWidget(NookWidgetKind)
     case tourMoveWidget(NookWidgetKind, to: Int)
     case tourPutBack
+    // The design kit
+    case designTab(NookDesignTab)
+    case copySwatch(position: Int)
+    case toggleKeepPicking
+    /// Types a color into the large card's field, one key at a time, with
+    /// no Return. `addTypedColor` presses the Add pill after it.
+    case typeColor(String)
+    case addTypedColor
 
     /// The step's name in the line the runner prints.
     var name: String {
@@ -59,6 +73,8 @@ enum DemoAction: Equatable, Sendable {
         case .checkOffTodo(let position): "check-off-todo-\(position + 1)"
         case .addTodo: "add-todo"
         case .saveNote: "save-note"
+        case .typeTodo: "type-todo"
+        case .typeNote: "type-note"
         case .startTimer(let minutes): "start-timer-\(minutes)"
         case .stopTimer: "stop-timer"
         case .applyTemplate(let id): "template-\(id.rawValue)"
@@ -86,6 +102,11 @@ enum DemoAction: Equatable, Sendable {
         case .tourPickWidget(let kind): "tour-pick-\(kind.rawValue)"
         case .tourMoveWidget(let kind, let index): "tour-move-\(kind.rawValue)-to-\(index)"
         case .tourPutBack: "tour-put-back"
+        case .designTab(let tab): "design-tab-\(tab.rawValue)"
+        case .copySwatch(let position): "copy-swatch-\(position + 1)"
+        case .toggleKeepPicking: "keep-pill"
+        case .typeColor: "type-color"
+        case .addTypedColor: "add-color"
         }
     }
 
@@ -100,7 +121,9 @@ enum DemoAction: Equatable, Sendable {
         case .previousTrack: "MediaRemoteService.previousTrack(), the back button"
         case .checkOffTodo: "NookTodoSource.complete(_:), the row's check"
         case .addTodo: "NookTodoSource.add(_:), the add field"
-        case .saveNote: "NookNotesService.append(_:), the note field"
+        case .saveNote: "NookNotesStore.beginNewNote(), edit(_:) and closeEditor(), the New note button"
+        case .typeTodo: "NookTodoCard's draft and its Return, the add field"
+        case .typeNote: "NookNotesStore.beginNewNote(), the New note button, then the editor's text"
         case .startTimer: "AppModel.perform(.startTimer), the link's own action"
         case .stopTimer: "AppModel.perform(.stopTimer), the link's own action"
         case .applyTemplate: "AppModel.applyTemplate(_:for:), the template card"
@@ -128,6 +151,22 @@ enum DemoAction: Equatable, Sendable {
         case .tourPickWidget: "OnboardingActions.pickArrangeWidget, the arrange page's card"
         case .tourMoveWidget: "NookModel.moveWidget(_:to:for:), where a drag ends"
         case .tourPutBack: "OnboardingActions.resetArrangement, the Put it back button"
+        case .designTab: "NookDesignKit.tab, the card's tab name"
+        case .copySwatch: "NookDesignKit.copy(_:from:), a swatch"
+        case .toggleKeepPicking: "NookDesignKit.toggleKeepsPicking(), the pill"
+        case .typeColor: "NookDesignQuickAdd's draft, the color field"
+        case .addTypedColor: "NookDesignQuickAdd's add, the Add pill"
+        }
+    }
+
+    /// The field a typing step types into, the text and whether it ends
+    /// with Return. Nil for every other step.
+    var typing: DemoTypingRun? {
+        switch self {
+        case .typeTodo(let text): DemoTypingRun(field: .todo, text: text, pressesReturn: true)
+        case .typeNote(let text): DemoTypingRun(field: .note, text: text, pressesReturn: true)
+        case .typeColor(let text): DemoTypingRun(field: .designColor, text: text, pressesReturn: false)
+        default: nil
         }
     }
 }
@@ -144,6 +183,12 @@ struct DemoStep: Equatable, Sendable {
     }
 
     var name: String { action.name }
+
+    /// The time the step's typing takes after its door, zero for a step
+    /// that types nothing.
+    var typingTime: TimeInterval {
+        action.typing?.duration ?? 0
+    }
 }
 
 /// A named list of timed steps (D51).
@@ -158,8 +203,9 @@ struct DemoScript: Equatable, Sendable {
     let startsPlaying: Bool
     let steps: [DemoStep]
 
-    /// The time from the first step's start to the quit, in seconds.
+    /// The time from the first step's start to the quit, in seconds. The
+    /// pointer moves inside each step's pause, and typing adds its own time.
     var duration: TimeInterval {
-        steps.reduce(0) { $0 + $1.pause } + Self.endPause
+        steps.reduce(0) { $0 + $1.pause + $1.typingTime } + Self.endPause
     }
 }

@@ -73,12 +73,46 @@ struct TickTickClient: Sendable {
     /// `POST /open/v1/task`. Without a project the task lands in the inbox.
     /// Returns nil when TickTick took the task but its answer could not be
     /// read, which is still a task that exists.
-    func createTask(title: String, projectID: String?) async throws -> TickTickTask? {
-        var fields = ["title": title]
-        if let projectID { fields["projectId"] = projectID }
-        guard let body = try? JSONEncoder().encode(fields) else { throw TickTickAPIError.invalidResponse }
+    ///
+    /// `due` is a whole day. The task is sent as an all-day task on that day,
+    /// in the zone of `calendar` (D69).
+    func createTask(
+        title: String,
+        projectID: String?,
+        due: DateComponents? = nil,
+        calendar: Calendar = .current
+    ) async throws -> TickTickTask? {
+        guard let body = Self.creationBody(title: title, projectID: projectID, due: due, calendar: calendar) else {
+            throw TickTickAPIError.invalidResponse
+        }
         let data = try await send(method: "POST", path: ["task"], body: body)
         return try? JSONDecoder().decode(TickTickTask.self, from: data)
+    }
+
+    /// The fields of a new task. Only the ones that are set are sent: a
+    /// title, a list, and for a dated task `dueDate`, `isAllDay` and the zone
+    /// the day was meant in.
+    ///
+    /// An all-day task is midnight of its day in its zone, sent as that
+    /// moment in UTC: `2026-10-16T07:00:00+0000` for the 16th in Los Angeles.
+    /// That is how TickTick holds one, and how `TickTickTaskMapper` reads one.
+    static func creationBody(title: String, projectID: String?, due: DateComponents?, calendar: Calendar) -> Data? {
+        var fields = CreationFields(title: title, projectId: projectID)
+        if let midnight = NookTodoDay.date(from: due ?? DateComponents(), calendar: calendar) {
+            fields.dueDate = TickTickDateWriter().string(from: midnight)
+            fields.isAllDay = true
+            fields.timeZone = calendar.timeZone.identifier
+        }
+        return try? JSONEncoder().encode(fields)
+    }
+
+    /// Keys left unset are not sent.
+    private struct CreationFields: Encodable {
+        let title: String
+        let projectId: String?
+        var dueDate: String?
+        var isAllDay: Bool?
+        var timeZone: String?
     }
 
     /// `POST /open/v1/project/{projectId}/task/{taskId}/complete`.

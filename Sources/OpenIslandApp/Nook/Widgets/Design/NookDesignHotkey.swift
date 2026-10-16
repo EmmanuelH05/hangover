@@ -36,6 +36,11 @@ enum NookDesignHotkeyStatus: Equatable, Sendable {
     case usedBySystem
     /// The saved shortcut breaks a rule.
     case invalid(NookDesignHotkeyProblem)
+
+    var isInvalid: Bool {
+        if case .invalid = self { return true }
+        return false
+    }
 }
 
 /// Pure rules for the eyedropper's shortcut. They are the agent
@@ -97,6 +102,9 @@ final class NookDesignHotkeyController {
     /// Tells the app model a recording began or ended, which lets it hold
     /// the agent shortcuts back for as long.
     @ObservationIgnored var onRecordingChange: (Bool) -> Void = { _ in }
+    /// Tells the app model the keys or the live state changed, which lets the
+    /// Record shortcut check itself against them again.
+    @ObservationIgnored var onShortcutsChange: () -> Void = {}
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var registrar: (any NookDesignHotkeyRegistering)?
@@ -123,6 +131,7 @@ final class NookDesignHotkeyController {
         self.combo = combo
         defaults.set(combo.storageValue, forKey: Self.comboKey)
         applyRegistration()
+        onShortcutsChange()
         return nil
     }
 
@@ -132,6 +141,7 @@ final class NookDesignHotkeyController {
         combo = nil
         defaults.removeObject(forKey: Self.comboKey)
         applyRegistration()
+        onShortcutsChange()
     }
 
     /// "⌃⌥C" on the keyboard layout in use, nil with no shortcut set.
@@ -172,6 +182,12 @@ final class NookDesignHotkeyController {
     func setLive(_ live: Bool) {
         guard live != isLive else { return }
         isLive = live
+        applyRegistration()
+        onShortcutsChange()
+    }
+
+    /// Checks the shortcut against the others again, because one of them changed.
+    func refresh() {
         applyRegistration()
     }
 

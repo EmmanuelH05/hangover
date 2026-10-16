@@ -51,8 +51,11 @@ struct OnboardingShowcaseProofTests {
         #expect(OnboardingAbility.lines(for: .mirror) == [
             .mirrorOn, .mirrorRing, .mirrorBooth, .mirrorLooks, .mirrorSaved, .mirrorStrip, .mirrorFrames,
         ])
-        #expect(OnboardingAbility.lines(for: .tray) == [.trayDrag, .trayActions, .trayClipboard, .trayPrivate])
-        #expect(OnboardingAbility.lines(for: .notes) == [.notesAdd, .notesRecent, .notesDelete, .notesWhere])
+        #expect(OnboardingAbility.lines(for: .tray) == [.trayDrag, .trayActions, .trayConvert, .trayClipboard, .trayPrivate])
+        #expect(OnboardingAbility.lines(for: .record) == [
+            .recordTargets, .recordFaceCam, .recordSound, .recordNotch, .recordShortcut, .recordSaved,
+        ])
+        #expect(OnboardingAbility.lines(for: .notes) == [.notesAdd, .notesShortcut, .notesRecent, .notesDelete, .notesWhere])
     }
 }
 
@@ -108,7 +111,7 @@ struct OnboardingIntegrationsTests {
         let index = pages.firstIndex(of: .integrations) ?? -1
         #expect(index >= 0 && pages[index + 1] == .tips)
         #expect(OnboardingPage.integrations.chapter == .know)
-        #expect(OnboardingPage.integrations.snapshotName == "32-integrations")
+        #expect(OnboardingPage.integrations.snapshotName == "34-integrations")
         #expect(!OnboardingPage.integrations.isAgentsOnly)
         #expect(!OnboardingPage.integrations.needsTodoWidget)
     }

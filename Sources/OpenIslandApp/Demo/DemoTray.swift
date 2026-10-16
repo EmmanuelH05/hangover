@@ -55,13 +55,14 @@ enum DemoTray {
 final class DemoPasteboard: NookPasteboardAccess {
     private(set) var changeCount = 0
     let access = NookClipboardAccess.allowed
-    private var content: NookClipboardContent?
+    /// The last thing written to it, which the app never reads back.
+    private(set) var lastWrite: NookClipboardContent?
 
     func types() -> [String] { [] }
     func read() -> NookClipboardContent? { nil }
 
     func write(_ content: NookClipboardContent) -> Bool {
-        self.content = content
+        lastWrite = content
         changeCount += 1
         return true
     }

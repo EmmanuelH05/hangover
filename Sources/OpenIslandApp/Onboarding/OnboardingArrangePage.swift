@@ -82,6 +82,7 @@ struct OnboardingArrangePage: View {
         }
         .buttonStyle(PressableButtonStyle())
         .accessibilityLabel(name(kind))
+        .demoTarget(.tourArrangeWidget(kind))
     }
 
     // MARK: Walk
@@ -193,6 +194,7 @@ struct OnboardingArrangePage: View {
             tryAnother
             Button(context.t("onboarding.arrange.reset")) { context.actions.resetArrangement() }
                 .buttonStyle(OnboardingSecondaryButtonStyle(height: 30))
+                .demoTarget(.tourPutBack)
                 .disabled(!hasChanged)
                 .opacity(hasChanged ? 1 : 0.4)
         }

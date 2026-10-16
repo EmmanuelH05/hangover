@@ -9,8 +9,8 @@ import OpenIslandCore
 
 @MainActor
 struct DemoScriptShapeTests {
-    @Test func thereAreFourScriptsByName() {
-        #expect(DemoScripts.names == ["tour", "use", "closed", "looks"])
+    @Test func thereAreFiveScriptsByName() {
+        #expect(DemoScripts.names == ["tour", "use", "closed", "looks", "kit"])
         for name in DemoScripts.names {
             #expect(DemoScripts.named(name)?.name == name)
         }
@@ -18,7 +18,7 @@ struct DemoScriptShapeTests {
         #expect(DemoScripts.named("") == nil)
     }
 
-    @Test(arguments: ["tour", "use", "closed", "looks"])
+    @Test(arguments: ["tour", "use", "closed", "looks", "kit"])
     func everyScriptIsUnderTwoMinutesAndEveryStepNamesADoor(name: String) throws {
         let script = try #require(DemoScripts.named(name))
 
@@ -94,8 +94,8 @@ struct DemoScriptShapeTests {
         let steps = DemoScripts.use.steps.map(\.action)
         let expected: [DemoAction] = [
             .openIsland, .playOrPause, .playOrPause, .playOrPause, .nextTrack,
-            .checkOffTodo(position: 0), .addTodo("Call home"), .startTimer(minutes: 25),
-            .closeIsland, .openIsland, .saveNote("Pick up groceries on the way back"),
+            .checkOffTodo(position: 0), .typeTodo("Call home"), .startTimer(minutes: 25),
+            .closeIsland, .openIsland, .typeNote("Pick up groceries on the way back"),
             .applyTemplate(.focus), .undoTemplate,
             .beginEditing, .moveWidget(.timer, to: 1), .resizeWidget(.todo, .large), .endEditing, .closeIsland,
         ]
@@ -153,7 +153,7 @@ struct DemoScriptShapeTests {
 
 @MainActor
 struct DemoRunnerTests {
-    @Test(arguments: ["tour", "use", "closed", "looks"])
+    @Test(arguments: ["tour", "use", "closed", "looks", "kit"])
     func aRunCallsTheDoorsInOrderThenQuitsAfterTwoSeconds(name: String) async throws {
         let script = try #require(DemoScripts.named(name))
         let doors = RecordingDoors()
@@ -162,8 +162,12 @@ struct DemoRunnerTests {
         await clock.runner.run(script, doors: doors, launchedAt: DemoFixture.now)
 
         #expect(doors.actions == script.steps.map(\.action))
-        #expect(clock.sleeps == script.steps.map(\.pause) + [2])
-        #expect(clock.sleeps.reduce(0, +) == script.duration)
+        // Each pause, then a typing step's key presses at their own pace.
+        let expected: [TimeInterval] = script.steps.flatMap { step -> [TimeInterval] in
+            [step.pause] + (step.action.typing?.gaps ?? [])
+        } + [2]
+        #expect(clock.sleeps == expected)
+        #expect(abs(clock.sleeps.reduce(0, +) - script.duration) < 1e-9)
         #expect(clock.quitCount == 1)
         #expect(clock.lines.count == script.steps.count, "one line for each step")
     }
@@ -204,7 +208,7 @@ struct DemoDoorsOnTheModelTests {
         #expect(todos.count == 6)
         #expect(!todos.contains("Finish problem set 3"), "the first task was checked off")
         #expect(todos.last == "Call home")
-        #expect(nook.notes.entries.first?.text == "Pick up groceries on the way back")
+        #expect(nook.notes.notes.first?.title == "Pick up groceries on the way back")
         #expect(nook.notes.savedCount == 1)
         #expect(nook.media.state?.isPlaying == true)
         #expect(nook.media.state?.title == "Paper Lanterns")
@@ -348,6 +352,14 @@ private final class ProbingDoors: DemoDoors {
     func perform(_ action: DemoAction) {
         inner.perform(action)
         moments.append(Moment(action: action, page: tour.page, look: world.state.calendarStyle))
+    }
+
+    func type(_ text: String, into field: DemoTypingField) {
+        inner.type(text, into: field)
+    }
+
+    func submit(_ field: DemoTypingField) {
+        inner.submit(field)
     }
 }
 

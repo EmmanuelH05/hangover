@@ -43,14 +43,14 @@ struct OnboardingFeatureWalkTests {
             enabledWidgets: Set(NookWidgetKind.allCases),
             nookPlacements: Self.kinds.map { NookWidgetPlacement(kind: $0, size: .medium) }
         )
-        #expect(state.featureWalk.kinds == Self.kinds + [.design, .linkAudio], "the kit and Link to MP3 end the walk")
+        #expect(state.featureWalk.kinds == Self.kinds + [.record, .design, .linkAudio], "Record, the kit and Link to MP3 end the walk")
         #expect(state.featureWalk.current == .timer)
     }
 
     @Test func aWidgetSwitchedOffIsNotWalked() {
         let placements = [NookWidgetKind.media, .notes].map { NookWidgetPlacement(kind: $0, size: .medium) }
         let walk = OnboardingState(nookPlacements: placements).featureWalk
-        #expect(walk.kinds == [.media, .notes, .design, .linkAudio])
+        #expect(walk.kinds == [.media, .notes, .record, .design, .linkAudio])
         #expect(!walk.kinds.contains(.mirror))
     }
 
@@ -454,7 +454,7 @@ struct OnboardingTryTests {
 
     @Test func onlyTheseWidgetsHaveButtonsAndTheOthersAreExplainedOnly() {
         let withButtons = Set(OnboardingTry.allCases.map(\.widget))
-        #expect(withButtons == [.mirror, .media, .timer, .tray, .notes, .calendar, .design, .linkAudio])
+        #expect(withButtons == [.mirror, .media, .timer, .tray, .notes, .calendar, .record, .design, .linkAudio])
         #expect(OnboardingTry.tries(for: .todo).isEmpty && OnboardingTry.tries(for: .weather).isEmpty)
         #expect(OnboardingTry.tries(for: .mirror) == [.mirrorOn, .ringLight, .photoBooth])
     }

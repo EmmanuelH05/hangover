@@ -19,7 +19,7 @@ struct OnboardingSetupRenderTests {
     private static var base: OnboardingState {
         var state = OnboardingState()
         state.nookPlacements = [.media, .todo, .notes].map { NookWidgetPlacement(kind: $0, size: .medium) }
-        state.notesFilePath = "~/Library/Application Support/OpenIsland/Notes/Quick Notes.md"
+        state.notesFolderPath = "~/Documents/Hangover Notes"
         return state
     }
 
@@ -93,17 +93,19 @@ struct OnboardingSetupRenderTests {
     // MARK: The notes page
 
     @Test func theNotesPageDrawsEachPlaceAndTheTickedStep() throws {
-        var file = Self.base
-        var saved = file
+        var folder = Self.base
+        var saved = folder
         saved.hasSavedNote = true
         var apple = Self.base
-        apple.notesDestination = .appleNotes
+        apple.notesSaveTo = .appleNotes
         var appleSaved = apple
         appleSaved.hasSavedNote = true
-        file.notesDestination = .file
+        var both = Self.base
+        both.notesSaveTo = .both
+        folder.notesSaveTo = .folder
 
         let drawn = try pictures(.notes, [
-            ("file", file), ("file-saved", saved), ("apple", apple), ("apple-saved", appleSaved),
+            ("folder", folder), ("folder-saved", saved), ("apple", apple), ("apple-saved", appleSaved), ("both", both),
         ])
         #expect(Set(drawn).count == drawn.count, "every state and width should draw its own picture")
     }
@@ -116,10 +118,10 @@ struct OnboardingSetupRenderTests {
 
     @Test func theRecapDrawsTheNotesChoice() throws {
         var file = Self.base
-        file.notesDestination = .file
+        file.notesSaveTo = .folder
         var apple = file
-        apple.notesDestination = .appleNotes
-        let a = try render("16-done-notes-file") { view(.done, file, size: OnboardingStyle.windowSize) }
+        apple.notesSaveTo = .appleNotes
+        let a = try render("16-done-notes-folder") { view(.done, file, size: OnboardingStyle.windowSize) }
         let b = try render("16-done-notes-apple") { view(.done, apple, size: OnboardingStyle.windowSize) }
         #expect(a != b)
     }

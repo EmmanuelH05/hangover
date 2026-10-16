@@ -759,14 +759,20 @@ final class OverlayPanelController {
             // Keep the island open while a permission/question is pending
             // when the user opted into “keep open until decision” (#547).
             blocksDismiss: isOpened && model.shouldBlockDismissWhileAwaitingDecision,
-            hasOpenPicker: isOpened && model.nook.tray.isSharePickerOpen,
-            holdsOpenForTour: isOpened && model.tourHoldsIslandOpen
+            hasOpenPicker: isOpened && model.nook.hasOpenPicker,
+            holdsOpenForTour: isOpened && model.tourHoldsIslandOpen,
+            isRecording: !isOpened && model.nook.record.isRunning
         )
 
         switch IslandPointerRules.clickAction(context) {
         case .open:
             cancelHoverOpenImmediately()
             model.notchOpen(reason: .click)
+        case .stopRecording:
+            // The closed notch shows the count or the timer, and a click on it
+            // ends the recording instead of opening the island.
+            cancelHoverOpenImmediately()
+            Task { @MainActor in await model.nook.record.toggleFromUser() }
         case .holdForDecision:
             passThroughClickInSettleStrip(at: screenLocation, isLocalEvent: isLocalEvent)
         case .dismiss:

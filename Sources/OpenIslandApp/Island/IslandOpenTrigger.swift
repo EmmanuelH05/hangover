@@ -30,6 +30,9 @@ enum IslandClickAction: Equatable, Sendable {
     case holdForDecision
     /// A second click on the notch of an island that is held open closes it.
     case closeFromNotch
+    /// A click on the closed island while a recording runs or counts down. It
+    /// stops the recording, or cancels the count, and does not open the island.
+    case stopRecording
     case none
 }
 
@@ -62,6 +65,9 @@ struct IslandClickContext: Equatable, Sendable {
     var hasOpenPicker = false
     /// The welcome tour holds the island open (D44). No click closes it.
     var holdsOpenForTour = false
+    /// A recording is counting down, running or paused (D67). A click on the
+    /// closed island stops it.
+    var isRecording = false
 }
 
 /// What a two-finger swipe means for the island (D46).
@@ -136,7 +142,8 @@ enum IslandPointerRules {
     static func clickAction(_ context: IslandClickContext) -> IslandClickAction {
         switch context.status {
         case .closed:
-            return context.isInClosedSurface ? .open : .none
+            guard context.isInClosedSurface else { return .none }
+            return context.isRecording ? .stopRecording : .open
         case .popping:
             return .none
         case .opened:

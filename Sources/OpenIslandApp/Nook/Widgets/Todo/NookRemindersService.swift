@@ -12,6 +12,13 @@ struct NookTodoItem: Identifiable, Equatable, Sendable {
     let listName: String
     /// Free text attached to the task. Nil when there is none.
     var notes: String? = nil
+    /// The last day of a date range, when the task has one that runs past
+    /// its first day (a Notion date range). `dueDate` stays the first day.
+    var endDate: Date? = nil
+
+    /// The day after which the task is overdue: the end of its range, else
+    /// its due date (D9).
+    var overdueDate: Date? { endDate ?? dueDate }
 }
 
 struct NookReminderList: Identifiable, Equatable, Sendable {
@@ -28,10 +35,14 @@ final class NookRemindersService {
     private(set) var items: [NookTodoItem] = []
     private(set) var lists: [NookReminderList] = []
     private(set) var authorization: EKAuthorizationStatus = .notDetermined
+    /// Why the last write did not happen. Cleared by the next write and by a
+    /// change of list. It feeds `errorMessage`, which the card shows (D2).
+    private(set) var lastWriteError: NookRemindersWriteError?
 
     var selectedListID: String? {
         didSet {
             guard selectedListID != oldValue else { return }
+            lastWriteError = nil
             if let selectedListID {
                 defaults.set(selectedListID, forKey: Self.listKey)
             } else {
@@ -51,6 +62,8 @@ final class NookRemindersService {
         return made
     }
     @ObservationIgnored private let defaults: UserDefaults
+    /// The EventKit calls a write makes; a test hands in its own.
+    @ObservationIgnored private let writes: NookRemindersWrites
     /// True in the demo mode (D51): the tasks are samples held in memory,
     /// and EventKit is never touched.
     @ObservationIgnored private let holdsSampleTasks: Bool
@@ -69,8 +82,14 @@ final class NookRemindersService {
 
     /// `access` is EventKit itself unless a test hands in its own. The demo
     /// mode hands in `sample` tasks and no store is ever made (D51).
-    init(access: NookEventKitAccess? = nil, defaults: UserDefaults = .standard, sample: [NookTodoItem]? = nil) {
+    init(
+        access: NookEventKitAccess? = nil,
+        defaults: UserDefaults = .standard,
+        sample: [NookTodoItem]? = nil,
+        writes: NookRemindersWrites = .eventKit
+    ) {
         self.defaults = defaults
+        self.writes = writes
         selectedListID = defaults.string(forKey: Self.listKey)
         holdsSampleTasks = sample != nil
         if let sample {
@@ -202,27 +221,69 @@ final class NookRemindersService {
         }
     }
 
-    func add(_ title: String) {
+    /// Adds a reminder. `due` is a whole day; the reminder gets that day and
+    /// no time (D69).
+    func add(_ title: String, due: DateComponents?) {
+        addReminder(title, due: due)
+    }
+
+    /// The same, answering whether the reminder was saved. A refusal sets
+    /// `lastWriteError`, which the card shows, and is logged (D2).
+    func addConfirmed(_ title: String, due: DateComponents?) async -> Bool {
+        addReminder(title, due: due)
+    }
+
+    @discardableResult
+    private func addReminder(_ title: String, due: DateComponents?) -> Bool {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let day = NookTodoDay.normalized(due)
         if holdsSampleTasks {
-            guard !trimmed.isEmpty else { return }
+            guard !trimmed.isEmpty else { return false }
             sampleAdds += 1
             items.append(NookTodoItem(
-                id: "demo-added-task-\(sampleAdds)", title: trimmed, dueDate: nil,
+                id: "demo-added-task-\(sampleAdds)", title: trimmed,
+                dueDate: day.flatMap { NookTodoDay.date(from: $0, calendar: .current) },
                 isCompleted: false, listName: DemoTodo.listName
             ))
-            return
+            return true
         }
-        guard hasAccess, !trimmed.isEmpty, let calendar = resolveCalendar() else { return }
+        // No access and a blank title are the card's to prevent: the field is
+        // off without access, and a blank line adds nothing.
+        guard hasAccess, !trimmed.isEmpty else { return false }
+        lastWriteError = nil
+        guard let calendar = writes.listForNewReminder(store, selectedListID) else {
+            reportWriteFailure(.noList, error: nil)
+            return false
+        }
         let reminder = EKReminder(eventStore: store)
         reminder.title = trimmed
         reminder.calendar = calendar
+        reminder.dueDateComponents = Self.dueComponents(for: day)
         do {
-            try store.save(reminder, commit: true)
+            try writes.save(store, reminder)
         } catch {
-            return
+            reportWriteFailure(.addFailed, error: error)
+            return false
         }
         refresh()
+        return true
+    }
+
+    /// Keeps the reason for the card and writes it to the log.
+    private func reportWriteFailure(_ failure: NookRemindersWriteError, error: (any Error)?) {
+        lastWriteError = failure
+        let reason = error.map { String(describing: $0) } ?? "no list to write to"
+        nookTodoDueLog.error(
+            "Reminders write failed (\(failure.rawValue, privacy: .public)): \(reason, privacy: .private)"
+        )
+    }
+
+    /// How EventKit is given a whole day: year, month and day on the
+    /// Gregorian calendar, with no time and no time zone, so the day does not
+    /// move when the Mac does. Nil for no date.
+    static func dueComponents(for day: DateComponents?) -> DateComponents? {
+        guard let day = NookTodoDay.normalized(day) else { return nil }
+        return DateComponents(calendar: Calendar(identifier: .gregorian), year: day.year, month: day.month, day: day.day)
     }
 
     func complete(_ id: String) {
@@ -230,11 +291,13 @@ final class NookRemindersService {
             items.removeAll { $0.id == id }
             return
         }
-        guard hasAccess, let reminder = store.calendarItem(withIdentifier: id) as? EKReminder else { return }
+        guard hasAccess, let reminder = writes.reminder(store, id) else { return }
+        lastWriteError = nil
         reminder.isCompleted = true
         do {
-            try store.save(reminder, commit: true)
+            try writes.save(store, reminder)
         } catch {
+            reportWriteFailure(.completeFailed, error: error)
             return
         }
         items.removeAll { $0.id == id }
@@ -248,12 +311,14 @@ final class NookRemindersService {
             items[index].notes = notes.isEmpty ? nil : notes
             return
         }
-        guard hasAccess, let reminder = store.calendarItem(withIdentifier: id) as? EKReminder else { return }
+        guard hasAccess, let reminder = writes.reminder(store, id) else { return }
+        lastWriteError = nil
         reminder.notes = notes.isEmpty ? nil : notes
         do {
-            try store.save(reminder, commit: true)
+            try writes.save(store, reminder)
         } catch {
             // The row keeps its old notes, and the editor keeps the draft.
+            reportWriteFailure(.notesFailed, error: error)
             return
         }
         if let index = items.firstIndex(where: { $0.id == id }) {
@@ -269,10 +334,6 @@ final class NookRemindersService {
     }
 
     private func resolveCalendar() -> EKCalendar? {
-        if let selectedListID,
-           let match = store.calendars(for: .reminder).first(where: { $0.calendarIdentifier == selectedListID }) {
-            return match
-        }
-        return store.defaultCalendarForNewReminders()
+        NookRemindersWrites.resolveList(in: store, selectedListID: selectedListID)
     }
 }

@@ -99,6 +99,13 @@ final class OpenIslandAppDelegate: NSObject, NSApplicationDelegate {
                 // The same goes for the design kit's sampler, panels,
                 // clipboard reads and shortcut.
                 model.nook.design.activate(.system())
+                // Record's shortcut, its face cam bubble and its area overlay
+                // are a real launch's too. The shortcut is held only while the
+                // widget is on.
+                model.nook.record.activate(.system(screen: { [model] in model.islandScreen }))
+                // The new note shortcut works from any app, with or without
+                // the Notes widget on the page.
+                model.nook.notes.hotkey.activate(registrar: NookNoteCarbonHotkey())
             }
 
             if let scenario = harnessLaunchConfiguration.scenario {
@@ -149,17 +156,37 @@ final class OpenIslandAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// A change to the designer kit's colors, links or pictures made just
-    /// before a quit is still being written. The quit waits for it, and gives
-    /// up after a few seconds, which keeps a stuck disk from stopping a quit.
+    /// before a quit is still being written, and a recording that is under
+    /// way is still an open file (D67). The quit waits for both, each with a
+    /// limit that really holds (`NookQuitWait`), which keeps a stuck disk or a
+    /// stalled capture from stopping a quit or an update. A recording gets
+    /// longer than the writes: its file has to be closed. A note typed a moment
+    /// ago is saved first, which queues its send to Apple Notes, and the sends
+    /// in line get the same short limit as the writes. One given up on is in the
+    /// backlog, and the next launch makes it.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard model.designKitQuitDecision == .afterWrites else { return .terminateNow }
+        let needsDesignWrites = model.designKitQuitDecision == .afterWrites
+        let isRecording = model.nook.record.phase.isBusy
+        let needsNotesSends = model.prepareNotesForQuit()
+        guard needsDesignWrites || isRecording || needsNotesSends else { return .terminateNow }
         Task { @MainActor [model] in
-            await withTaskGroup(of: Void.self) { group in
-                group.addTask { await model.flushDesignKitBeforeQuit() }
-                group.addTask { try? await Task.sleep(for: .seconds(3)) }
-                _ = await group.next()
-                group.cancelAll()
+            var jobs: [NookQuitJob] = []
+            if needsNotesSends {
+                jobs.append(NookQuitJob(name: "Apple Notes sends", limit: NookQuitWait.writesLimit) {
+                    await model.flushNotesBeforeQuit()
+                })
             }
+            if needsDesignWrites {
+                jobs.append(NookQuitJob(name: "design kit writes", limit: NookQuitWait.writesLimit) {
+                    await model.flushDesignKitBeforeQuit()
+                })
+            }
+            if isRecording {
+                jobs.append(NookQuitJob(name: "recording", limit: NookQuitWait.recordingLimit) {
+                    await model.nook.record.prepareForQuit()
+                })
+            }
+            _ = await NookQuitWait.run(jobs)
             NSApp.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater

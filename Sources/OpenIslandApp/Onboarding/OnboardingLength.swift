@@ -60,7 +60,8 @@ extension OnboardingPage {
             .short
         case .agents, .features, .layout, .arrange, .todos, .notes, .weather, .opened, .look, .integrations, .tips:
             .medium
-        case .mirror, .booth, .weatherCard, .lights, .accent, .power, .volume, .usage, .quiet, .phone, .screens, .sounds, .links, .startup, .updates:
+        case .mirror, .booth, .weatherCard, .record, .convert, .lights, .accent, .power, .volume, .usage, .quiet, .phone, .screens, .sounds,
+             .links, .startup, .updates:
             .long
         }
     }
@@ -72,9 +73,9 @@ extension OnboardingPage {
 extension OnboardingGrant {
     /// The widgets whose first use makes macOS ask for something the
     /// permissions page names: the camera for the mirror, Calendar for the
-    /// calendar and Reminders for the to-dos. The short tour walks the
-    /// permissions page while one of them is on the page, and while the
-    /// agents are on, which is when it has its Automation row. The longer
-    /// tours always walk it.
-    static let widgetsAskingMacOS: Set<NookWidgetKind> = [.mirror, .calendar, .todo]
+    /// calendar, Reminders for the to-dos, and Screen Recording and the
+    /// microphone for Record. The short tour walks the permissions page while
+    /// one of them is on the page, and while the agents are on, which is when
+    /// it has its Automation row. The longer tours always walk it.
+    static let widgetsAskingMacOS: Set<NookWidgetKind> = [.mirror, .calendar, .todo, .record]
 }

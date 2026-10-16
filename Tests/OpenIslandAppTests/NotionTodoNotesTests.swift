@@ -264,6 +264,24 @@ private let notesTestPages = [
         #expect(harness.service.canEditNotes)
     }
 
+    @Test func aFailedSaveIsOneForTheNotesPageAndAFailedAddIsNot() async throws {
+        let harness = try Harness()
+        harness.serve(pages: notesTestPages)
+        await harness.activate()
+        harness.transport.setResponder { _, _ in .json("{}", status: 500) }
+
+        await harness.service.performAdd("New task")
+        #expect(harness.service.actionError == .addFailed)
+        #expect(!harness.service.notesSaveFailed)
+
+        await harness.service.performSetNotes("New outline", for: "a")
+        #expect(harness.service.notesSaveFailed)
+
+        harness.serve(pages: notesTestPages)
+        await harness.service.performAdd("New task")
+        #expect(!harness.service.notesSaveFailed, "the next write clears it")
+    }
+
     @Test func forbiddenSaveTurnsEditingOffAndSaysWhy() async throws {
         let harness = try Harness()
         harness.serve(pages: notesTestPages)

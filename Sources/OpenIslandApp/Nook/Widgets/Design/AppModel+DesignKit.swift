@@ -67,17 +67,17 @@ extension AppModel {
 extension NookModel {
     /// A widget's switch on the Nook tab of Settings. Turning the calendar or
     /// the to-do widget on is when macOS is asked for its permission. The
-    /// design kit and Link to MP3 start off, and a layout may have taken
-    /// either off the display in use while it was off. Switching it on there
-    /// is asking for the card, which it gets back. Only these two are taken
-    /// off the hidden list: the other widgets are switched on the way they
-    /// always were, and the other displays keep their own lists.
+    /// design kit, Link to MP3 and Record start off, and a layout may have
+    /// taken any of them off the display in use while it was off. Switching one
+    /// on there is asking for the card, which it gets back. Only these three
+    /// are taken off the hidden list: the other widgets are switched on the way
+    /// they always were, and the other displays keep their own lists.
     func setWidgetFromSettings(_ kind: NookWidgetKind, enabled: Bool) {
         // A widget the build does not offer has no switch to flip.
         guard kind.isOffered else { return }
         setWidget(kind, enabled: enabled)
         guard enabled else { return }
-        if kind == .design || kind == .linkAudio {
+        if NookWidgetKind.tools.contains(kind) {
             updateDisplayPreferences(for: activeProfile()) { $0.hiddenWidgets.remove(kind) }
         }
         widgetTurnedOn(kind)
@@ -96,14 +96,15 @@ extension NookWidgetKind {
     }
 
     /// The widgets that are off until the user switches them on: mirror and
-    /// weather, and the design kit and Link to MP3. The welcome tour lists
+    /// weather, Record, the design kit and Link to MP3. The welcome tour lists
     /// every widget on its widgets page and says which ones start off.
     static var startsOff: [NookWidgetKind] {
         offered.filter { !defaultEnabled.contains($0) }
     }
 
-    /// The two tools, which start off and have their own step at the end of
-    /// the tour's widget walk. A layout does not list either, and the tour
-    /// puts back the ones the user switched on.
-    static var tools: [NookWidgetKind] { [.design, .linkAudio].filter(\.isOffered) }
+    /// The tools: Record, the design kit and Link to MP3. They start off and
+    /// have their own steps at the end of the tour's widget walk, in this
+    /// order. A layout lists none of them, and the tour puts back the ones the
+    /// user switched on.
+    static var tools: [NookWidgetKind] { [.record, .design, .linkAudio].filter(\.isOffered) }
 }

@@ -259,8 +259,13 @@ extension NookNotionTodoService {
         track { await $0.performComplete(id) }
     }
 
-    func add(_ title: String) {
-        track { await $0.performAdd(title) }
+    func add(_ title: String, due: DateComponents?) {
+        track { _ = await $0.performAdd(title, due: due) }
+    }
+
+    /// Waits for Notion's answer: true once the page was created.
+    func addConfirmed(_ title: String, due: DateComponents?) async -> Bool {
+        await performAdd(title, due: due)
     }
 
     func setNotes(_ notes: String, for id: String) {
@@ -361,6 +366,7 @@ extension NookNotionTodoService {
                     items[current].notes = confirmed
                 }
                 reportWriteFailure(NotionClient.classify(error), fallback: .notesFailed) { canUpdate = false }
+                notesSaveFailed = true
                 onNotesWriteFinished?(id, unsaved, false)
                 return
             }
@@ -379,34 +385,44 @@ extension NookNotionTodoService {
         refresh(.manual)
     }
 
-    /// Creates a not-done task with this title.
-    func performAdd(_ title: String) async {
+    /// Creates a not-done task with this title. `due` is a whole day for the
+    /// Due column (D69). The row shown at once carries it too, so the date is
+    /// there before the reload.
+    @discardableResult
+    func performAdd(_ title: String, due: DateComponents? = nil) async -> Bool {
         let trimmed = String(title.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.maxTitleLength))
         guard isActive, canInsert, !trimmed.isEmpty, let client = makeClient(), let resolved,
-              let dataSourceID = selectedDatabaseID else { return }
+              let dataSourceID = selectedDatabaseID else { return false }
         guard !isRateLimited else {
             actionError = .rateLimited
-            return
+            return false
         }
         let startEpoch = epoch
         actionError = nil
+        // With no Due column mapped nothing is sent, so the row has no date.
+        let day = resolved.dueProperty == nil ? nil : NookTodoDay.normalized(due)
         do {
             let page = try await client.createPage(
                 dataSourceID: dataSourceID,
-                properties: NotionTodoMapper.creationProperties(title: trimmed, resolved: resolved)
+                properties: NotionTodoMapper.creationProperties(title: trimmed, resolved: resolved, due: day)
             )
-            guard epoch == startEpoch else { return }
+            // The page exists in Notion even when the source changed meanwhile.
+            guard epoch == startEpoch else { return true }
             if !items.contains(where: { $0.id == page.id }) {
                 items.append(NookTodoItem(
-                    id: page.id, title: trimmed, dueDate: nil, isCompleted: false, listName: databaseTitle ?? ""
+                    id: page.id, title: trimmed,
+                    dueDate: day.flatMap { NookTodoDay.date(from: $0, calendar: .current) },
+                    isCompleted: false, listName: databaseTitle ?? ""
                 ))
             }
             saveCache()
             // Puts the new row in its sorted place.
             refresh(.manual)
+            return true
         } catch {
-            guard epoch == startEpoch else { return }
+            guard epoch == startEpoch else { return false }
             reportWriteFailure(NotionClient.classify(error), fallback: .addFailed) { canInsert = false }
+            return false
         }
     }
 
@@ -415,6 +431,11 @@ extension NookNotionTodoService {
         fallback: NotionTodoActionError,
         onForbidden: () -> Void
     ) {
+        if error != .cancelled {
+            nookTodoDueLog.error(
+                "Notion write failed (\(String(describing: fallback), privacy: .public)): \(String(describing: error), privacy: .public)"
+            )
+        }
         switch error {
         case .cancelled:
             return
@@ -479,6 +500,15 @@ extension NookNotionTodoService: NookTodoSource {
         if !canUpdate { return lang.t("nook.todo.notion.error.cannotUpdate") }
         if mapping.notesPropertyID == nil { return lang.t("nook.todo.notion.notes.pickColumn") }
         return lang.t("nook.todo.notes.unavailable")
+    }
+
+    /// Needs adding to work and a Due column picked in Settings.
+    var canSetDue: Bool { canAdd && resolved?.dueProperty != nil }
+
+    var dueUnavailableReason: String? {
+        if canSetDue { return nil }
+        if canAdd { return lang.t("nook.todo.due.pickColumn") }
+        return lang.t("nook.todo.due.unavailable")
     }
 
     var addPlaceholder: String {

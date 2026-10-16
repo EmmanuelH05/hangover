@@ -4,7 +4,7 @@
 # The recorder is built on first use. Nothing but the app's own windows can
 # end up in the movie, and it works with the screen locked.
 #
-# usage: scripts/demo/take.sh <tour|use|closed|looks> <seconds> <out-dir> <backdrop.jpg>
+# usage: scripts/demo/take.sh <tour|use|closed|looks|kit> <seconds> <out-dir> <backdrop.jpg>
 set -euo pipefail
 NAME=$1
 SECONDS_TO_RECORD=$2

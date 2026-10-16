@@ -65,7 +65,7 @@ struct NookTodoDetailPage: View {
             if let due = item.dueDate {
                 Text(NookTodoCard.dueLabel(due))
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(NookTodoCard.isOverdue(due) ? Color.red : .white.opacity(0.35))
+                    .foregroundStyle(NookTodoCard.isOverdue(item.overdueDate ?? due) ? Color.red : .white.opacity(0.35))
             }
         }
     }

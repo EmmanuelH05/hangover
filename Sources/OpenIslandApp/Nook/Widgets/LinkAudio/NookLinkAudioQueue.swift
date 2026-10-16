@@ -34,6 +34,8 @@ struct NookLinkAudioJob: Identifiable, Equatable, Sendable {
     let link: NookLinkAudioLink
     var title: String?
     var phase: Phase = .waiting
+    /// The key and tempo, once they are found. A finished row shows them.
+    var findings: NookLinkAudioFindings?
     /// When the process started. Nothing older than this is ever removed.
     var startedAt: Date?
     /// The file `yt-dlp` said it was writing, for the clean-up after a cancel.
@@ -102,6 +104,13 @@ struct NookLinkAudioQueue: Equatable, Sendable {
         running = nil
         finished.insert(job, at: 0)
         if finished.count > Self.maxFinished { finished.removeLast(finished.count - Self.maxFinished) }
+    }
+
+    /// Changes a job that has finished, such as when its key and tempo come
+    /// in after the file was saved. Nothing happens when it is no longer listed.
+    mutating func updateFinished(_ id: UUID, _ change: (inout NookLinkAudioJob) -> Void) {
+        guard let index = finished.firstIndex(where: { $0.id == id }) else { return }
+        change(&finished[index])
     }
 
     /// Takes the running job off the list without keeping it, as a cancel

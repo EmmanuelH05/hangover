@@ -53,17 +53,18 @@ struct NookDesignStoreProblem: Equatable, Identifiable, Sendable {
 extension NookDesignKit {
     /// The line that stands in the card for as long as the eyedropper's
     /// shortcut is set and does not work, whatever the cause: macOS refused
-    /// it, uses it itself, an agent shortcut has the keys, or it breaks a
-    /// rule. It is the only place besides Settings that reports it, and it
-    /// opens Settings.
+    /// it, uses it itself, an agent shortcut or Record has the keys, or it
+    /// breaks a rule. It is the only place besides Settings that reports it,
+    /// and it opens Settings.
     var standingNotice: NookDesignStandingNotice? {
         let lang = LanguageManager.shared
-        guard hotkey.combo != nil else { return nil }
+        guard let combo = hotkey.combo else { return nil }
         let text: String
         switch hotkey.status {
         case let .failed(code): text = lang.t("nook.design.standing.failed", Int(code))
         case .usedBySystem: text = lang.t("nook.design.standing.system")
-        case .invalid(.usedByAgentShortcut): text = lang.t("nook.design.standing.agent")
+        case .invalid(.usedByAgentShortcut):
+            text = lang.t(holder(of: combo).standingKey)
         case .invalid(.needsModifiers): text = lang.t("nook.design.standing.invalid")
         case .none, .inactive, .ready: return nil
         }
@@ -118,5 +119,46 @@ extension NookDesignKit {
         if let problem = links.loadProblem { result.append(NookDesignStoreProblem(tab: .links, problem: problem)) }
         if let problem = references.loadProblem { result.append(NookDesignStoreProblem(tab: .references, problem: problem)) }
         return result
+    }
+}
+
+/// Who holds keys the eyedropper may not take. The agents', Record's and the
+/// new note shortcut's keys are checked as one list, and the sentence that
+/// refuses them still says whose they are.
+enum NookTakenKeysHolder: CaseIterable, Sendable {
+    case agent, record, notes
+
+    /// The island's standing line under the eyedropper.
+    var standingKey: String {
+        switch self {
+        case .agent: "nook.design.standing.agent"
+        case .record: "nook.design.standing.record"
+        case .notes: "nook.design.standing.notes"
+        }
+    }
+
+    /// The line under the shortcut in Settings.
+    var problemKey: String {
+        switch self {
+        case .agent: "nook.design.hotkey.problem.agent"
+        case .record: "nook.design.hotkey.problem.record"
+        case .notes: "nook.design.hotkey.problem.notes"
+        }
+    }
+}
+
+extension NookDesignKit {
+    func holder(of combo: AgentHotkeyCombo) -> NookTakenKeysHolder {
+        if nook?.record.reservedShortcuts.contains(combo) == true { return .record }
+        if nook?.notes.hotkey.combo == combo { return .notes }
+        return .agent
+    }
+
+    /// The Settings sentence for a shortcut that breaks a rule. Keys another
+    /// shortcut holds are named by their holder; a rule the keys break by
+    /// themselves names nobody.
+    func problemMessageKey(_ problem: NookDesignHotkeyProblem, combo: AgentHotkeyCombo?) -> String {
+        guard problem == .usedByAgentShortcut, let combo else { return problem.messageKey }
+        return holder(of: combo).problemKey
     }
 }

@@ -41,7 +41,13 @@ final class NookNotionTodoService {
     var items: [NookTodoItem] = []
     var state: NotionTodoState = .inactive
     var isShowingCachedItems = false
-    var actionError: NotionTodoActionError?
+    var actionError: NotionTodoActionError? {
+        // The next write, and a refresh that clears the line, clear this too.
+        didSet { if actionError == nil { notesSaveFailed = false } }
+    }
+    /// A notes save failed and the row went back to the notes Notion holds,
+    /// whatever the reason: the card keeps the person's draft.
+    var notesSaveFailed = false
     /// False after Notion answered 403 to creating a page.
     var canInsert = true
     /// False after Notion answered 403 to updating a page.

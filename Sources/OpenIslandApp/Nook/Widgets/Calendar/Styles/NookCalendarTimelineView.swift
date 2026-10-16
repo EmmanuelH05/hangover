@@ -98,8 +98,6 @@ struct NookCalendarTimelineView: View {
                         .fill(timed[index].calendarColor)
                         .frame(width: frame.width, height: Self.trackHeight)
                         .offset(x: frame.x, y: trackY)
-                        .contentShape(Rectangle())
-                        .onTapGesture { nook.startNote(for: timed[index]) }
                 }
                 ForEach(shown, id: \.self) { index in
                     Text(timed[index].title)

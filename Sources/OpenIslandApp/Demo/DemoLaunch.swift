@@ -22,10 +22,14 @@ final class DemoSession {
     let backdropPath: String?
     /// Whether the design kit is on the page, for a recording made by hand.
     let showsDesignKit: Bool
+    /// Whether the `kit` script runs (D65), which puts the design kit on the
+    /// page with sample palettes and links in the demo's own folder.
+    let runsKitScript: Bool
     /// The demo's own folder under the temporary directory.
     let folder: URL
 
     private var backdrop: DemoBackdrop?
+    private var pointerWindow: DemoPointerWindow?
 
     /// Builds a session from the environment. The panel is put on screen
     /// unless `putsPanelOnScreen` is false, which only a test passes.
@@ -40,6 +44,7 @@ final class DemoSession {
         self.script = script
         backdropPath = environment[DemoMode.backdropKey]
         showsDesignKit = environment[DemoMode.designKey] == "1"
+        runsKitScript = script?.name == DemoScripts.kit.name
         folder = temporary.appendingPathComponent("open-island-demo-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
 
         // The store starts from the app's defaults and goes nowhere. The
@@ -64,8 +69,12 @@ final class DemoSession {
         let trayFolder = folder.appendingPathComponent("Tray", isDirectory: true)
         try? FileManager.default.createDirectory(at: trayFolder, withIntermediateDirectories: true)
         try? DemoTray.populate(folder: trayFolder, now: now)
-        let notesURL = (try? DemoNotes.write(in: folder.appendingPathComponent("Notes", isDirectory: true), now: now))
-            ?? folder.appendingPathComponent("Notes/\(NookNotesService.folderFileName)")
+        let designFolder = folder.appendingPathComponent("Design", isDirectory: true)
+        if runsKitScript, !DemoDesign.write(in: designFolder, now: now) {
+            print("DEMO the sample palettes could not be written")
+        }
+        let notesFolder = folder.appendingPathComponent("Notes", isDirectory: true)
+        try? DemoNotes.write(in: notesFolder, now: now)
 
         let nook = NookModel(
             calendar: NookCalendarService(sample: calendarSource, defaults: defaults),
@@ -82,7 +91,7 @@ final class DemoSession {
                 )
             ),
             media: MediaRemoteService(sample: player),
-            notes: NookNotesService(defaults: defaults, appleNotes: DemoNotesWriter(), fileURL: notesURL),
+            notes: DemoNotes.makeStore(defaults: defaults, root: folder, notesFolder: notesFolder, now: now),
             tray: NookTrayStore(
                 folder: trayFolder,
                 clipboard: NookClipboardMonitor(pasteboard: pasteboard, defaults: defaults),
@@ -91,10 +100,7 @@ final class DemoSession {
             weather: NookWeatherService(transport: weatherTransport, defaults: defaults),
             // The design kit is off in a demo unless its switch asks for
             // it. Its files are the demo's own either way (D53).
-            design: NookDesignKit(
-                folder: folder.appendingPathComponent("Design", isDirectory: true),
-                defaults: defaults
-            ),
+            design: NookDesignKit(folder: designFolder, defaults: defaults),
             // Link to MP3 is off in a demo, and could start nothing if it
             // were on: it finds no programs and has no runner.
             linkAudio: NookLinkAudioService.isolated(
@@ -107,7 +113,7 @@ final class DemoSession {
         )
         // A meeting link opens nothing in the demo.
         nook.openURL = { _ in }
-        if showsDesignKit {
+        if showsDesignKit || runsKitScript {
             // First on every display's page and at its largest, which is
             // where a recording of the kit wants it.
             for profile in IslandAppearanceDisplayProfile.allCases {
@@ -122,8 +128,8 @@ final class DemoSession {
         model.overlay.overlayPanelController.putsPanelOnScreen = putsPanelOnScreen
     }
 
-    /// Puts the backdrop up, parks the pointer and runs the script. Called
-    /// once, after the model has started.
+    /// Puts the backdrop up, parks the real pointer, puts the drawn one up
+    /// and runs the script. Called once, after the model has started.
     func begin(launchedAt: Date) {
         if let backdropPath, let screen = model.islandScreen ?? NSScreen.main {
             if let backdrop = DemoBackdrop(imagePath: backdropPath, screen: screen) {
@@ -136,7 +142,7 @@ final class DemoSession {
         if let screen = model.islandScreen ?? NSScreen.main {
             DemoPointer.park(on: screen)
         }
-        if showsDesignKit {
+        if usesRealDesignServices {
             // A hand drives this run, and it picks from the real screen and
             // pastes into a real app: the kit gets its real services, and
             // its copies go to the real clipboard, not the demo's.
@@ -153,6 +159,9 @@ final class DemoSession {
         }
         let doors = AppDemoDoors(model: model)
         var runner = DemoRunner()
+        if let screen = model.islandScreen ?? NSScreen.main {
+            runner.pointer = startPointer(on: screen)
+        }
         runner.quit = { [weak self] in
             self?.removeFiles()
             NSApp.terminate(nil)
@@ -161,6 +170,36 @@ final class DemoSession {
             try? await Task.sleep(for: .seconds(settle))
             await runner.run(script, doors: doors, launchedAt: launchedAt)
         }
+    }
+
+    /// Whether the design kit gets its real eyedropper, panels and clipboard:
+    /// only for a recording made by hand. The `kit` script keeps its copies
+    /// on the demo's own pasteboard (D65).
+    var usesRealDesignServices: Bool {
+        showsDesignKit && !runsKitScript
+    }
+
+    /// Puts the drawn pointer up where the real one is parked, and tells the
+    /// registry where the closed island is (D65). The real pointer stays
+    /// parked: on the island it would open it by hovering.
+    private func startPointer(on screen: NSScreen) -> DemoPointerDriver {
+        let window = DemoPointerWindow(screen: screen)
+        pointerWindow = window
+        let registry = DemoTargetRegistry.current ?? DemoTargetRegistry()
+        let panel = model.overlay.overlayPanelController
+        registry.provide(.notch) { [weak panel] in panel?.notchRect }
+        let screenFrame = screen.frame
+        let model = self.model
+        return DemoPointerDriver(
+            registry: registry,
+            drawing: window,
+            start: DemoPointer.parkPoint(screenFrame: screenFrame),
+            openIsland: { [weak model] in
+                guard let model, model.notchStatus == .opened,
+                      let footprint = model.overlay.openedIslandFootprint() else { return nil }
+                return (footprint.island, screenFrame)
+            }
+        )
     }
 
     /// Takes the sample files out of the temporary folder when the run ends.

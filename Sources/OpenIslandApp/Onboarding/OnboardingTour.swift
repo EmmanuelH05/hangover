@@ -81,10 +81,10 @@ struct OnboardingState: Equatable, Sendable {
     /// Where the connecting of that source stands (D44). The secret is not
     /// part of it.
     var todoSetup = OnboardingTodoSetup()
-    /// Where quick notes go.
-    var notesDestination: NookNotesDestination = .file
-    /// The Markdown file notes go to, as the page prints it.
-    var notesFilePath = ""
+    /// Where notes are saved: the Obsidian folder, Apple Notes or both.
+    var notesSaveTo: NookNotesSaveTo = .folder
+    /// The folder notes are saved in, as the page prints it.
+    var notesFolderPath = ""
     /// How many notes the app has saved since it started. The tour compares
     /// it with the count when the notes page came up.
     var notesSavedCount = 0
@@ -165,7 +165,7 @@ struct OnboardingState: Equatable, Sendable {
 
     /// The widget page the tour draws: the display's own, or the shown
     /// template's widgets that are switched on, or the app's starting page.
-    /// Every widget the app offers is on offer, the design kit and Link to MP3
+    /// Every widget the app offers is on offer, Record, the design kit and Link to MP3
     /// included where the build has it (`NookLinkAudioOffer`), and each is
     /// drawn once it is on the page. A widget the build does not offer is never
     /// in it, whatever a state handed in says.
@@ -212,13 +212,24 @@ struct OnboardingState: Equatable, Sendable {
         OnboardingFeatureWalk(kinds: featureKinds, current: featureKind)
     }
 
-    /// The walk's widgets: the ones on the page, in order, then the design
-    /// kit and Link to MP3. Those two are always the last steps, switched on
-    /// or not, because the first button of each is the one that switches it
+    /// The walk's widgets: the ones on the page, in order, then Record, the
+    /// design kit and Link to MP3. Those are always the last steps, switched
+    /// on or not, because the first button of each is the one that switches it
     /// on. One that is on the page does not come up twice: it takes its step
     /// at the end. Only the medium and long tours have the page.
     var featureKinds: [NookWidgetKind] {
         shownPlacements.map(\.kind).filter { !NookWidgetKind.tools.contains($0) } + NookWidgetKind.tools
+    }
+
+    /// The features reading with the one part the tour works out itself:
+    /// Record is on when its switch is. It is the switch and not the page the
+    /// tour draws, because a layout can leave the card off a display while the
+    /// switch stays on, and that Record is the user's. The rest of the reading
+    /// is the app's. A reading handed in with Record on is kept.
+    var featureReading: OnboardingFeatureReading {
+        var reading = features
+        reading.isRecordOn = reading.isRecordOn || (enabledWidgets.contains(.record) && NookWidgetKind.record.isOffered)
+        return reading
     }
 
     /// True once the app showed a "Try it" done. The notes step is the
@@ -278,12 +289,12 @@ struct OnboardingActions {
     var allowReminders: () -> Void = {}
     /// Opens System Settings at the Reminders privacy list.
     var openRemindersSettings: () -> Void = {}
-    /// Picks where quick notes go. The preference Settings writes.
-    var setNotesDestination: (NookNotesDestination) -> Void = { _ in }
+    /// Picks where notes are saved. The preference Settings writes.
+    var setNotesSaveTo: (NookNotesSaveTo) -> Void = { _ in }
     /// Opens the system folder chooser and saves the pick as the notes
     /// folder. The panel is the app's, not the page's.
     var chooseNotesFolder: () -> Void = {}
-    /// Shows the notes file in Finder, or opens Notes.
+    /// Shows the notes folder in Finder, or opens Notes.
     var showNotes: () -> Void = {}
     /// Looks a typed city up. The search Settings runs.
     var searchWeather: (String) -> Void = { _ in }
@@ -405,8 +416,8 @@ struct OnboardingPicks: Equatable, Sendable {
     /// The longest length the user has reached the last page of and carried
     /// on from. It is what a skipped tour records as done.
     var finished: OnboardingLength?
-    /// The tools (the design kit, Link to MP3) the user switched on in this
-    /// run and has not switched off. A layout lists neither and hides every
+    /// The tools (Record, the design kit, Link to MP3) the user switched on in this
+    /// run and has not switched off. A layout lists none of them and hides every
     /// widget it does not list. They are switched on again after one.
     var tools: Set<NookWidgetKind> = []
     /// The Good to know switches turned on here and not turned off since.
@@ -594,6 +605,7 @@ final class OnboardingTour {
     /// opened is kept, which lets a snapshot hand in a fixed one.
     var state: OnboardingState {
         var state = readState()
+        state.features = state.featureReading
         state.length = length
         if state.isIslandOpen { hasSeenIslandOpen = true }
         state.hasOpenedIsland = state.hasOpenedIsland || hasSeenIslandOpen
@@ -632,14 +644,21 @@ final class OnboardingTour {
         var actions = appActions
         // A tool switched on here is noted: a layout hides it, and it comes
         // back (`putPicksBack`). Switched off, it is no longer the user's pick.
-        actions.setWidget = { [weak self, appActions] kind, isOn in
+        actions.setWidget = { [weak self, appActions, readState] kind, isOn in
             if NookWidgetKind.tools.contains(kind) {
                 if isOn { self?.picks.tools.insert(kind) } else { self?.picks.tools.remove(kind) }
             }
             // The same for a widget that was switched on from its card.
             if !isOn, kind == .mirror { self?.picks.more.remove(.mirrorWidget) }
             if !isOn, kind == .weather { self?.picks.more.remove(.weatherWidget) }
+            // Record switched on by a button of the features page is noted, to
+            // be switched off when the step is left. One that was on already,
+            // or that the widgets page switched on, is the user's.
+            let wasRecordOn = kind == .record && readState().featureReading.isRecordOn
             appActions.setWidget(kind, isOn)
+            if kind == .record, isOn, !wasRecordOn, self?.featuresActive == true, readState().featureReading.isRecordOn {
+                self?.trials.record = true
+            }
         }
         // A switch turned on here is noted, for the summary. Nothing is turned
         // back when the tour ends: these are the user's choices.
@@ -706,27 +725,27 @@ final class OnboardingTour {
         actions.openPhotoBooth = { [weak self, appActions, readState] in
             guard self?.featuresActive == true else { return }
             // A session already showing is the user's, and is left alone.
-            let wasShowing = readState().features.isBoothShowing
+            let wasShowing = readState().featureReading.isBoothShowing
             appActions.openPhotoBooth()
-            if self?.featuresActive == true, !wasShowing, readState().features.isBoothShowing {
+            if self?.featuresActive == true, !wasShowing, readState().featureReading.isBoothShowing {
                 self?.trials.booth = true
             }
         }
         actions.startTimer = { [weak self, appActions, readState] length in
             guard self?.featuresActive == true else { return }
-            let before = readState().features
+            let before = readState().featureReading
             appActions.startTimer(length)
-            if self?.featuresActive == true, !before.isTimerActive, readState().features.isTourTimer {
+            if self?.featuresActive == true, !before.isTimerActive, readState().featureReading.isTourTimer {
                 self?.trials.timer = true
             }
         }
         actions.stopTimer = { [weak self, appActions, readState] in
             // Only the page's own countdown: a timer of the user's stays.
-            let before = readState().features
+            let before = readState().featureReading
             guard before.isTourTimer else { return }
             appActions.stopTimer()
             self?.trials.timer = false
-            self?.featureProgress.noteTimerStop(before: before, after: readState().features)
+            self?.featureProgress.noteTimerStop(before: before, after: readState().featureReading)
         }
         actions.copySampleLine = { [weak self, appActions] text in
             let copied = appActions.copySampleLine(text)
@@ -870,7 +889,7 @@ final class OnboardingTour {
         guard !featuresActive, !flow.hasEnded else { return }
         featuresActive = true
         featureKind = currentWalk.current
-        let reading = readState().features
+        let reading = readState().featureReading
         // One baseline for the whole visit: what was on now is the user's.
         trials = OnboardingTrials(baseline: OnboardingFeatureBaseline(reading))
         featureProgress.note(reading)
@@ -887,8 +906,8 @@ final class OnboardingTour {
     }
 
     /// Lets go of everything the features page started: a photo booth
-    /// session, the ring light setting, the camera and a timer the tour
-    /// switched on, and the ring on the island. Every way out of the page
+    /// session, the ring light setting, the camera, a timer and the Record
+    /// widget the tour switched on, and the ring on the island. Every way out of the page
     /// runs it: Next, Back, a dot, Skip, finishing, the window closing
     /// (`releaseIsland`) and the hold going off. Only the hold going off
     /// with the page still up keeps the widget the walk was on.
@@ -906,16 +925,18 @@ final class OnboardingTour {
 
     /// Puts back what the tour switched on for the widget being left, or
     /// for every widget with nil, in this order: the booth session, the ring
-    /// light setting, the mirror, the timer. A thing that was on when the
+    /// light setting, the mirror, the timer, Record. A thing that was on when the
     /// page came up is left as it is, and no camera is ever switched on.
     private func releaseTrials(leaving kind: NookWidgetKind?) {
-        let reading = readState().features
+        let reading = readState().featureReading
         for release in trials.observing(reading).releases(leaving: kind, reading: reading) {
             switch release {
             case .boothCancel: appActions.cancelPhotoBooth()
             case .ringLight(let isOn): appActions.setRingLight(isOn)
             case .mirrorOff: appActions.setMirror(false)
             case .timerOff: appActions.stopTimer()
+            // Through the tour's own door, which forgets the pick.
+            case .recordOff: actions.setWidget(.record, false)
             }
         }
         trials = trials.after(leaving: kind)

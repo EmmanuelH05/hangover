@@ -56,6 +56,15 @@ struct NookLinkAudioSettings: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            Toggle(lang.t("nook.linkAudio.settings.findKey"), isOn: Binding(
+                get: { service.findsKeyAndTempo },
+                set: { service.setFindsKeyAndTempo($0) }
+            ))
+            Text(lang.t("nook.linkAudio.settings.findKeyCaption"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             Text(lang.t("nook.linkAudio.settings.caption"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
