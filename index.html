@@ -109,7 +109,7 @@
   <a class="button" href="https://github.com/EmmanuelH05/hangover/releases/latest/download/Hangover.zip">Download for Mac</a>
   <span>Apple silicon, macOS 14 or later</span>
 </div>
-<p class="muted version">Version 1.0.13, October 15, 2026. If you already have Hangover, it updates itself.</p>
+<p class="muted version">Version 1.0.14, October 2026. If you already have Hangover, it asks you, then updates itself.</p>
 
 <figure class="demo">
   <video id="demo-video" src="demo/hero.mp4" poster="demo/hero-poster.jpg" width="1240" height="1080" autoplay muted playsinline disablepictureinpicture preload="auto" aria-label="Hangover, recorded with sample content"></video>
@@ -133,11 +133,19 @@
 <script src="try/audio.js" defer></script>
 <script src="try/try.js" defer></script>
 
+<h2>New in 1.0.14</h2>
+<dl>
+  <div><dt>Updates ask first</dt><dd>When a new version lands, the notch asks. One press and it's back in a few seconds.</dd></div>
+  <div><dt>All your to-dos</dt><dd>Turn on Reminders, Notion, TickTick, Asana, monday and Canvas together. Each gets its own section.</dd></div>
+  <div><dt>Search in Settings</dt><dd>Press Command-F in Settings to find any setting.</dd></div>
+  <div><dt>Send feedback</dt><dd>Settings, About, Send Feedback writes an email to me.</dd></div>
+</dl>
+
 <h2>What's in it</h2>
 <dl>
   <div><dt>Music</dt><dd>Play, pause, skip and scrub, and pick the speaker, without leaving what you're doing.</dd></div>
   <div><dt>Calendar</dt><dd>What's next today, in five looks. A heads-up in the notch before an event starts, and a Join button when it's a meeting.</dd></div>
-  <div><dt>To-dos</dt><dd>From Reminders, Notion or TickTick. Check one off right there, or give it a due date and the notch reminds you that morning, and once more when it's overdue.</dd></div>
+  <div><dt>To-dos</dt><dd>From Reminders, Notion, TickTick, Asana, monday and your Canvas classes, one or all at once. Check one off right there, or give it a due date and the notch reminds you that morning, and once more when it's overdue.</dd></div>
   <div><dt>Notes</dt><dd>Write as much as you want and it saves as you type. Control+Option+J opens a new note from any app. Notes go to a folder (an Obsidian vault works), to Apple Notes, or both.</dd></div>
   <div><dt>File tray</dt><dd>Drop a file on the notch and drag it back out when you need it. Press Convert to change a picture's format or size, shrink a video, turn it into a GIF or keep only its sound, turn PDF pages into pictures, or join pictures and PDFs into one PDF. It can AirDrop or zip what's in it, and it keeps a clipboard history.</dd></div>
   <div><dt>Record</dt><dd>Record the whole screen, one window or an area, with your face cam, your voice and the Mac's sound. Standard keeps files small and High records at full resolution and 60 fps. Control+Option+R starts and stops it from any app, and the recording lands in Movies/Hangover and in the tray.</dd></div>
@@ -145,6 +153,7 @@
   <div><dt>Weather</dt><dd>Now, the next hours and the week.</dd></div>
   <div><dt>Mirror</dt><dd>A camera check before a call, with frames, stickers and a ring light. It's also a photo booth: four shots, and the strip is saved as a PDF.</dd></div>
   <div><dt>Design kit</dt><dd>Palettes, a screen eyedropper, links and reference pictures for design work. Reference pictures resize to any size and remember it. Off until you turn it on.</dd></div>
+  <div><dt>Settings</dt><dd>Search every setting with Command-F, and send me feedback from About.</dd></div>
   <div><dt>Layouts</dt><dd>Start from a template, then press, hold and drag to move widgets and change their size.</dd></div>
   <div><dt>Closed notch</dt><dd>Each side can show the date, your battery, the next event, the weather, a timer or your open to-dos.</dd></div>
   <div><dt>Glow</dt><dd>A soft light around the notch when music plays or something needs you. You pick the colors, and it can pulse with the beat or throw lasers.</dd></div>
@@ -183,11 +192,11 @@
 
 <h2>Opening it</h2>
 <p>Hangover is signed with an Apple Developer ID and notarized by Apple. Open <b>Hangover.zip</b> from your Downloads, drag <b>Hangover</b> into your <b>Applications</b> folder and double-click it. macOS asks once if you want to open an app from the internet. Click <b>Open</b>.</p>
-<p>Hangover keeps itself up to date. It checks the first time you open it and once a day after that, and a new version goes in the next time the app starts. You can turn that off in Settings, About.</p>
+<p>Hangover keeps itself up to date. It checks once a day, and when a new version is ready the notch asks before it installs; it takes a few seconds and never interrupts a recording or an agent's question. You can turn that off in Settings, About.</p>
 <p>Each permission is asked for once, the first time you use the thing that needs it: Screen Recording for the recorder, the camera for the mirror and the face cam, the microphone for your voice, and control of Notes if you save notes to Apple Notes.</p>
 
 <footer>
-  <p>There's no account and no analytics, and Hangover has no server of its own. The weather and a to-do list kept in Notion or TickTick are the things that go online, and only after you turn them on. About once a day it asks GitHub whether there's a new version. All of <a href="https://github.com/EmmanuelH05/hangover">the code is on GitHub</a>. If something breaks, <a href="https://github.com/EmmanuelH05/hangover/issues">open an issue</a>.</p>
+  <p>There's no account and no analytics, and Hangover has no server of its own. The weather and to-do lists kept in Notion, TickTick, Asana, monday or Canvas are the things that go online, and only after you turn them on. About once a day it asks GitHub whether there's a new version. All of <a href="https://github.com/EmmanuelH05/hangover">the code is on GitHub</a>. If something breaks, use Send Feedback in Settings, About, or <a href="https://github.com/EmmanuelH05/hangover/issues">open an issue</a>.</p>
   <p>Hangover is a changed version of <a href="https://github.com/Octane0411/open-vibe-island">Open Island</a> by Octane0411 and its contributors. It's free software under the GNU General Public License, version 3. Weather data by <a href="https://open-meteo.com/">Open-Meteo.com</a>.</p>
 </footer>
 
