@@ -44,6 +44,7 @@ struct OnboardingMoreSwitchRow: View {
             .opacity(isEnabled ? 1 : 0.45)
             .accessibilityLabel(title)
             .accessibilityValue(context.t(isOn ? "onboarding.widgets.switch.on" : "onboarding.widgets.switch.off"))
+            .demoTarget(.tourMoreSwitch(item))
 
             if item == .volumeKeys { keysStatus }
         }

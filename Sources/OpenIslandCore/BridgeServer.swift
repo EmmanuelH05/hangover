@@ -2296,11 +2296,16 @@ public final class BridgeServer: @unchecked Sendable {
         )
     }
 
+    /// A later hook event for the session means the approval or the answer was
+    /// given in the terminal. The island lets the card go, and the hook process
+    /// that was still waiting on the island is answered with nothing, which
+    /// lets it exit now instead of at its 24 h timeout.
     private func clearStaleClaudeInteractionIfNeeded(for sessionID: String) {
-        guard pendingClaudeInteractions.removeValue(forKey: sessionID) != nil else {
+        guard let pending = pendingClaudeInteractions.removeValue(forKey: sessionID) else {
             return
         }
 
+        send(.response(.acknowledged), to: pending.clientID)
         emit(
             .actionableStateResolved(
                 ActionableStateResolved(

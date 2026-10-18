@@ -113,8 +113,15 @@ enum OnboardingGrant: String, CaseIterable, Sendable {
 struct OnboardingTipsPage: View {
     let context: OnboardingPageContext
 
-    private static let columnCount = 4
+    /// Five across, in two rows: ten tips, which is every tip there is with
+    /// the swipe off. Four across held eight, and the widgets' own tips were
+    /// the ones that fell off the page.
+    private static let columnCount = 5
     private static let spacing: CGFloat = 10
+    /// The width that puts `columnCount` cards across the page's content.
+    static var cardWidth: CGFloat {
+        (OnboardingStyle.contentWidth - spacing * CGFloat(columnCount - 1)) / CGFloat(columnCount)
+    }
 
     var body: some View {
         let state = context.state
@@ -141,7 +148,7 @@ struct OnboardingTipsPage: View {
         }
     }
 
-    /// The tips in rows of four. A short last row sits in the middle.
+    /// The tips in rows of five. A short last row sits in the middle.
     static func rows(_ tips: [OnboardingTip]) -> [[OnboardingTip]] {
         stride(from: 0, to: tips.count, by: columnCount).map {
             Array(tips[$0..<min($0 + columnCount, tips.count)])
@@ -168,7 +175,7 @@ struct OnboardingTipsPage: View {
             Spacer(minLength: 0)
         }
         .padding(13)
-        .frame(width: 201.5, height: 178, alignment: .topLeading)
+        .frame(width: Self.cardWidth, height: 190, alignment: .topLeading)
         .background(OnboardingCardBackground())
         .accessibilityElement(children: .combine)
     }

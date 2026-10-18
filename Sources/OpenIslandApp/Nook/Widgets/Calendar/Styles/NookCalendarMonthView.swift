@@ -79,7 +79,7 @@ struct NookCalendarMonthView: View {
         let dates = Self.gridDates(start: start, calendar: cal)
         let end = cal.date(byAdding: .day, value: Self.gridDays, to: start) ?? start
         let grouped = Self.group(nook.calendarEvents(from: start, to: end), calendar: cal)
-        let hasTasks = !nook.todo.source(reminders: nook.reminders).items.isEmpty
+        let hasTasks = nook.hasTodoItems
         return VStack(alignment: .leading, spacing: 4) {
             header(now: now, calendar: cal)
             weekdayRow(calendar: cal)
@@ -218,7 +218,7 @@ struct NookCalendarMonthView: View {
     @ViewBuilder
     private func dayRows(grouped: [Date: [NookCalendarEvent]], now: Date, calendar: Calendar) -> some View {
         let events = (grouped[calendar.startOfDay(for: pickedDay)] ?? []).sorted { $0.start < $1.start }
-        let tasks = nook.todo.source(reminders: nook.reminders).items.isEmpty ? [] : nook.tasksDue(on: pickedDay)
+        let tasks = !nook.hasTodoItems ? [] : nook.tasksDue(on: pickedDay)
         let total = events.count + tasks.count
         let hidden = NookCalendarExpansion.hiddenRows(total: total, shownWhenCollapsed: Self.maxDayRows)
         // "+N more" grows the card by N rows, which the grid and the window

@@ -329,9 +329,12 @@ enum PillSlotIdentity: Hashable {
     case timer
     case todos
     case hidden
+    case notice
+    case spinner
     case mediaWing
     case textWing
     case levelWing
+    case chipsWing
 
     init(rightSlot content: IslandRightSlotContent) {
         switch content {
@@ -350,6 +353,7 @@ enum PillSlotIdentity: Hashable {
         case .weather: self = .weather
         case .timer: self = .timer
         case .todos: self = .todos
+        case .notice: self = .notice
         case .hidden: self = .hidden
         }
     }
@@ -358,6 +362,7 @@ enum PillSlotIdentity: Hashable {
         switch leading {
         case .artwork: self = .artwork
         case .symbol(let name, _): self = .symbol(name)
+        case .spinner: self = .spinner
         }
     }
 
@@ -366,6 +371,7 @@ enum PillSlotIdentity: Hashable {
         case .media: self = .mediaWing
         case .text: self = .textWing
         case .level: self = .levelWing
+        case .chips: self = .chipsWing
         }
     }
 }
@@ -378,6 +384,7 @@ struct PillContentKey: Equatable {
     /// GIF placement, artwork), which are not content swaps.
     struct ActivityKey: Equatable {
         var leading: PillSlotIdentity
+        var leadingText: String?
         var trailing: PillSlotIdentity?
         var text: String?
         var showsOnRight: Bool
@@ -458,11 +465,63 @@ struct V6ClosedPill: View {
     }
 
     private var leadingWidth: CGFloat {
-        shownLeftSlot.map { NookSideSlotView.width(of: $0) } ?? 24
+        if let activity {
+            return 24 + (activity.leadingText.map { Self.leadingTextGap + NookWingText.width(of: $0) } ?? 0)
+        }
+        return shownLeftSlot.map { NookSideSlotView.width(of: $0) } ?? 24
     }
 
     static let plainWingWidth: CGFloat = 44
     static let mediaWingWidth: CGFloat = 50
+    /// Between the glyph and the words after it in the left wing.
+    static let leadingTextGap: CGFloat = 7
+    /// The most a wing grows past its own width to fit words or chips
+    /// (D82). Longer words are cut, as they were.
+    static let maxWingGrowth: CGFloat = 200
+    /// Words shrink a little (`minimumScaleFactor`) before a wing grows,
+    /// which keeps a time such as "10:00" from moving the pill.
+    static let wingSlack: CGFloat = 8
+
+    /// What the right wing's words, chips or notice need past the room the
+    /// wing has. Art, the ring and the agent slot never ask for more.
+    private var trailingNeed: CGFloat {
+        let room: CGFloat
+        let needed: CGFloat
+        if showsActivityOnRight, let trailing = activity?.trailing {
+            guard let width = trailing.contentWidth else { return 0 }
+            room = trailingWingWidth
+            needed = width
+        } else if let extra = shownRightExtra, case .notice = extra {
+            room = (activity == nil ? Self.plainWingWidth : Self.mediaWingWidth) - horizontalPadding
+            needed = NookSideSlotView.width(of: extra)
+        } else {
+            return 0
+        }
+        return max(0, needed - room - Self.wingSlack)
+    }
+
+    /// The same for the left wing, which only words after the glyph widen.
+    private var leadingNeed: CGFloat {
+        guard activity?.leadingText != nil else { return 0 }
+        return max(0, leadingWidth - 24)
+    }
+
+    /// How much each wing grows on a MacBook. The pill is centred on the
+    /// notch, which means the two wings must grow alike or one side's
+    /// words slide under the notch: both take the larger need, capped.
+    var macbookWingGrowth: CGFloat {
+        min(Self.maxWingGrowth, max(leadingNeed, trailingNeed))
+    }
+
+    /// How much the right wing grows as drawn: the shared amount on a
+    /// MacBook, its own need on an external display, whose pill is sized
+    /// by its content anyway.
+    private var trailingGrowth: CGFloat {
+        switch layout {
+        case .macbook: macbookWingGrowth
+        case .external: min(Self.maxWingGrowth, trailingNeed)
+        }
+    }
     /// Horizontal inset while an activity shows; tighter than the plain pad
     /// so the art and GIF sit close to the physical notch.
     private static let activityPad: CGFloat = 12
@@ -493,7 +552,7 @@ struct V6ClosedPill: View {
             let labelBlock = label == nil ? 0 : 6 + labelWidth
             let rightBlock: CGFloat
             if showsActivityOnRight {
-                rightBlock = Self.innerGap + Self.externalMediaSideWidth
+                rightBlock = Self.innerGap + Self.externalMediaSideWidth + trailingGrowth
             } else if let extra = shownRightExtra {
                 rightBlock = Self.innerGap + NookSideSlotView.width(of: extra)
             } else {
@@ -501,7 +560,7 @@ struct V6ClosedPill: View {
             }
             return max(minWidth, pad * 2 + glyphWidth + labelBlock + rightBlock)
         case .macbook:
-            let wing = activity == nil ? Self.plainWingWidth : Self.mediaWingWidth
+            let wing = (activity == nil ? Self.plainWingWidth : Self.mediaWingWidth) + macbookWingGrowth
             return wing + physicalNotchWidth + wing
         }
     }
@@ -526,6 +585,9 @@ struct V6ClosedPill: View {
         case .macbook: Self.mediaWingWidth - Self.activityPad - 2
         }
     }
+
+    /// The wing as drawn: its own width plus what its words or chips need.
+    private var drawnTrailingWingWidth: CGFloat { trailingWingWidth + trailingGrowth }
 
     // MARK: Content
 
@@ -569,10 +631,12 @@ struct V6ClosedPill: View {
                 switch activity.trailing {
                 case .text(let value): text = value
                 case .level(let percent, _): text = "\(percent)"
+                case .chips(let chips): text = "\(chips.deny.title)|\(chips.approve.title)"
                 case .media, nil: text = nil
                 }
                 return PillContentKey.ActivityKey(
                     leading: PillSlotIdentity(leading: activity.leading),
+                    leadingText: activity.leadingText,
                     trailing: activity.trailing.map { PillSlotIdentity(trailing: $0) },
                     text: text,
                     showsOnRight: showsActivityOnRight
@@ -644,7 +708,13 @@ struct V6ClosedPill: View {
     @ViewBuilder
     private var leadingGlyph: some View {
         if let activity {
-            NookLeadingWingView(leading: activity.leading, size: albumArtSize, statusTint: agentStatusTint)
+            HStack(spacing: Self.leadingTextGap) {
+                NookLeadingWingView(leading: activity.leading, size: albumArtSize, statusTint: agentStatusTint)
+                if let text = activity.leadingText {
+                    NookLeadingTextView(text: text)
+                }
+            }
+            .frame(width: leadingWidth, alignment: .leading)
         } else if let leftSlot = shownLeftSlot {
             NookSideSlotView(content: leftSlot, size: 24, isLive: isLive)
         } else {
@@ -656,7 +726,7 @@ struct V6ClosedPill: View {
     private func rightView(_ content: RightContent) -> some View {
         switch content {
         case .wing(let trailing):
-            NookTrailingWingView(trailing: trailing, height: height - 6, width: trailingWingWidth, isLive: isLive)
+            NookTrailingWingView(trailing: trailing, height: height - 6, width: drawnTrailingWingWidth, isLive: isLive)
         case .extra(let extra):
             NookSideSlotView(content: extra, size: 24, isLive: isLive)
         case .agents(let slot):

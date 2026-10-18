@@ -372,6 +372,12 @@ public struct ClaudeHookPayload: Equatable, Codable, Sendable {
     public var warpPaneUUID: String?
     /// Set to `true` by the Python hook client to indicate a remote (SSH) session.
     public var remote: Bool?
+    /// `CLAUDE_CODE_ENTRYPOINT`, read at hook runtime: "cli" for a run at a
+    /// terminal, "sdk-cli" for `claude -p`, "sdk-ts" and "sdk-py" for the
+    /// Agent SDKs, "claude-desktop", "claude-vscode", "local-agent" and
+    /// others for the hosts that name themselves. Nil from a tool that does
+    /// not set it.
+    public var entrypoint: String?
 
     /// The agent tool that produced this hook payload (e.g. "claude", "qoder", "factory", "codebuddy", "kimi").
     /// Set by the hooks CLI from the `--source` argument; absent from the JSON emitted by agents
@@ -412,6 +418,7 @@ public struct ClaudeHookPayload: Equatable, Codable, Sendable {
         case terminalTitle = "terminal_title"
         case warpPaneUUID = "warp_pane_uuid"
         case remote
+        case entrypoint
     }
 
     public init(
@@ -445,7 +452,8 @@ public struct ClaudeHookPayload: Equatable, Codable, Sendable {
         terminalTTY: String? = nil,
         terminalTitle: String? = nil,
         warpPaneUUID: String? = nil,
-        remote: Bool? = nil
+        remote: Bool? = nil,
+        entrypoint: String? = nil
     ) {
         self.cwd = cwd
         self.hookEventName = hookEventName
@@ -478,6 +486,7 @@ public struct ClaudeHookPayload: Equatable, Codable, Sendable {
         self.terminalTitle = terminalTitle
         self.warpPaneUUID = warpPaneUUID
         self.remote = remote
+        self.entrypoint = entrypoint
     }
 }
 
@@ -679,6 +688,24 @@ public enum ClaudeHookOutputEncoder {
 }
 
 public extension ClaudeHookPayload {
+    /// The entrypoints Claude Code names for a run with nobody at a prompt:
+    /// `claude -p` and the Agent SDKs.
+    static let headlessEntrypoints: Set<String> = ["sdk-cli", "sdk-ts", "sdk-py"]
+
+    /// True for a hook fired from a run with nobody to approve for it: a print
+    /// or SDK run (`claude -p` under launchd or cron, an agent built on the
+    /// SDK) whose process has no TTY and is not remote. A `claude -p` typed at
+    /// a terminal keeps its TTY and is not headless: the island can be used.
+    /// An interactive run, the desktop app, the IDE extensions and the local
+    /// agent name other entrypoints, and a hook that names none is another
+    /// tool speaking Claude's format, which waits as it always did. A
+    /// permission request from a headless run has no one to approve it on the
+    /// island, and waiting for one hung the run for a day.
+    var runsHeadless: Bool {
+        guard let entrypoint, Self.headlessEntrypoints.contains(entrypoint) else { return false }
+        return (terminalTTY ?? "").isEmpty && remote != true
+    }
+
     var workspaceName: String {
         WorkspaceNameResolver.workspaceName(for: cwd)
     }
@@ -981,6 +1008,10 @@ public extension ClaudeHookPayload {
 
         if payload.terminalApp == nil {
             payload.terminalApp = inferTerminalApp(from: environment)
+        }
+
+        if payload.entrypoint == nil, let entrypoint = environment["CLAUDE_CODE_ENTRYPOINT"], !entrypoint.isEmpty {
+            payload.entrypoint = entrypoint
         }
 
         // Resolve Warp pane UUID from the live SQLite state.

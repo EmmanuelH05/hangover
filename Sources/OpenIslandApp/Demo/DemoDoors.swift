@@ -40,6 +40,8 @@ final class AppDemoDoors: DemoDoors {
         case .playOrPause: nook.media.togglePlayPause()
         case .nextTrack: nook.media.nextTrack()
         case .previousTrack: nook.media.previousTrack()
+        case .toggleShuffle: nook.media.toggleShuffle()
+        case .cycleRepeat: nook.media.cycleRepeat()
         case .checkOffTodo(let position): checkOffTodo(at: position)
         case .addTodo(let title): nook.todo.source(reminders: nook.reminders).add(title)
         case .saveNote(let text): saveNote(text)
@@ -73,6 +75,8 @@ final class AppDemoDoors: DemoDoors {
         case .tourPickWidget(let kind): currentTour()?.actions.pickArrangeWidget(kind)
         case .tourMoveWidget(let kind, let index): move(kind, to: index)
         case .tourPutBack: currentTour()?.actions.resetArrangement()
+        case .tourGo(let page): currentTour()?.show(page)
+        case .tourSetMore(let item, let isOn): currentTour()?.actions.setMore(item, isOn)
         case .designTab(let tab): nook.design.tab = tab
         case .copySwatch(let position): copySwatch(at: position)
         case .toggleKeepPicking: nook.design.toggleKeepsPicking()
@@ -127,9 +131,10 @@ final class AppDemoDoors: DemoDoors {
     /// The row's check, which asks the source to complete the task at that
     /// place in its list.
     private func checkOffTodo(at position: Int) {
-        let source = nook.todo.source(reminders: nook.reminders)
-        guard source.items.indices.contains(position) else { return }
-        source.complete(source.items[position].id)
+        let items = nook.todoItems
+        guard items.indices.contains(position) else { return }
+        let id = items[position].id
+        nook.todo.source(holding: id, reminders: nook.reminders)?.complete(id)
     }
 
     /// A swatch on the card, by its place in the order the card shows.

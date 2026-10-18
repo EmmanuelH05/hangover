@@ -11,6 +11,9 @@ enum DemoAction: Equatable, Sendable {
     case playOrPause
     case nextTrack
     case previousTrack
+    /// The shuffle and repeat buttons, drawn in the dev copy.
+    case toggleShuffle
+    case cycleRepeat
     // To-dos and notes
     case checkOffTodo(position: Int)
     case addTodo(String)
@@ -53,6 +56,11 @@ enum DemoAction: Equatable, Sendable {
     case tourPickWidget(NookWidgetKind)
     case tourMoveWidget(NookWidgetKind, to: Int)
     case tourPutBack
+    /// Straight to a page, the way the island's hint turns the tour to one.
+    /// A page of a longer tour lengthens the tour.
+    case tourGo(OnboardingPage)
+    /// A switch on a Good to know page.
+    case tourSetMore(OnboardingMoreSwitch, isOn: Bool)
     // The design kit
     case designTab(NookDesignTab)
     case copySwatch(position: Int)
@@ -70,6 +78,8 @@ enum DemoAction: Equatable, Sendable {
         case .playOrPause: "play-pause"
         case .nextTrack: "next-track"
         case .previousTrack: "previous-track"
+        case .toggleShuffle: "shuffle"
+        case .cycleRepeat: "repeat"
         case .checkOffTodo(let position): "check-off-todo-\(position + 1)"
         case .addTodo: "add-todo"
         case .saveNote: "save-note"
@@ -102,6 +112,8 @@ enum DemoAction: Equatable, Sendable {
         case .tourPickWidget(let kind): "tour-pick-\(kind.rawValue)"
         case .tourMoveWidget(let kind, let index): "tour-move-\(kind.rawValue)-to-\(index)"
         case .tourPutBack: "tour-put-back"
+        case .tourGo(let page): "tour-go-\(page.rawValue)"
+        case .tourSetMore(let item, let isOn): "tour-more-\(item.rawValue)-\(isOn ? "on" : "off")"
         case .designTab(let tab): "design-tab-\(tab.rawValue)"
         case .copySwatch(let position): "copy-swatch-\(position + 1)"
         case .toggleKeepPicking: "keep-pill"
@@ -119,6 +131,8 @@ enum DemoAction: Equatable, Sendable {
         case .playOrPause: "MediaRemoteService.togglePlayPause(), the play button"
         case .nextTrack: "MediaRemoteService.nextTrack(), the forward button"
         case .previousTrack: "MediaRemoteService.previousTrack(), the back button"
+        case .toggleShuffle: "MediaRemoteService.toggleShuffle(), the shuffle button"
+        case .cycleRepeat: "MediaRemoteService.cycleRepeat(), the repeat button"
         case .checkOffTodo: "NookTodoSource.complete(_:), the row's check"
         case .addTodo: "NookTodoSource.add(_:), the add field"
         case .saveNote: "NookNotesStore.beginNewNote(), edit(_:) and closeEditor(), the New note button"
@@ -151,6 +165,8 @@ enum DemoAction: Equatable, Sendable {
         case .tourPickWidget: "OnboardingActions.pickArrangeWidget, the arrange page's card"
         case .tourMoveWidget: "NookModel.moveWidget(_:to:for:), where a drag ends"
         case .tourPutBack: "OnboardingActions.resetArrangement, the Put it back button"
+        case .tourGo: "OnboardingTour.show(_:), the island's hint and a progress dot"
+        case .tourSetMore: "OnboardingActions.setMore, a Good to know page's switch"
         case .designTab: "NookDesignKit.tab, the card's tab name"
         case .copySwatch: "NookDesignKit.copy(_:from:), a swatch"
         case .toggleKeepPicking: "NookDesignKit.toggleKeepsPicking(), the pill"

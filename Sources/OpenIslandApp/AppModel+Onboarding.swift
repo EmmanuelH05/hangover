@@ -182,9 +182,13 @@ extension AppModel {
         note(.links, allowsLinksFromOtherApps)
         note(.launchAtLogin, launchAtLoginEnabled)
         note(.dockIcon, showDockIcon)
-        note(.autoUpdates, updateChecker.installsAutomatically)
-        note(.mirrorWidget, isOnThePage(.mirror))
-        note(.weatherWidget, isOnThePage(.weather))
+        // Off where the updater does not run (the dev copy), as the switch
+        // is dimmed there: the preference only means something in a release.
+        note(.autoUpdates, updateChecker.canCheckForUpdates && updateChecker.installsAutomatically)
+        // Read as Settings reads them: the widget's switch. A layout can keep an
+        // enabled widget off this display, and the two said different things.
+        note(.mirrorWidget, nook.isWidgetEnabled(.mirror))
+        note(.weatherWidget, nook.isWidgetEnabled(.weather))
         let keys = nook.volume.keys
         let access: OnboardingKeysAccess = switch keys.status {
         case .off: .off
@@ -282,7 +286,7 @@ extension AppModel {
             // The preference the Source picker in Settings writes. Settings
             // also asks macOS for Reminders at that moment. The tour does
             // not: there the prompt waits until the widget is first shown.
-            setTodoSource: { [weak self] in self?.nook.todo.selectedKind = $0 },
+            setTodoSource: { [weak self] in self?.nook.todo.pick($0) },
             openTodoSetupPage: { kind in
                 if let url = NookTodoSetupLink.url(for: kind) { NSWorkspace.shared.open(url) }
             },

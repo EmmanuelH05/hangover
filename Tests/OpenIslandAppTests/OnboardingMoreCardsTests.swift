@@ -200,3 +200,61 @@ struct OnboardingMoreCardsTests {
         #expect(!OnboardingPage.shown(length: .short, agentsEnabled: true).contains(.features))
     }
 }
+
+// MARK: - A flip reaches the card
+
+/// The power and volume switches read a setting the app keeps in its defaults,
+/// which SwiftUI does not watch. The card still has to change when the switch
+/// is flipped: the flip must move something the tour's observers see, or the
+/// card keeps its old look until something else redraws the page.
+@MainActor
+struct OnboardingMoreRedrawTests {
+    private final class Flag: @unchecked Sendable {
+        var isSet = false
+    }
+
+    @Test func flippingAPowerOrVolumeSwitchChangesWhatTheTourObserves() {
+        let defaults = MemoryDefaults()
+        let nook = NookModel(defaults: defaults, looksForImportedGIF: false)
+        let model = AppModel(agentsDefaults: MemoryDefaults(), defaults: defaults, nookModel: nook)
+        nook.activeProfile = { [weak model] in model?.activeAppearanceProfile ?? .topBar }
+        let tour = model.makeWelcomeTour(startingAt: .power)
+
+        for item in [OnboardingMoreSwitch.powerNotices, .volumeNotice] {
+            let before = tour.state.more.isOn(item)
+            let fired = Flag()
+            withObservationTracking {
+                _ = tour.state.more
+            } onChange: {
+                fired.isSet = true
+            }
+            tour.actions.setMore(item, !before)
+            #expect(fired.isSet, "\(item): nothing the card observes changed")
+            #expect(tour.state.more.isOn(item) == !before, "\(item)")
+        }
+    }
+
+    /// Flipped in Settings while the tour is up, the switch is a defaults
+    /// write the tour never sees on its own. The window tells it, and the
+    /// page reads the app again.
+    @Test func aFlipOutsideTheTourReachesTheCardOnceTheTourIsTold() {
+        let defaults = MemoryDefaults()
+        let nook = NookModel(defaults: defaults, looksForImportedGIF: false)
+        let model = AppModel(agentsDefaults: MemoryDefaults(), defaults: defaults, nookModel: nook)
+        nook.activeProfile = { [weak model] in model?.activeAppearanceProfile ?? .topBar }
+        let tour = model.makeWelcomeTour(startingAt: .power)
+        #expect(tour.state.more.isOn(.powerNotices))
+
+        let fired = Flag()
+        withObservationTracking {
+            _ = tour.state.more
+        } onChange: {
+            fired.isSet = true
+        }
+        nook.power.setEnabled(false)
+        #expect(!fired.isSet, "a plain defaults write is not seen")
+        tour.noteOutsideChange()
+        #expect(fired.isSet)
+        #expect(!tour.state.more.isOn(.powerNotices))
+    }
+}

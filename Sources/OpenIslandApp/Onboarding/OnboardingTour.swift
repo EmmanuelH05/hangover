@@ -455,6 +455,10 @@ final class OnboardingTour {
     private(set) var flow: OnboardingFlow
     /// What was chosen in this run. The pages read it through `state`.
     private(set) var picks = OnboardingPicks()
+    /// Bumped when a setting changed outside the tour (`noteOutsideChange`).
+    /// The state reads it, which redraws a page that shows a setting the app
+    /// keeps in its defaults and SwiftUI does not watch.
+    private(set) var outsideChangeCount = 0
 
     @ObservationIgnored private let readState: () -> OnboardingState
     /// The doors into the app, as they were handed in.
@@ -604,6 +608,7 @@ final class OnboardingTour {
     /// already says about a pick, a failure or the island having been
     /// opened is kept, which lets a snapshot hand in a fixed one.
     var state: OnboardingState {
+        _ = outsideChangeCount
         var state = readState()
         state.features = state.featureReading
         state.length = length
@@ -796,6 +801,12 @@ final class OnboardingTour {
         self.appIsActive = appIsActive
         self.windowIsVisible = windowIsVisible
         syncIsland()
+    }
+
+    /// A setting changed in Settings or on the island while the tour is up.
+    /// The window tells the tour, and the pages read the app again.
+    func noteOutsideChange() {
+        outsideChangeCount += 1
     }
 
     /// Lets the island go whatever page is up. The window calls it on every

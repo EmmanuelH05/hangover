@@ -23,4 +23,11 @@ OPEN_ISLAND_DEMO=1 OPEN_ISLAND_DEMO_BACKDROP="$BACKDROP" OPEN_ISLAND_DEMO_SCRIPT
 APP_PID=$!
 /bin/sleep 1.2
 "$RECORDER" $APP_PID "$SECONDS_TO_RECORD" "$OUT/$NAME.mov"
+# The script quits the app two seconds after its last step. One that is
+# still up five seconds after the recording is stopped here.
+for _ in {1..10}; do
+    kill -0 $APP_PID 2>/dev/null || break
+    /bin/sleep 0.5
+done
+kill -9 $APP_PID 2>/dev/null || true
 wait $APP_PID 2>/dev/null || true

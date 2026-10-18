@@ -244,10 +244,14 @@ struct IslandHaloMetrics: Equatable, Sendable {
         flashPeak: 1.0, noticeOpacity: 0.85, musicOpacity: 0.45, runningOpacity: 0.42,
         pulseLow: 0.25, pulseHigh: 0.85
     )
+    /// Vivid is a wider, softer blur than subtle, which spreads the same
+    /// opacity thinner. Its resting opacities sit well above subtle's so the
+    /// closed island reads as vivid and not as a fainter, larger subtle; the
+    /// Settings and tour previews promise about this much.
     static let vivid = IslandHaloMetrics(
-        radius: 18, drop: 5, breathingLow: 0.7, breathingHigh: 1.0,
-        flashPeak: 1.0, noticeOpacity: 1.0, musicOpacity: 0.65, runningOpacity: 0.6,
-        pulseLow: 0.35, pulseHigh: 1.0
+        radius: 18, drop: 5, breathingLow: 0.8, breathingHigh: 1.0,
+        flashPeak: 1.0, noticeOpacity: 1.0, musicOpacity: 0.85, runningOpacity: 0.85,
+        pulseLow: 0.45, pulseHigh: 1.0
     )
     /// While the island is open only a flash shows, sized to fit the
     /// window's transparent insets (18pt sides, 22pt bottom).

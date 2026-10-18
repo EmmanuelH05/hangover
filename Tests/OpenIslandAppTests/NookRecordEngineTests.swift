@@ -421,10 +421,10 @@ final class RecordEngineRig {
         for index in 0..<(25 * 30) { try await feeder.feed(writer, frame: Double(index) / 30) }
         rig.capture?.emit(.firstFrame)
         await rig.until { !rig.phases.isEmpty }
-        // A picture of another size: the encoder refuses it, and the writer is
-        // failed from the next fragment on.
+        // A picture in a format the encoder cannot take: it refuses it, and the
+        // writer is failed from the next fragment on.
         let offerDeadline = Date().addingTimeInterval(10)
-        while !writer.append(try NookRecordWriterTests.frame(at: 25.05, width: 128, height: 128), to: .video) {
+        while !writer.append(try NookRecordWriterTests.frame(at: 25.05, format: kCVPixelFormatType_16Gray), to: .video) {
             guard Date() < offerDeadline else { throw NookRecordWriterTests.FeedTimeout() }
             try await Task.sleep(for: .milliseconds(2))
         }
@@ -513,11 +513,14 @@ final class RecordEngineRig {
         #expect(await NookScreenRecorder.fileLooksPlayable(rig.fileURL))
     }
 
+    /// The first fragment closes two seconds in (`NookRecordWriter.fragmentInterval`);
+    /// one second of pictures is before it.
     @Test func aFileCutShortBeforeItsFirstFragmentDoesNotPlay() async throws {
         let url = tempFile(); defer { try? FileManager.default.removeItem(at: url) }
         let writer = try NookRecordWriter(fileURL: url, width: 64, height: 64, framesPerSecond: 30, tracks: [.video])
         let feeder = NookRecordWriterTests()
-        for index in 0..<(3 * 30) { try await feeder.feed(writer, frame: Double(index) / 30) }
+        #expect(NookRecordWriter.fragmentInterval.seconds > 1)
+        for index in 0..<30 { try await feeder.feed(writer, frame: Double(index) / 30) }
         try await Task.sleep(for: .milliseconds(300))
 
         // What a crash would leave: the bytes on disk now, copied.

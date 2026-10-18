@@ -602,10 +602,18 @@ struct IslandPanelView: View {
         ZStack(alignment: .top) {
             if shown.showsNookPage {
                 VStack(spacing: 0) {
+                    // The ask sits above the agents row; Update ready and
+                    // What's new sit under it, over the widgets (D82).
+                    if let kind = model.updateFlow.card, kind.isAsk {
+                        updateCard(kind)
+                    }
                     if shown.showsNookAgentsBar {
                         NookAgentsBar(model: model)
                             .padding(.horizontal, sessionListSideInset)
                             .padding(.top, 8)
+                    }
+                    if let kind = model.updateFlow.card, !kind.isAsk {
+                        updateCard(kind)
                     }
                     NookPanelView(model: model)
                         .padding(.horizontal, sessionListSideInset)
@@ -613,6 +621,9 @@ struct IslandPanelView: View {
                 .transition(pageTransition)
             } else {
                 VStack(spacing: 0) {
+                    if let kind = model.updateFlow.card {
+                        updateCard(kind)
+                    }
                     agentsContent
                     if shown.showsNookCompactBar {
                         NookCompactBar(model: model)
@@ -625,6 +636,23 @@ struct IslandPanelView: View {
             }
         }
         .motionAnimation(Motion.pageSwitch, value: shown.showsNookPage)
+    }
+
+    /// One of the update flow's cards, spanning the page (D82).
+    private func updateCard(_ kind: UpdateCardKind) -> some View {
+        UpdateCardView(
+            kind: kind,
+            hint: kind.isAsk ? model.updateAskHint : nil,
+            lang: model.lang,
+            onLater: { model.updateCardLater() },
+            onInstall: { model.updateCardInstall() },
+            onDone: { model.updateCardDone() },
+            onSeeAll: { model.updateCardSeeAll() }
+        )
+        .frame(height: UpdateCardLayout.height(for: kind))
+        .padding(.horizontal, sessionListSideInset)
+        .padding(.top, NookWidgetLayout.rowSpacing)
+        .transition(Motion.transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity), reduceMotion: reduceMotion))
     }
 
     private var agentsContent: some View {

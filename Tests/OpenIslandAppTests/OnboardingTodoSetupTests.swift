@@ -454,7 +454,7 @@ struct OnboardingTodoConnectorTests {
     @Test func readingAnyConnectedSetupAsksNothingOfMacOS() {
         let permission = FakeEventKitPermission(status: .notDetermined)
         let reminders = NookRemindersService(access: permission.access)
-        for source in NookTodoSourceKind.allCases {
+        for source in NookTodoSourceKind.offeredInTour {
             _ = connector(reminders: reminders, source: source).setup()
         }
         #expect(permission.requestCount == 0)

@@ -287,12 +287,12 @@ struct OnboardingRenderTests {
     /// widget and its own steps.
     @Test func theToDosPageDrawsEachSourcesOwnSteps() throws {
         var pictures: [Data] = []
-        for source in NookTodoSourceKind.allCases {
+        for source in NookTodoSourceKind.offeredInTour {
             var state = Self.sampleState
             state.todoSource = source
             pictures.append(try render(Self.name(.todos, source.rawValue)) { tourView(.todos, state) })
         }
-        #expect(Set(pictures).count == NookTodoSourceKind.allCases.count, "every source should draw its own picture")
+        #expect(Set(pictures).count == NookTodoSourceKind.offeredInTour.count, "every source should draw its own picture")
 
         // Once the source is connected the page draws it ticked.
         var connected = Self.sampleState

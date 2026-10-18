@@ -20,6 +20,26 @@ struct NookSettingsPane: View {
                     guard !Task.isCancelled else { return }
                     withAnimation { proxy.scrollTo(NookSettingsAnchor.todo, anchor: .top) }
                 }
+                .settingsScrollsToJump(proxy)
+        }
+    }
+
+    /// A widget's switch with the anchor of its own entry. The ids are
+    /// written out one by one so the index test can read them.
+    @ViewBuilder
+    private func widgetAnchored<Content: View>(_ kind: NookWidgetKind, _ content: Content) -> some View {
+        switch kind {
+        case .media: content.settingsAnchor(SettingsIndex.entry("nook.widget.media")!)
+        case .calendar: content.settingsAnchor(SettingsIndex.entry("nook.widget.calendar")!)
+        case .todo: content.settingsAnchor(SettingsIndex.entry("nook.widget.todo")!)
+        case .notes: content.settingsAnchor(SettingsIndex.entry("nook.widget.notes")!)
+        case .tray: content.settingsAnchor(SettingsIndex.entry("nook.widget.tray")!)
+        case .timer: content.settingsAnchor(SettingsIndex.entry("nook.widget.timer")!)
+        case .mirror: content.settingsAnchor(SettingsIndex.entry("nook.widget.mirror")!)
+        case .weather: content.settingsAnchor(SettingsIndex.entry("nook.widget.weather")!)
+        case .record: content.settingsAnchor(SettingsIndex.entry("nook.widget.record")!)
+        case .design: content.settingsAnchor(SettingsIndex.entry("nook.widget.design")!)
+        case .linkAudio: content.settingsAnchor(SettingsIndex.entry("nook.widget.linkAudio")!)
         }
     }
 
@@ -28,33 +48,37 @@ struct NookSettingsPane: View {
         return Form {
             Section("Widgets") {
                 ForEach(NookWidgetKind.offered) { kind in
-                    Toggle(isOn: Binding(
+                    widgetAnchored(kind, Toggle(isOn: Binding(
                         get: { nook.isWidgetEnabled(kind) },
                         set: { isOn in
                             nook.setWidgetFromSettings(kind, enabled: isOn)
                         }
                     )) {
                         Label(kind.title, systemImage: kind.systemImage)
-                    }
+                    })
                 }
-                Text("To arrange widgets, open the island and right-click a widget or press and hold it. Drag widgets to reorder them, drag the corner grip to resize, and use Done when you are finished. Each display keeps its own layout.")
+                Text(LanguageManager.shared.t("settings.nook.arrange.note"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .settingsAnchor(SettingsIndex.entry("nook.arrange")!)
             }
 
             // Every row here is about agents, the link to the per-display
             // rows included.
             if model.agentsEnabled {
                 Section("Working with the agents") {
-                    LabeledContent("Per-display options") {
+                    LabeledContent(LanguageManager.shared.t("settings.nook.perDisplay.title")) {
                         Button("Open Personalization…", action: onOpenPersonalization)
                     }
-                    Text("What the closed island shows while music plays, which page opens first, and the rows that link the agents and the Nook are set per display, for the MacBook notch and for external displays, in Personalization.")
+                    .settingsAnchor(SettingsIndex.entry("nook.perDisplay")!)
+                    Text(LanguageManager.shared.t("settings.nook.perDisplay.note"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Toggle("Focus timer silences completion pop-ups", isOn: $nook.focusSuppressesCompletions)
-                    Toggle("Meetings silence completion pop-ups", isOn: $nook.meetingSuppressesCompletions)
-                    Text("A meeting is a calendar event with a video link that is on right now. Permission requests and questions still come through during a focus session or a meeting. The timer's end sound follows the island's mute switch.")
+                    Toggle(LanguageManager.shared.t("settings.nook.focusSuppresses.title"), isOn: $nook.focusSuppressesCompletions)
+                        .settingsAnchor(SettingsIndex.entry("nook.focusSuppressesCompletions")!)
+                    Toggle(LanguageManager.shared.t("settings.nook.meetingSuppresses.title"), isOn: $nook.meetingSuppressesCompletions)
+                        .settingsAnchor(SettingsIndex.entry("nook.meetingSuppressesCompletions")!)
+                    Text(LanguageManager.shared.t("settings.nook.meetingSuppresses.note"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -74,19 +98,24 @@ struct NookSettingsPane: View {
                         .truncationMode(.middle)
                 }
                 HStack {
-                    Button("Choose GIF…") { nook.chooseGIF() }
-                    Button("Use visualizer") { nook.clearGIF() }
+                    Button(LanguageManager.shared.t("settings.nook.gif.choose")) { nook.chooseGIF() }
+                        .settingsAnchor(SettingsIndex.entry("nook.nowPlaying.gif")!)
+                    Button(LanguageManager.shared.t("settings.nook.gif.visualizer")) { nook.clearGIF() }
                         .disabled(nook.gifURL == nil)
+                        .settingsAnchor(SettingsIndex.entry("nook.nowPlaying.visualizer")!)
                 }
                 Slider(value: $nook.gifScale, in: 0.5...2.5, step: 0.05) {
-                    Text("Scale \(nook.gifScale, format: .number.precision(.fractionLength(2)))")
+                    Text("\(LanguageManager.shared.t("settings.nook.gif.scale")) \(nook.gifScale, format: .number.precision(.fractionLength(2)))")
                 }
+                .settingsAnchor(SettingsIndex.entry("nook.nowPlaying.scale")!)
                 Slider(value: $nook.gifOffsetX, in: -40...40, step: 1) {
-                    Text("Horizontal offset \(Int(nook.gifOffsetX))")
+                    Text("\(LanguageManager.shared.t("settings.nook.gif.offsetX")) \(Int(nook.gifOffsetX))")
                 }
+                .settingsAnchor(SettingsIndex.entry("nook.nowPlaying.offsetX")!)
                 Slider(value: $nook.gifOffsetY, in: -20...20, step: 1) {
-                    Text("Vertical offset \(Int(nook.gifOffsetY))")
+                    Text("\(LanguageManager.shared.t("settings.nook.gif.offsetY")) \(Int(nook.gifOffsetY))")
                 }
+                .settingsAnchor(SettingsIndex.entry("nook.nowPlaying.offsetY")!)
             }
 
             NookCalendarSettings(nook: nook)

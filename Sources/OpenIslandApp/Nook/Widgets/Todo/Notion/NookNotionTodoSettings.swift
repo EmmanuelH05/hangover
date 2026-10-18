@@ -32,6 +32,7 @@ struct NookNotionTodoSettings: View {
                 SecureField(lang.t("nook.todo.notion.token.placeholder"), text: $draftToken)
                     .textContentType(.password)
                     .onSubmit(connect)
+                    .settingsAnchor(SettingsIndex.entry("nook.todo.notion.token")!)
                 Text(lang.t("nook.todo.notion.token.help"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -143,6 +144,7 @@ struct NookNotionTodoSettings: View {
                     Text(choice.title).tag(Optional(choice.id))
                 }
             }
+            .settingsAnchor(SettingsIndex.entry("nook.todo.notion.database")!)
             HStack {
                 Button(lang.t("nook.todo.notion.database.reload")) {
                     Task { await service.loadDatabases() }

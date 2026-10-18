@@ -83,7 +83,13 @@ final class AppModel {
     let discovery = SessionDiscoveryCoordinator()
     let monitoring = ProcessMonitoringCoordinator()
     let codexAppServer = CodexAppServerCoordinator()
-    let updateChecker = UpdateChecker()
+    let updateChecker: UpdateChecker
+    /// A downloaded update's way onto the Mac: the ask, Later, the
+    /// relaunch and What's new (D82). Glue in `AppModel+Update`.
+    let updateFlow: UpdateFlow
+    /// The Send Feedback sheet's state; Settings presents the sheet and
+    /// the app menu asks for it (S7).
+    let feedback = FeedbackPresenter(mailer: NSWorkspaceFeedbackMailer(), details: FeedbackDetails.current)
     let nook: NookModel
 
     /// Approve and deny from the keyboard, replies being typed, and what
@@ -335,7 +341,7 @@ final class AppModel {
     private var agentRuntimeGeneration: UInt64 = 0
     /// Handed over once by the app, never by a harness run or a test.
     @ObservationIgnored
-    private var agentHotkeyRegistrar: (any AgentHotkeyRegistering)?
+    var agentHotkeyRegistrar: (any AgentHotkeyRegistering)?
     /// The welcome tour is offered once a launch.
     @ObservationIgnored
     private var hasOfferedWelcomeTour = false
@@ -753,6 +759,8 @@ final class AppModel {
         self.accent = accent ?? HangoverAccentModel(defaults: defaults)
         hooks = HookInstallationCoordinator(intentStore: AgentIntentStore(defaults: defaults))
         agentHotkeys = AgentHotkeyController(defaults: defaults)
+        updateChecker = UpdateChecker(defaults: defaults)
+        updateFlow = UpdateFlow(defaults: defaults)
         // A model built on a store of its own is a test or a preview. It
         // does not go looking for the old NotchNook GIF in the real folder.
         // The demo mode (D51) hands in a Nook whose services hold sample
@@ -886,6 +894,7 @@ final class AppModel {
             self?.discovery.maintainCodexAppSessionsIfNeeded()
         }
         configureAgentTools()
+        configureUpdateFlow()
         refreshOverlayDisplayConfiguration()
         hasFinishedInit = true
     }
@@ -1275,6 +1284,7 @@ final class AppModel {
         }
         if loadRuntimeState {
             updateChecker.startIfNeeded()
+            updateFlow.noteLaunch(currentVersion: AppBrand.currentVersion, hasRunBefore: firstLaunchCompleted)
             if !startsAgents {
                 // The agent half offers the welcome tour once it has read
                 // the hook status. With that half off the tour is offered
@@ -1453,15 +1463,18 @@ final class AppModel {
         } else {
             stopAgentRuntime()
         }
+        // An update's ask keeps its keys through the switch (D82).
+        refreshUpdateHotkeyArming()
         refreshOverlayPlacementIfVisible()
     }
 
     /// Hands the agent shortcuts the system registrar. While the agents
-    /// switch is off it is only kept, and nothing is registered with macOS.
+    /// switch is off it is only kept, and nothing is registered with macOS
+    /// unless an update's ask is up (D82).
     func activateAgentHotkeys(registrar: any AgentHotkeyRegistering) {
         agentHotkeyRegistrar = registrar
-        guard agentsEnabled else { return }
-        agentHotkeys.activate(registrar: registrar)
+        if agentsEnabled { agentHotkeys.activate(registrar: registrar) }
+        refreshUpdateHotkeyArming()
     }
 
     /// Session state from discovery or the process monitor. A result that
@@ -1676,7 +1689,7 @@ final class AppModel {
 
     /// What the Nook puts in the closed island on the current display.
     var nookClosedActivity: NookClosedActivity? {
-        nook.closedActivity(for: nookDisplay, isHidden: closedContentIsHidden)
+        nook.closedActivity(for: nookDisplay, isHidden: closedContentIsHidden, ask: updateAskActivity)
     }
 
     static let nookTrackLabelLimit = 26
@@ -1721,6 +1734,8 @@ final class AppModel {
     /// What the right side shows when this display overrides the island's
     /// own right slot. Nil leaves that slot in charge.
     var nookRightSlotContent: NookSideSlotContent? {
+        // An update's mark is a notice, which a swipe leaves up (D46).
+        if let mark = updateClosedMark { return mark }
         if closedContentIsHidden { return nil }
         return nookDisplay.rightSlot.flatMap(nookSideSlotContent(for:))
     }
@@ -1761,8 +1776,8 @@ final class AppModel {
             return NookSideSlotContent.timerText(remaining: nook.timer.remaining, isActive: nook.timer.isActive)
                 .map(NookSideSlotContent.timer)
         case .todos:
-            let source = nook.todo.source(reminders: nook.reminders)
-            return NookSideSlotContent.resolvedTodos(items: source.items, connection: source.connection)
+            let isReady = nook.todo.sections(reminders: nook.reminders).contains { $0.source.connection == .ready }
+            return NookSideSlotContent.resolvedTodos(items: nook.todoItems, isReady: isReady)
         }
     }
 
@@ -1813,7 +1828,7 @@ final class AppModel {
                     bottomPadding: 0,
                     shadowBottomInset: IslandChromeMetrics.openedShadowBottomInset
                 ),
-                barsHeight: nookBarsHeight
+                barsHeight: nookBarsHeight + updateCardHeight
             )
         }
         return NookMirrorFit.size(

@@ -27,6 +27,7 @@ extension AppearanceSettingsPane {
                     : "settings.appearance.nook.leftSlot.note.nookOnly"
             )
         )
+        .settingsAnchor("appearance.leftSlot")
 
         if showsAgents {
             nookSideSlotRow([.agents, .count, .grid, .none], group: "nook.leftSlot.first", current: { $0.leftSlot }) { slot in
@@ -72,6 +73,7 @@ extension AppearanceSettingsPane {
             title: lang.t("settings.appearance.rightSlot.title"),
             note: lang.t("settings.appearance.rightSlot.note")
         )
+        .settingsAnchor("appearance.rightSlot")
 
         ForEach(Array(Self.sideSlotRowsWithoutAgents.enumerated()), id: \.offset) { index, row in
             nookSideSlotRow(
@@ -156,6 +158,7 @@ extension AppearanceSettingsPane {
             title: lang.t("settings.appearance.nook.closed.title"),
             note: lang.t("settings.appearance.nook.closed.note")
         )
+        .settingsAnchor("appearance.closedMusic")
 
         let showsAgents = showsAgents
         NookSliceReader(
@@ -186,6 +189,7 @@ extension AppearanceSettingsPane {
                     option.keyPath,
                     enabledWhen: { option.isEnabled(whenStyle: $0.mediaStyle) }
                 )
+                .modifier(ClosedMusicAnchor(option: option))
             }
         }
     }
@@ -203,6 +207,7 @@ extension AppearanceSettingsPane {
                     : "settings.appearance.nook.halo.note.nookOnly"
             )
         )
+        .settingsAnchor("appearance.glow")
 
         NookSliceReader(
             nook: model.nook,
@@ -238,6 +243,7 @@ extension AppearanceSettingsPane {
                 \.haloFollowsMusic,
                 enabledWhen: { $0.haloStyle != .off && $0.mediaStyle != .off }
             )
+            .settingsAnchor("appearance.glow.followsMusic")
             // The pulse needs the process tap of macOS 14.2 (D56).
             if IslandBeatSupport.isAvailable {
                 nookToggleRow(
@@ -246,6 +252,7 @@ extension AppearanceSettingsPane {
                     \.haloPulsesWithBeat,
                     enabledWhen: { $0.haloStyle != .off && $0.mediaStyle != .off && $0.haloFollowsMusic }
                 )
+                .settingsAnchor("appearance.glow.beat")
                 // How far the pulse goes out, only while it is switched on.
                 NookSliceReader(
                     nook: model.nook,
@@ -275,6 +282,7 @@ extension AppearanceSettingsPane {
                                 set: { look in updateNook { $0.haloBeatLook = look } }
                             )
                         )
+                        .settingsAnchor("appearance.glow.beatLook")
                         // Each hit for itself, or a show: only for the
                         // lasers.
                         if state.look == .lasers {
@@ -286,6 +294,7 @@ extension AppearanceSettingsPane {
                                     set: { mode in updateNook { $0.haloLaserMode = mode } }
                                 )
                             )
+                            .settingsAnchor("appearance.glow.laserMode")
                         }
                         // One slider at a time: the glow's reach, or the
                         // lasers' own, which goes much further.
@@ -308,6 +317,7 @@ extension AppearanceSettingsPane {
                             )
                         )
                         .id(slider)
+                        .modifier(BeatReachAnchor(slider: slider))
                         // How many beams, only for the lasers.
                         if state.look == .lasers {
                             NookLaserCountRow(
@@ -321,6 +331,7 @@ extension AppearanceSettingsPane {
                                     }
                                 )
                             )
+                            .settingsAnchor("appearance.glow.laserCount")
                         }
                     }
                 }
@@ -351,6 +362,7 @@ extension AppearanceSettingsPane {
             title: lang.t("settings.appearance.openedLook.title"),
             note: lang.t("settings.appearance.openedLook.note")
         )
+        .settingsAnchor("appearance.openedLook")
 
         NookSliceReader(nook: model.nook, profile: editingProfile, select: \.openedLook) { look in
             VStack(alignment: .leading, spacing: 12) {
@@ -393,6 +405,7 @@ extension AppearanceSettingsPane {
                 title: lang.t("settings.appearance.nook.opened.title"),
                 note: lang.t("settings.appearance.nook.opened.note")
             )
+        .settingsAnchor("appearance.openedPage")
 
             NookSliceReader(nook: model.nook, profile: editingProfile, select: \.openedPage) { selected in
                 NookCardRow(
@@ -414,11 +427,13 @@ extension AppearanceSettingsPane {
                     noteKey: "settings.appearance.nook.compactBar.note",
                     \.showsCompactBar
                 )
+                .settingsAnchor("appearance.compactBar")
                 nookToggleRow(
                     titleKey: "settings.appearance.nook.agentsBar.title",
                     noteKey: "settings.appearance.nook.agentsBar.note",
                     \.showsAgentsBar
                 )
+                .settingsAnchor("appearance.agentsBar")
             }
         }
 
@@ -435,6 +450,7 @@ extension AppearanceSettingsPane {
             title: lang.t("settings.appearance.nook.calendarStyle.title"),
             note: lang.t("settings.appearance.nook.calendarStyle.note")
         )
+        .settingsAnchor("appearance.calendarStyle")
 
         NookSliceReader(nook: model.nook, profile: editingProfile, select: \.calendarStyle) { selected in
             NookCardRow(
@@ -465,6 +481,7 @@ extension AppearanceSettingsPane {
                 ? lang.t("settings.appearance.nook.calendars.note")
                 : lang.t("settings.appearance.nook.calendars.empty")
         )
+        .settingsAnchor("appearance.calendars")
 
         if hasCalendars {
             NookSliceReader(
@@ -508,6 +525,7 @@ extension AppearanceSettingsPane {
             title: lang.t("settings.appearance.nook.widgets.title"),
             note: lang.t("settings.appearance.nook.widgets.note")
         )
+        .settingsAnchor("appearance.widgets")
 
         NookSliceReader(
             nook: nook,
@@ -628,6 +646,36 @@ extension AppearanceSettingsPane {
 }
 
 // MARK: - Pieces
+
+/// Anchors one closed-music switch. Each id is written out whole, because
+/// the index test finds anchors by reading the source for the literal id.
+private struct ClosedMusicAnchor: ViewModifier {
+    let option: NookClosedMusicOption
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        switch option {
+        case .reclaim: content.settingsAnchor("appearance.closedMusic.reclaim")
+        case .dot: content.settingsAnchor("appearance.closedMusic.dot")
+        case .track: content.settingsAnchor("appearance.closedMusic.track")
+        case .nextEvent: content.settingsAnchor("appearance.closedMusic.nextEvent")
+        case .notices: content.settingsAnchor("appearance.closedMusic.notices")
+        }
+    }
+}
+
+/// Anchors the one reach slider the look shows, the glow's or the lasers'.
+private struct BeatReachAnchor: ViewModifier {
+    let slider: IslandBeatReachSlider
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        switch slider {
+        case .glow: content.settingsAnchor("appearance.glow.reach")
+        case .lasers: content.settingsAnchor("appearance.glow.laserReach")
+        }
+    }
+}
 
 /// The glow style and the color its cards draw their sample in.
 private struct NookHaloStyleChoice: Equatable, Sendable {

@@ -125,7 +125,7 @@ enum OnboardingAbility: String, CaseIterable, Identifiable, Sendable {
             .widget("Calendar/NookEventEditor.swift", ".help(\"Repeat\")"),
         ]
         case .calendarNext: [
-            .widget("Calendar/NookCalendarSettings.swift", "Next-up notices (10 and 2 minutes before)"),
+            .widget("Calendar/NookCalendarSettings.swift", "nook.calendar.settings.nextUp"),
             .widget("Calendar/NookMeetingLink.swift", "static let lead: TimeInterval = 10 * 60"),
             .nook("Views/NookPanelView.swift", "NookJoinBar(nook: nook, event: meeting)"),
         ]
@@ -214,7 +214,7 @@ enum OnboardingAbility: String, CaseIterable, Identifiable, Sendable {
         ]
         case .timerClosed: [
             .widget("Timer/NookFocusTimer.swift", "var closedText: String?"),
-            .widget("Timer/NookTimerSettings.swift", "Play a sound when done"),
+            .widget("Timer/NookTimerSettings.swift", "nook.timer.settings.sound"),
         ]
         case .weatherForecast: [
             .widget("Weather/NookWeatherModels.swift", "case hours"),

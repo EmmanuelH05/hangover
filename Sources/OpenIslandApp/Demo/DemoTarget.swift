@@ -22,6 +22,9 @@ enum DemoTarget: Hashable, Sendable {
     case playPause
     case nextTrack
     case previousTrack
+    /// The shuffle and repeat buttons, drawn in the dev copy.
+    case shuffle
+    case repeatMode
     // To-dos, notes, the timer and the weather
     /// A to-do's check box, by its place in the list.
     case todoCheck(position: Int)
@@ -43,6 +46,8 @@ enum DemoTarget: Hashable, Sendable {
     case tourTemplate(PersonalizationTemplate.ID)
     case tourArrangeWidget(NookWidgetKind)
     case tourPutBack
+    /// A switch card on a Good to know page.
+    case tourMoreSwitch(OnboardingMoreSwitch)
     // The design kit
     case designTab(NookDesignTab)
     /// A swatch of the active palette, by its place on the card.
@@ -61,7 +66,7 @@ enum DemoTarget: Hashable, Sendable {
     /// copy of the app offers.
     static let all: [DemoTarget] = {
         var all: [DemoTarget] = [
-            .notch, .widgetPage, .editDone, .playPause, .nextTrack, .previousTrack,
+            .notch, .widgetPage, .editDone, .playPause, .nextTrack, .previousTrack, .shuffle, .repeatMode,
             .todoField, .notesField, .timerStart, .templateUndo,
             .tourNext, .tourNextFeature, .tourPutBack,
             .designKeepPill, .designColorField, .designAddColor,
@@ -76,6 +81,7 @@ enum DemoTarget: Hashable, Sendable {
         all += OnboardingLength.allCases.map { .tourLength($0) }
         all += OnboardingTry.allCases.map { .tourTry($0) }
         all += NookCalendarStyle.allCases.map { .tourCalendarLook($0) }
+        all += OnboardingMoreSwitch.allCases.map { .tourMoreSwitch($0) }
         all += NookDesignTab.allCases.map { .designTab($0) }
         all += swatchPositions.map { .designSwatch(position: $0) }
         return all
@@ -115,6 +121,8 @@ extension DemoAction {
         case .playOrPause: .click(.playPause)
         case .nextTrack: .click(.nextTrack)
         case .previousTrack: .click(.previousTrack)
+        case .toggleShuffle: .click(.shuffle)
+        case .cycleRepeat: .click(.repeatMode)
         case .checkOffTodo(let position): .click(.todoCheck(position: position))
         case .addTodo, .typeTodo: .click(.todoField)
         case .saveNote, .typeNote: .click(.notesField)
@@ -134,15 +142,17 @@ extension DemoAction {
         case .tourApplyTemplate(let id): .click(.tourTemplate(id))
         case .tourPickWidget(let kind): .click(.tourArrangeWidget(kind))
         case .tourPutBack: .click(.tourPutBack)
+        case .tourSetMore(let item, _): .click(.tourMoreSwitch(item))
         case .designTab(let tab): .click(.designTab(tab))
         case .copySwatch(let position): .click(.designSwatch(position: position))
         case .toggleKeepPicking: .click(.designKeepPill)
         case .typeColor: .click(.designColorField)
         case .addTypedColor: .click(.designAddColor)
-        // A picker in Settings, the tour's closed page, a link's action or
-        // something the Mac sends: nothing on the screen to press.
+        // A picker in Settings, the tour's closed page, a link's action, a
+        // jump to a page or something the Mac sends: nothing on the screen
+        // to press.
         case .stopTimer, .setCalendarLook, .chooseRightSide, .chooseLeftSide, .setGlow,
-             .showChargingNotice, .showCalendarNotice, .openTour,
+             .showChargingNotice, .showCalendarNotice, .openTour, .tourGo,
              .applyTemplate, .undoTemplate:
             .none
         }

@@ -226,6 +226,7 @@ struct NookRecordPixels {
     static let states: [(String, NookRecordPhase)] = [
         ("idle", .idle),
         ("counting", .countdown(secondsLeft: 3)),
+        ("starting", .countdown(secondsLeft: 0)),
         ("recording", .recording(startedAt: Date().addingTimeInterval(-754), pausedTotal: 0)),
         ("paused", .paused(startedAt: someTime, pausedAt: someTime.addingTimeInterval(5), pausedTotal: 0)),
         ("saving", .saving),

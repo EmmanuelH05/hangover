@@ -344,7 +344,7 @@ struct OnboardingRecordStringsTests {
             "onboarding.nook.widget.record", "onboarding.widgets.record",
             "onboarding.features.try.recordOn", "onboarding.features.try.recordOn.note",
             "onboarding.feature.trayConvert",
-            "onboarding.tips.convertFiles.title", "onboarding.tips.convertFiles.text",
+            "onboarding.tips.dropFiles.title", "onboarding.tips.dropFiles.text",
             "onboarding.features.note", "onboarding.features.note.release",
             "onboarding.permissions.record.title", "onboarding.permissions.record.when", "onboarding.permissions.record.note",
             "onboarding.permissions.camera.when", "onboarding.permissions.camera.note",
@@ -415,53 +415,38 @@ struct OnboardingRecordStringsTests {
         #expect(saved.contains("Movies") && saved.contains("Hangover") && saved.contains("tray"))
     }
 
-    /// The tip has two blanks, the file and the list, in every language.
+    /// The tray tip names the Convert menu in every language, with no blank
+    /// to fill: a list of the choices made the card too tall.
     @Test(arguments: HangoverBrandTests.languages)
-    func theConvertTipHasTwoBlanks(language: String) throws {
+    func theTrayTipNamesConvertAndHasNoBlanks(language: String) throws {
         let table = try HangoverBrandTests.table(language)
-        let text = try #require(table["onboarding.tips.convertFiles.text"])
-        #expect(text.components(separatedBy: "%@").count == 3, "\(language) \(text)")
+        let text = try #require(table["onboarding.tips.dropFiles.text"])
+        let word = ["en": "Convert", "zh-Hans": "转换", "zh-Hant": "轉換"]
+        #expect(text.contains(try #require(word[language])), "\(language) \(text)")
+        #expect(!text.contains("%@"), "\(language) \(text)")
     }
 }
 
 // MARK: - The Convert tip and the Convert page
 
 struct OnboardingConvertTests {
-    @Test func theTipShowsTheChoicesTheRulesGiveAVideoAndNamesTheFile() {
+    @Test func everyTipReadsItsOwnString() {
         let lang = LanguageManager.shared
-        let text = OnboardingTip.convertFiles.text(openTrigger: .click, lang: lang)
-        let actions = NookConvertRules.actions(forFileNamed: "clip.mov")
-
-        #expect(OnboardingTip.convertExampleFile == "clip.mov")
-        #expect(OnboardingTip.convertExample == actions)
-        #expect(!actions.isEmpty)
-        #expect(text.contains("clip.mov"))
-        for action in actions {
-            #expect(text.contains(lang.t(action.titleKey)), "the tip leaves out \(action)")
-        }
-    }
-
-    @Test func theTipSeparatesTheChoicesWithAMiddleDotAndLeavesNoGarbledText() {
-        let text = OnboardingTip.convertFiles.text(openTrigger: .hover, lang: LanguageManager.shared)
-        #expect(text.contains(" \u{00B7} "))
-        #expect(!text.contains("\u{00C2}"), "a double-encoded character")
-    }
-
-    @Test func theOtherTipsReadTheirOwnString() {
-        let lang = LanguageManager.shared
-        for tip in OnboardingTip.allCases where tip != .convertFiles {
+        for tip in OnboardingTip.allCases {
             let key = "onboarding.tips.\(tip.keyName(openTrigger: .click)).text"
             #expect(tip.text(openTrigger: .click, lang: lang) == lang.t(key), "\(tip)")
         }
     }
 
     @Test func theTipIsAboutTheTrayAndShowsOnlyWhileTheTrayIsOnThePage() {
-        #expect(OnboardingTip.convertFiles.widget == .tray)
+        #expect(OnboardingTip.dropFiles.widget == .tray)
         let withTray = OnboardingTip.shown(agentsEnabled: false, widgets: [.tray])
         let without = OnboardingTip.shown(agentsEnabled: false, widgets: [.media])
-        #expect(withTray.contains(.convertFiles) && withTray.contains(.dropFiles))
-        #expect(!without.contains(.convertFiles))
-        #expect(withTray.firstIndex(of: .dropFiles).map { $0 + 1 } == withTray.firstIndex(of: .convertFiles), "the tray tips sit together")
+        #expect(withTray.contains(.dropFiles))
+        #expect(!without.contains(.dropFiles))
+        // One tip for the tray. A second one, for Convert alone, pushed a
+        // widget's tip off the page.
+        #expect(!OnboardingTip.allCases.map(\.rawValue).contains("convertFiles"))
     }
 
     @Test func theLongTourHasAConvertPageAndTheShortAndMainOnesDoNot() {

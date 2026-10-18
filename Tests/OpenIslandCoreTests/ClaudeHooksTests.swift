@@ -1065,3 +1065,67 @@ private func sendOnGCDThread(
         }
     }
 }
+
+// MARK: - Headless runs
+
+/// A permission request from a run with nobody at a terminal (`claude -p`
+/// under launchd) is not waited on: the hook answers nothing and the run's
+/// own permission mode decides. The rule reads the runtime context the hook
+/// gathers.
+struct ClaudeHookHeadlessTests {
+    private static let noLocator: @Sendable (String) -> (sessionID: String?, tty: String?, title: String?) = { _ in
+        (sessionID: nil, tty: nil, title: nil)
+    }
+
+    private static func payload(
+        _ event: ClaudeHookEventName = .permissionRequest,
+        environment: [String: String] = [:],
+        tty: String? = nil
+    ) -> ClaudeHookPayload {
+        ClaudeHookPayload(cwd: "/tmp/demo", hookEventName: event, sessionID: "s1")
+            .withRuntimeContext(
+                environment: environment,
+                currentTTYProvider: { tty },
+                terminalLocatorProvider: noLocator,
+                warpPaneResolver: { _ in nil }
+            )
+    }
+
+    @Test func aPrintOrSDKRunWithNoTTYIsHeadless() {
+        for entry in ["sdk-cli", "sdk-ts", "sdk-py"] {
+            #expect(Self.payload(environment: ["CLAUDE_CODE_ENTRYPOINT": entry]).runsHeadless, "\(entry)")
+        }
+        #expect(
+            Self.payload(.preToolUse, environment: ["CLAUDE_CODE_ENTRYPOINT": "sdk-cli"]).runsHeadless,
+            "the rule is about the run, not the event"
+        )
+    }
+
+    @Test func aPersonAtATerminalAnIDEOrTheDesktopAppIsNotHeadless() {
+        #expect(
+            !Self.payload(environment: ["CLAUDE_CODE_ENTRYPOINT": "cli"]).runsHeadless,
+            "an interactive run whose TTY was not found is still a person"
+        )
+        #expect(
+            !Self.payload(environment: ["CLAUDE_CODE_ENTRYPOINT": "sdk-cli"], tty: "/dev/ttys003").runsHeadless,
+            "claude -p typed at a terminal: the island can be used"
+        )
+        #expect(!Self.payload(environment: ["CLAUDE_CODE_ENTRYPOINT": "claude-vscode"]).runsHeadless)
+        #expect(!Self.payload(environment: ["CLAUDE_CODE_ENTRYPOINT": "claude-desktop"]).runsHeadless)
+        #expect(!Self.payload(environment: ["CLAUDE_CODE_ENTRYPOINT": "local-agent"]).runsHeadless)
+        #expect(!Self.payload(environment: ["TERM_PROGRAM": "ghostty"]).runsHeadless)
+        #expect(!Self.payload().runsHeadless, "no entrypoint named: another tool in Claude's format, which waits as before")
+    }
+
+    @Test func aRemoteSessionHasAPersonAtTheFarEnd() {
+        var remote = Self.payload(environment: ["CLAUDE_CODE_ENTRYPOINT": "sdk-cli"])
+        remote.remote = true
+        #expect(!remote.runsHeadless)
+    }
+
+    @Test func theEntrypointIsReadFromTheEnvironment() {
+        #expect(Self.payload(environment: ["CLAUDE_CODE_ENTRYPOINT": "sdk-cli"]).entrypoint == "sdk-cli")
+        #expect(Self.payload(environment: ["CLAUDE_CODE_ENTRYPOINT": ""]).entrypoint == nil)
+        #expect(Self.payload().entrypoint == nil)
+    }
+}

@@ -28,7 +28,9 @@ struct NookPhotoBoothSettings: View {
         let typed = booth.caption
         Section(lang.t("nook.photoBooth.settings.section")) {
             layoutChoices(booth)
+                .settingsAnchor(SettingsIndex.entry("nook.photoBooth.layout")!)
             themeChoices(booth)
+                .settingsAnchor(SettingsIndex.entry("nook.photoBooth.theme")!)
             TextField(
                 lang.t("nook.photoBooth.settings.caption"),
                 text: $booth.caption,
@@ -42,18 +44,22 @@ struct NookPhotoBoothSettings: View {
                     settledCaption = settled
                 }
             }
+            .settingsAnchor(SettingsIndex.entry("nook.photoBooth.caption")!)
             Picker(lang.t("nook.photoBooth.settings.countdown"), selection: $booth.countdown) {
                 ForEach(NookPhotoBoothPlan.countdownChoices, id: \.self) { seconds in
                     Text(lang.t("nook.photoBooth.settings.countdown.seconds", seconds)).tag(seconds)
                 }
             }
+            .settingsAnchor(SettingsIndex.entry("nook.photoBooth.countdown")!)
             Toggle(lang.t("nook.photoBooth.settings.sound"), isOn: $booth.playsSound)
+                .settingsAnchor(SettingsIndex.entry("nook.photoBooth.sound")!)
             LabeledContent(lang.t("nook.photoBooth.settings.folder")) {
                 Text((booth.folderURL.path as NSString).abbreviatingWithTildeInPath)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
+            .settingsAnchor(SettingsIndex.entry("nook.photoBooth.folder")!)
             HStack {
                 Button(lang.t("nook.photoBooth.settings.folder.choose")) { booth.chooseFolder() }
                 Button(lang.t("nook.photoBooth.settings.folder.default")) { booth.useDefaultFolder() }

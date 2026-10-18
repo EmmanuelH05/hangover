@@ -26,7 +26,7 @@ struct NookTodoCard: View {
     private static let maxHeaderNameLength = 24
     private static let fadeDuration: Duration = .milliseconds(250)
 
-    @Environment(\.nookWidgetSize) private var size
+    @Environment(\.nookWidgetSize) var size
 
     @State var draft = ""
     /// Medium and large: the day picked for the next task, if any (D69).
@@ -46,14 +46,28 @@ struct NookTodoCard: View {
     /// value at save time means someone else edited the task.
     @State private var notesBase: String?
 
+    /// The source a typed task goes to (B7). With one app on it is the
+    /// card's only source.
     private var source: any NookTodoSource { nook.todo.source(reminders: nook.reminders) }
+
+    /// Two or more apps are on: sections, dots and the add chip (T12).
+    var isGrouped: Bool { nook.todo.hasManyEnabled }
+
+    /// The source that holds a task, for the notes page. With several apps
+    /// on it is the one the task came from, not the add target.
+    private func notesSource(holding id: String?) -> any NookTodoSource {
+        let add = source
+        guard isGrouped, let id, let held = nook.todo.source(holding: id, reminders: nook.reminders) else { return add }
+        return held
+    }
 
     var body: some View {
         let source = source
-        let openItem = Self.openItem(openItemID, in: source)
+        let notesSource = notesSource(holding: openItemID)
+        let openItem = Self.openItem(openItemID, in: notesSource)
         VStack(alignment: .leading, spacing: 6) {
             if let openItem {
-                detail(openItem, source: source)
+                detail(openItem, source: notesSource)
             } else {
                 list(source)
             }
@@ -65,7 +79,11 @@ struct NookTodoCard: View {
         // Picks up access granted in System Settings while the island was
         // closed, and reloads a remote source when the island opens.
         .onAppear {
-            source.refresh()
+            if isGrouped {
+                for section in nook.todo.sections(reminders: nook.reminders) { section.source.refresh() }
+            } else {
+                source.refresh()
+            }
             // Reminders access is asked for here, the first time the tile
             // is in the user's view, and not at launch.
             nook.widgetsCameIntoView()
@@ -78,14 +96,14 @@ struct NookTodoCard: View {
             nook.todo.isPickingDate = false
         }
         .onChange(of: size) { _, _ in isAdding = false }
-        .task(id: nook.todo.selectedKind) { await autoRefresh() }
+        .task(id: nook.todo.enabledKinds) { await autoRefresh() }
         .onChange(of: nook.todo.selectedKind) { old, new in
             leaveNotesPage()
             // A day picked for one source is not carried to another (D3).
             dueDraft = NookTodoAdding.pickedDay(dueDraft, afterSourceChangedFrom: old, to: new)
         }
         .onChange(of: openItem?.notes) { old, new in
-            followRemoteNotes(from: old, to: new, source: source)
+            followRemoteNotes(from: old, to: new, source: notesSource)
         }
         .onChange(of: openItem == nil) { _, isGone in
             // The task was completed or removed elsewhere: back to the list.
@@ -134,7 +152,7 @@ struct NookTodoCard: View {
     /// the list. A failed write hands its text back the same way.
     private func saveNotes(overwritingRemoteChanges: Bool) {
         guard let id = openItemID else { return }
-        let source = source
+        let source = notesSource(holding: id)
         let hub = nook.todo
         guard let item = Self.openItem(id, in: source) else {
             if notesDraft != (notesBase ?? "") { hub.noteDrafts[id] = notesDraft }
@@ -201,7 +219,9 @@ struct NookTodoCard: View {
 
     @ViewBuilder
     private func list(_ source: any NookTodoSource) -> some View {
-        if size == .small {
+        if isGrouped {
+            groupedList(nook.todo.sections(reminders: nook.reminders))
+        } else if size == .small {
             smallList(source)
         } else {
             NookCardHeader(title: "Todo", systemImage: "checklist", trailing: Self.headerTrailing(source))
@@ -284,9 +304,17 @@ struct NookTodoCard: View {
             .tint(accent.controlTint)
             .font(.system(size: 12))
             .foregroundStyle(.white.opacity(0.85))
-            .padding(.horizontal, 8)
+            .padding(.leading, 8)
+            // Room for the chip, which names the app a typed task goes to.
+            .padding(.trailing, isGrouped ? Self.chipRoom : 8)
             .padding(.vertical, 4)
             .background(RoundedRectangle(cornerRadius: 6).fill(.white.opacity(0.08)))
+            .overlay(alignment: .trailing) {
+                if isGrouped {
+                    NookTodoAddChip(hub: nook.todo)
+                        .padding(.trailing, 4)
+                }
+            }
             .disabled(!source.canAdd)
             .onChange(of: draft) { _, text in nook.setDraft(.todo, isUnsaved: NookDraft.isUnsaved(text) || isPickingDate) }
             .onDisappear { nook.setDraft(.todo, isUnsaved: false) }
@@ -324,14 +352,19 @@ struct NookTodoCard: View {
 
     /// Repeats while the card is on screen, for sources that need polling.
     private func autoRefresh() async {
-        guard let interval = source.autoRefreshInterval else { return }
+        // With several apps on, every one that polls is asked on the
+        // shortest interval; each service spaces its own refreshes.
+        let polling = nook.todo.sections(reminders: nook.reminders)
+            .map(\.source)
+            .filter { $0.autoRefreshInterval != nil }
+        guard let interval = polling.compactMap(\.autoRefreshInterval).min() else { return }
         while !Task.isCancelled {
             do {
                 try await Task.sleep(for: interval)
             } catch {
                 return
             }
-            source.refreshOnTimer()
+            for source in polling { source.refreshOnTimer() }
         }
     }
 
@@ -346,7 +379,9 @@ struct NookTodoCard: View {
 
     /// One task. The small size passes `showsDue: false` when the label
     /// would not fit beside the title.
-    func row(_ item: NookTodoItem, source: any NookTodoSource, showsDue: Bool = true) -> some View {
+    func row(
+        _ item: NookTodoItem, source: any NookTodoSource, showsDue: Bool = true, position: Int? = nil
+    ) -> some View {
         let isFading = fading.contains(item.id)
         return HStack(spacing: 8) {
             Button {
@@ -361,7 +396,7 @@ struct NookTodoCard: View {
             }
             .buttonStyle(.plain)
             .disabled(!source.canComplete)
-            .demoTarget(.todoCheck(position: source.items.firstIndex { $0.id == item.id } ?? -1))
+            .demoTarget(.todoCheck(position: position ?? source.items.firstIndex { $0.id == item.id } ?? -1))
             // Everything right of the circle opens the task's notes page.
             Button {
                 open(item)

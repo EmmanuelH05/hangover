@@ -255,7 +255,7 @@ struct DemoCalendarTests {
 
         fixture.nook.calendar.checkNextUp(now: event.start.addingTimeInterval(-9.5 * 60))
 
-        #expect(fixture.nook.transient?.text.hasSuffix("in 10 min") == true)
+        #expect(fixture.nook.transient?.text == "10 min", "the slot holds the time, not a cut title")
         #expect(fixture.nook.transient?.symbol == "video.fill", "the event has a join link")
     }
 }

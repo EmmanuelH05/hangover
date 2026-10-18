@@ -1,0 +1,29 @@
+{
+  "releases": [
+    {
+      "version": "1.0.14",
+      "items": [
+        {
+          "title": "Updates ask first",
+          "detail": "The island asks before it installs.",
+          "symbol": "arrow.down.circle"
+        },
+        {
+          "title": "To-dos from all your apps",
+          "detail": "Asana, monday and Canvas join the list.",
+          "symbol": "checklist"
+        },
+        {
+          "title": "Search in Settings",
+          "detail": "Command-F finds any setting.",
+          "symbol": "magnifyingglass"
+        },
+        {
+          "title": "Send feedback from the app",
+          "detail": "Write to me from Settings, About.",
+          "symbol": "envelope"
+        }
+      ]
+    }
+  ]
+}

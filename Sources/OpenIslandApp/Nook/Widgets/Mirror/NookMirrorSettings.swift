@@ -9,20 +9,22 @@ struct NookMirrorSettings: View {
 
     var body: some View {
         Section("Mirror") {
-            Picker("Camera", selection: $deviceID) {
+            Picker(LanguageManager.shared.t("nook.mirror.settings.camera"), selection: $deviceID) {
                 Text("Default").tag("")
                 ForEach(devices) { device in
                     Text(device.name).tag(device.id)
                 }
             }
+            .settingsAnchor(SettingsIndex.entry("nook.mirror.camera")!)
             NookRingLightTintRow()
-            Text("The camera stays off until you click the Mirror widget. The mirror then shows above your widgets and holds the island open until you turn it off or close the island. The bulb on the mirror lights the edge of your screen like a vanity mirror.")
+            Text(LanguageManager.shared.t("nook.mirror.settings.note"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Button(LanguageManager.shared.t("nook.mirror.decorations.settings.clear"), role: .destructive) {
                 nook.clearMirrorDecorations()
             }
             .disabled(nook.mirrorDecorations.isEmpty)
+            .settingsAnchor(SettingsIndex.entry("nook.mirror.clearDecorations")!)
         }
         .onAppear { devices = NookMirrorDevices.available() }
     }

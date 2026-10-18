@@ -26,18 +26,21 @@ struct NookRecordSettings: View {
                 get: { record.options.includeIsland },
                 set: { record.options.includeIsland = $0 }
             ))
+            .settingsAnchor(SettingsIndex.entry("nook.record.includeIsland")!)
             Text(lang.t("nook.record.settings.includeIsland.note"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             shortcutRow(record.hotkey)
+                .settingsAnchor(SettingsIndex.entry("nook.record.hotkey")!)
             Text(lang.t("nook.record.settings.hotkey.note"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Button(lang.t("nook.record.settings.openFolder")) { openFolder() }
+                .settingsAnchor(SettingsIndex.entry("nook.record.openFolder")!)
             Text(lang.t("nook.record.settings.folder.note"))
                 .font(.caption)
                 .foregroundStyle(.secondary)

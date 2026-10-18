@@ -306,9 +306,12 @@ final class NookCalendarService {
                 guard firedKeys.insert(key).inserted else { continue }
                 nook.showTransient(
                     // A camera says this one can be joined: open the island
-                    // and the Join bar is at the top.
+                    // and the Join bar is at the top. The closed island's
+                    // trailing slot holds about six characters, which is the
+                    // time and not the title: a title in it came out cut
+                    // ("Standu…"). The opened island names the event.
                     symbol: event.meetingURL == nil ? "calendar" : "video.fill",
-                    text: "\(Self.shortTitle(event.title)) in \(minutes) min",
+                    text: Self.nextUpText(minutes: minutes),
                     tint: event.calendarColor,
                     duration: .seconds(6)
                 )
@@ -340,8 +343,9 @@ final class NookCalendarService {
         )
     }
 
-    /// Keep closed-notch text short (about 18 characters in total).
-    private static func shortTitle(_ title: String) -> String {
-        title.count > 8 ? String(title.prefix(7)) + "…" : title
+    /// The next-up notice's text: "10 min", "2 min". Short enough for the
+    /// closed island's trailing slot in every layout.
+    static func nextUpText(minutes: Int) -> String {
+        "\(minutes) min"
     }
 }

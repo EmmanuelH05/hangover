@@ -31,13 +31,10 @@ enum NookWidgetKind: String, CaseIterable, Codable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .media: "Now playing"
-        case .calendar: "Calendar"
-        case .todo: "Todo"
-        case .notes: "Notes"
-        case .tray: "File tray"
-        case .timer: "Focus timer"
-        case .mirror: "Mirror"
+        // The same keys the settings search reads (D84), which keeps a
+        // switch and its search words in one language.
+        case .media, .calendar, .todo, .notes, .tray, .timer, .mirror:
+            LanguageManager.shared.t("settings.nook.widget.\(rawValue)")
         case .weather: LanguageManager.shared.t("nook.weather.title")
         case .design: LanguageManager.shared.t("nook.design.title")
         case .linkAudio: LanguageManager.shared.t("nook.linkAudio.title")
@@ -734,7 +731,11 @@ final class NookModel {
 
     /// What the closed island shows on a display with these preferences.
     /// `isHidden` keeps only the notices (D46).
-    func closedActivity(for preferences: NookDisplayPreferences, isHidden: Bool = false) -> NookClosedActivity? {
+    func closedActivity(
+        for preferences: NookDisplayPreferences,
+        isHidden: Bool = false,
+        ask: NookClosedActivity? = nil
+    ) -> NookClosedActivity? {
         .resolve(
             transient: transient,
             timerText: timer.closedText,
@@ -745,7 +746,8 @@ final class NookModel {
             media: closedMediaActivity,
             preferences: preferences,
             isHidden: isHidden,
-            recording: record.closedRecording(now: Date())
+            recording: record.closedRecording(now: Date()),
+            ask: ask
         )
     }
 
@@ -775,12 +777,13 @@ final class NookModel {
         tint: Color = .white,
         level: Int? = nil,
         duration: Duration = .seconds(4),
-        pops: Bool = true
+        pops: Bool = true,
+        spins: Bool = false
     ) -> Int {
         transientTask?.cancel()
         transientSerial += 1
         let serial = transientSerial
-        transient = NookTransientActivity(symbol: symbol, text: text, tint: tint, level: level)
+        transient = NookTransientActivity(symbol: symbol, text: text, tint: tint, level: level, spins: spins)
         if pops { onTransient?() }
         transientTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: duration)
@@ -866,10 +869,15 @@ final class NookModel {
         if meetingPrompt?.id == event.id { meetingPrompt = nil }
     }
 
+    /// The open tasks of every app that is on, merged (B10).
+    var todoItems: [NookTodoItem] { todo.items(reminders: reminders) }
+
+    var hasTodoItems: Bool { !todoItems.isEmpty }
+
     /// Open tasks due on a day, for the styles that mark tasks on dates.
     func tasksDue(on day: Date) -> [NookTodoItem] {
         let cal = Calendar.current
-        return todo.source(reminders: reminders).items.filter { item in
+        return todoItems.filter { item in
             guard !item.isCompleted, let due = item.dueDate else { return false }
             return cal.isDate(due, inSameDayAs: day)
         }

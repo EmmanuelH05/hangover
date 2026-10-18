@@ -152,3 +152,32 @@ private func jsonObject(from data: Data) throws -> [String: Any] {
     let object = try JSONSerialization.jsonObject(with: data)
     return object as? [String: Any] ?? [:]
 }
+
+// MARK: - Headless runs
+
+struct CodexHookHeadlessTests {
+    private static func payload(environment: [String: String] = [:], tty: String? = nil) -> CodexHookPayload {
+        CodexHookPayload(
+            cwd: "/Users/u/demo",
+            hookEventName: .permissionRequest,
+            model: "gpt-5.4",
+            permissionMode: .default,
+            sessionID: "s1",
+            transcriptPath: nil
+        ).withRuntimeContext(
+            environment: environment,
+            currentTTYProvider: { tty },
+            terminalLocatorProvider: { _ in (sessionID: nil, tty: nil, title: nil) },
+            warpPaneResolver: { _ in nil }
+        )
+    }
+
+    /// `codex exec` under launchd has no terminal and no TTY; a terminal, a
+    /// TTY or Codex.app itself is a person who can approve.
+    @Test func aRunWithNoTerminalAndNoTTYIsHeadlessAndTheOthersAreNot() {
+        #expect(Self.payload().runsHeadless)
+        #expect(!Self.payload(environment: ["TERM_PROGRAM": "ghostty"]).runsHeadless)
+        #expect(!Self.payload(tty: "/dev/ttys003").runsHeadless)
+        #expect(!Self.payload(environment: ["__CFBundleIdentifier": "com.openai.codex"]).runsHeadless)
+    }
+}

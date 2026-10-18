@@ -49,6 +49,9 @@ extension AppModel {
         }
         refreshAgentHotkeyArming(hasWaitingSession: !waitingSessions.isEmpty)
         refreshAgentHotkeyCard()
+        // A request that came or went changes whether the island may ask
+        // about an update (K7).
+        updateFlow.reconsider()
 
         // Written back only when something changed, which keeps views that
         // read them from redrawing on every event.
@@ -95,7 +98,11 @@ extension AppModel {
     /// show: the same list a press reads. `hasWaitingSession` false skips
     /// building that list, which is the usual case.
     func refreshAgentHotkeyArming(hasWaitingSession: Bool) {
-        agentHotkeys.setArmed(agentsEnabled && hasWaitingSession && !agentHotkeyWaiting().isEmpty)
+        // The update's ask holds the keys too (D82); it never shows while
+        // a request waits, so a press has one thing to answer.
+        agentHotkeys.setArmed(
+            (agentsEnabled && hasWaitingSession && !agentHotkeyWaiting().isEmpty) || updateFlow.isAsking
+        )
     }
 
     /// The requests a press can decide or show: waiting, in the island's
@@ -156,6 +163,17 @@ extension AppModel {
     /// where to approve, and no notice is shown: notices live on the closed
     /// island, and this card is open.
     func handleAgentHotkey(_ action: AgentHotkeyAction, now: Date = .now) {
+        // A recording or the mirror may have started since the last look;
+        // the ask comes down first, and the press then finds no ask.
+        updateFlow.reconsider(now: now)
+        if updateFlow.isAsking {
+            // The ask is up, which means no request is (K7).
+            switch action {
+            case .approve: updateFlow.answerInstall(now: now)
+            case .deny: updateFlow.answerLater(now: now)
+            }
+            return
+        }
         guard agentsEnabled else { return }
         // A change of card the app did not see happen starts its time now.
         refreshAgentHotkeyCard(now: now)

@@ -76,6 +76,7 @@ private struct GlowColorsEditor: View, Equatable {
                     set: { isOn in update(animated: true) { $0.usesSingleColor = isOn } }
                 )
             )
+            .settingsAnchor(SettingsIndex.entry("appearance.glow.single")!)
 
             if colors.usesSingleColor {
                 singleColorRow
@@ -88,6 +89,7 @@ private struct GlowColorsEditor: View, Equatable {
             }
             .disabled(colors == .standard)
             .opacity(colors == .standard ? 0.45 : 1)
+            .settingsAnchor(SettingsIndex.entry("appearance.glow.reset")!)
         }
         .allowsHitTesting(isGlowOn)
         .disabled(!isGlowOn)
@@ -167,6 +169,7 @@ private struct GlowColorsEditor: View, Equatable {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
+        .modifier(MomentAnchor(moment: moment))
     }
 
     /// A notice that keeps the color it comes with, or music that takes the
@@ -261,6 +264,24 @@ struct GlowThemeSwatches: View {
                     .overlay(Circle().strokeBorder(Color.black.opacity(0.55), lineWidth: 1))
                     .shadow(color: color.color.opacity(0.55), radius: 4)
             }
+        }
+    }
+}
+
+/// Anchors one moment's row. Each id is written out whole, because the
+/// index test finds anchors by reading the source for the literal id.
+private struct MomentAnchor: ViewModifier {
+    let moment: IslandHaloMoment
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        switch moment {
+        case .approval: content.settingsAnchor(SettingsIndex.entry("appearance.glow.status")!)
+        case .question: content.settingsAnchor(SettingsIndex.entry("appearance.glow.question")!)
+        case .completed: content.settingsAnchor(SettingsIndex.entry("appearance.glow.completed")!)
+        case .running: content.settingsAnchor(SettingsIndex.entry("appearance.glow.running")!)
+        case .notice: content.settingsAnchor(SettingsIndex.entry("appearance.glow.notice")!)
+        case .music: content.settingsAnchor(SettingsIndex.entry("appearance.glow.music")!)
         }
     }
 }

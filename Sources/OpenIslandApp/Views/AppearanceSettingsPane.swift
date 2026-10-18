@@ -30,8 +30,11 @@ struct AppearanceSettingsPane: View {
     var showsAgents: Bool { model.agentsEnabled }
 
     var body: some View {
-        ScrollView {
-            contentColumn
+        ScrollViewReader { proxy in
+            ScrollView {
+                contentColumn
+            }
+            .settingsScrollsToJump(proxy)
         }
         .background(Color(red: 0.055, green: 0.055, blue: 0.06))
         .navigationTitle(lang.t("settings.tab.appearance"))
@@ -77,6 +80,7 @@ struct AppearanceSettingsPane: View {
             withMotion(Motion.morph) { model.appearanceSettingsProfile = profile }
         }
         .equatable()
+        .settingsAnchor(SettingsIndex.entry("appearance.profile")!)
     }
 
     // MARK: - Notch part
@@ -188,6 +192,7 @@ struct AppearanceSettingsPane: View {
             }
         )
         .equatable()
+        .settingsAnchor(SettingsIndex.entry("appearance.rightSlot")!)
     }
 
     // MARK: - 02 · Center label
@@ -217,6 +222,7 @@ struct AppearanceSettingsPane: View {
             }
         )
         .equatable()
+        .settingsAnchor(SettingsIndex.entry("appearance.centerLabel")!)
     }
 
     private static func centerLabelSample(for option: IslandCenterLabel) -> String {
@@ -244,6 +250,7 @@ struct AppearanceSettingsPane: View {
             icon: { UsageDisplayPreview(option: $0) }
         )
         .equatable()
+        .settingsAnchor(SettingsIndex.entry("appearance.usageDisplay")!)
     }
 
     // MARK: - 03 · Session state
@@ -265,6 +272,7 @@ struct AppearanceSettingsPane: View {
             icon: { StateIndicatorPreview(option: $0) }
         )
         .equatable()
+        .settingsAnchor(SettingsIndex.entry("appearance.stateIndicator")!)
     }
 
     // MARK: - 04 · Session grouping
@@ -284,6 +292,7 @@ struct AppearanceSettingsPane: View {
             icon: { SessionGroupPreview(option: $0) }
         )
         .equatable()
+        .settingsAnchor(SettingsIndex.entry("appearance.sessionGroup")!)
     }
 
     // MARK: - 05 · Session sorting
@@ -303,6 +312,7 @@ struct AppearanceSettingsPane: View {
             icon: { SessionSortPreview(option: $0) }
         )
         .equatable()
+        .settingsAnchor(SettingsIndex.entry("appearance.sessionSort")!)
     }
 
     // MARK: - 06 · Done timeout
@@ -327,6 +337,7 @@ struct AppearanceSettingsPane: View {
             }
         )
         .equatable()
+        .settingsAnchor(SettingsIndex.entry("appearance.staleThreshold")!)
     }
 
     // MARK: - Helpers

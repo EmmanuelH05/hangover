@@ -9,7 +9,8 @@ struct NookCalendarSettings: View {
     var body: some View {
         let service = nook.calendar
         Section("Calendar") {
-            Toggle("Next-up notices (10 and 2 minutes before)", isOn: $nextUpEnabled)
+            Toggle(LanguageManager.shared.t("nook.calendar.settings.nextUp"), isOn: $nextUpEnabled)
+                .settingsAnchor(SettingsIndex.entry("nook.calendar.nextUp")!)
 
             HStack {
                 Text(statusText(service.authorization))

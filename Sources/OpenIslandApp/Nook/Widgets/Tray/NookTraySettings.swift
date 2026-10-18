@@ -10,13 +10,16 @@ struct NookTraySettings: View {
         Section(lang.t("nook.tray.settings.section")) {
             LabeledContent(lang.t("nook.tray.settings.count"), value: "\(nook.tray.items.count)")
             Button(lang.t("nook.tray.settings.revealFolder")) { nook.tray.revealFolder() }
+                .settingsAnchor(SettingsIndex.entry("nook.tray.revealFolder")!)
             Button(lang.t("nook.tray.settings.clear"), role: .destructive) { nook.tray.clear() }
                 .disabled(nook.tray.items.isEmpty)
+                .settingsAnchor(SettingsIndex.entry("nook.tray.clear")!)
 
             Toggle(lang.t("nook.tray.settings.clipboard"), isOn: Binding(
                 get: { clipboard.isEnabled },
                 set: { clipboard.setEnabled($0) }
             ))
+            .settingsAnchor(SettingsIndex.entry("nook.tray.clipboard")!)
             Text(lang.t("nook.tray.settings.clipboard.note"))
                 .font(.caption)
                 .foregroundStyle(.secondary)

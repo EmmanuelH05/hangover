@@ -6,7 +6,7 @@ import Foundation
 /// pause holds the drawn pointer's glide to the control, which ends the
 /// pause with the click.
 enum DemoScripts {
-    static let all = [tour, use, closed, looks, kit]
+    static let all = [tour, use, closed, looks, kit, check]
 
     static let names = all.map(\.name)
 
@@ -178,6 +178,50 @@ enum DemoScripts {
 }
 
 extension DemoScripts {
+    // MARK: check
+
+    /// A walk past what the 2026-10-18 UX fixes changed, for a look at a
+    /// recording instead of a hand on each control: the vivid glow and the
+    /// next-up notice on the closed island, shuffle and repeat on the music
+    /// card, the size chips in edit mode, and the tour's tips, to-dos, power
+    /// and volume pages with their switches flipped. It presses nothing that
+    /// asks macOS for anything, and the real players are never sent an Apple
+    /// Event: the sample player answers the two buttons.
+    static let check = DemoScript(
+        name: "check",
+        startsPlaying: true,
+        steps: [
+            // The closed island: vivid with the music, then "10 min".
+            DemoStep(2.0, .closeIsland),
+            DemoStep(2.0, .setGlow(.vivid)),
+            DemoStep(3.0, .showCalendarNotice),
+            // The music card's two mode buttons.
+            DemoStep(6.5, .openIsland),
+            DemoStep(2.0, .toggleShuffle),
+            DemoStep(2.0, .cycleRepeat),
+            DemoStep(2.0, .cycleRepeat),
+            // Edit mode: the chips at the bottom left, across from the grip.
+            DemoStep(2.0, .beginEditing),
+            DemoStep(2.5, .resizeWidget(.calendar, .large)),
+            DemoStep(2.5, .endEditing),
+            DemoStep(1.5, .closeIsland),
+            // The tour: the pages the fixes touched, one jump each.
+            DemoStep(2.0, .openTour),
+            DemoStep(2.0, .tourNext),
+            DemoStep(1.5, .tourChooseLength(.medium)),
+            DemoStep(1.5, .tourGo(.tips)),
+            DemoStep(4.0, .tourGo(.todos)),
+            DemoStep(4.0, .tourGo(.power)),
+            DemoStep(2.0, .tourSetMore(.powerNotices, isOn: false)),
+            DemoStep(2.0, .tourSetMore(.powerNotices, isOn: true)),
+            DemoStep(2.0, .tourGo(.volume)),
+            DemoStep(2.0, .tourSetMore(.volumeNotice, isOn: false)),
+            DemoStep(2.0, .tourSetMore(.volumeNotice, isOn: true)),
+            DemoStep(3.0, .tourGo(.done)),
+            DemoStep(2.5, .tourNext),
+        ]
+    )
+
     // MARK: kit
 
     /// The design kit (D53, D65), on the demo's own sample palettes and

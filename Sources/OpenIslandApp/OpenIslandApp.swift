@@ -231,6 +231,13 @@ struct OpenIslandApp: App {
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
+            CommandGroup(after: .appSettings) {
+                Button(LanguageManager.shared.t("feedback.menu")) {
+                    openWindow(id: "settings")
+                    appDelegate.model.showSettings()
+                    appDelegate.model.feedback.present(kind: .bug, text: "")
+                }
+            }
         }
     }
 }

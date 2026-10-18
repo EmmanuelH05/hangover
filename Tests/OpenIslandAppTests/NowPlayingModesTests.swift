@@ -93,7 +93,7 @@ import Testing
         await Self.settle(service)
         #expect(scripted.ran.count == 1)
         #expect(scripted.ran[0].contains("tell application id \"com.spotify.client\""))
-        #expect(scripted.ran[0].contains("set shuffling to not shuffling"))
+        #expect(scripted.ran[0].contains("set shuffling to not wasShuffling"))
         #expect(service.shuffle == .tracks)
         #expect(service.repeating == .off)
         #expect(scripts.hasAsked(.spotify))
@@ -101,7 +101,7 @@ import Testing
 
         service.cycleRepeat()
         await Self.settle(service)
-        #expect(scripted.ran[1].contains("set repeating to not repeating"))
+        #expect(scripted.ran[1].contains("set repeating to true"), "the first press told it repeat was off")
         #expect(service.repeating == .playlist)
 
         service.apply(Self.state("com.spotify.client", title: "Next song"))
@@ -162,8 +162,24 @@ import Testing
         await Self.settle(service)
         #expect(scripted.ran.count == 2)
         #expect(!scripted.ran[0].contains("to not"))
-        #expect(scripted.ran[1].contains("set shuffling to not shuffling"))
+        #expect(scripted.ran[1].contains("set shuffling to true"), "the read said shuffle was off")
         #expect(service.shuffle == .tracks)
+    }
+
+    /// With the player's last report in hand, a press sets the value outright
+    /// and reads nothing first: a read inside Spotify's stale second after a
+    /// set would send a quick second press the wrong way.
+    @Test func aPressWithTheLastReportKnownSetsTheValueOutright() {
+        let known = NookPlayerModes(shuffle: .tracks, repeating: .off)
+        let shuffle = NookScriptedPlayer.spotify.script(.toggleShuffle, knowing: known)
+        #expect(shuffle.contains("set shuffling to false") && !shuffle.contains("wasShuffling"))
+        #expect(shuffle.contains("return \"false\" & \",\" & r"))
+        let repeatOn = NookScriptedPlayer.spotify.script(.cycleRepeat, knowing: known)
+        #expect(repeatOn.contains("set repeating to true") && repeatOn.contains(",all,"))
+        let music = NookScriptedPlayer.music.script(.cycleRepeat, knowing: NookPlayerModes(shuffle: .off, repeating: .playlist))
+        #expect(music.contains("set song repeat to one") && music.contains(",one,true"))
+        // Nothing known yet: the script reads first.
+        #expect(NookScriptedPlayer.spotify.script(.toggleShuffle).contains("set wasShuffling to shuffling"))
     }
 
     @Test func aPlayerThatNeverAnsweredIsNotReadAgain() async {
@@ -208,7 +224,7 @@ import Testing
                 let script = player.script(action)
                 #expect(script.hasPrefix("if application id \"\(player.rawValue)\" is running then\ntell application id \"\(player.rawValue)\"\n"))
                 #expect(script.hasSuffix("\nend tell\nelse\nerror \"not running\"\nend if"))
-                #expect(script.contains("return ("))
+                #expect(script.contains("\nreturn "), "the script ends by saying where the player stands")
             }
         }
         #expect(!NookScriptedPlayer.spotify.script(.read).contains("to not"))
@@ -255,8 +271,11 @@ import Testing
     /// The card at its three sizes with shuffle on and one song on repeat.
     /// Set `OPEN_ISLAND_RENDER_SNAPSHOTS=1` to write the PNGs to
     /// `output/render/music/`. Nothing here shows a window.
-    @Test func theButtonsAreParkedInEveryBuild() {
-        #expect(!NookModeButtonsOffer.isOffered)
+    @Test func theButtonsAreOfferedInTheDevCopyOnly() {
+        #expect(NookModeButtonsOffer.isOffered(bundleID: NookLinkAudioOffer.devBundleID))
+        #expect(!NookModeButtonsOffer.isOffered(bundleID: "com.emmanuelhernandez.hangover"))
+        #expect(!NookModeButtonsOffer.isOffered(bundleID: "app.openisland"))
+        #expect(NookModeButtonsOffer.$override.withValue(false) { !NookModeButtonsOffer.isOffered })
         #expect(NookModeButtonsOffer.$override.withValue(true) { NookModeButtonsOffer.isOffered })
     }
 

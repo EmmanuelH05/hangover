@@ -88,7 +88,10 @@ final class DemoSession {
                 tickTick: NookTickTickTodoService(
                     defaults: defaults, tokenStore: DemoTokenStore(),
                     cache: TickTickTodoCache(directory: folder.appendingPathComponent("TickTickCache", isDirectory: true))
-                )
+                ),
+                asana: NookAsanaTodoService(defaults: defaults, tokenStore: DemoTokenStore()),
+                monday: NookMondayTodoService(defaults: defaults, tokenStore: DemoTokenStore()),
+                canvas: NookCanvasTodoService(defaults: defaults, tokenStore: DemoTokenStore())
             ),
             media: MediaRemoteService(sample: player),
             notes: DemoNotes.makeStore(defaults: defaults, root: folder, notesFolder: notesFolder, now: now),

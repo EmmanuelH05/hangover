@@ -26,6 +26,8 @@ struct OnboardingTodoConnector {
         case .reminders: remindersSetup()
         case .notion: notionSetup()
         case .tickTick: tickTickSetup()
+        // Set up in Settings, not the tour (D83).
+        case .asana, .monday, .canvas: OnboardingTodoSetup()
         }
     }
 
@@ -96,7 +98,7 @@ struct OnboardingTodoConnector {
     /// makes the same call.
     func connect(token: String) async {
         switch hub.selectedKind {
-        case .reminders: break
+        case .reminders, .asana, .monday, .canvas: break
         case .notion: await hub.notion.connect(token: token)
         case .tickTick: await hub.tickTick.connect(token: token)
         }
@@ -105,7 +107,7 @@ struct OnboardingTodoConnector {
     /// Loads the databases or the lists again.
     func checkAgain() async {
         switch hub.selectedKind {
-        case .reminders: break
+        case .reminders, .asana, .monday, .canvas: break
         case .notion: await hub.notion.loadDatabases()
         case .tickTick: await hub.tickTick.loadLists()
         }
@@ -114,7 +116,7 @@ struct OnboardingTodoConnector {
     /// Picks the database or the list, which loads its tasks.
     func choose(_ id: String) async {
         switch hub.selectedKind {
-        case .reminders: break
+        case .reminders, .asana, .monday, .canvas: break
         case .notion: await hub.notion.selectDatabase(id)
         case .tickTick: await hub.tickTick.selectList(id)
         }

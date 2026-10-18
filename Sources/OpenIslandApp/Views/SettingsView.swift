@@ -122,8 +122,24 @@ struct SettingsView: View {
     @State private var selectedTab: SettingsTab = .general
     /// Set each time the Nook tab is asked to show its to-do section.
     @State private var nookTodoRequest: UUID?
+    /// The sidebar field's query, selection and jump (F3, F4).
+    @State private var search = SettingsSearchState()
+    @FocusState private var searchFocused: Bool
 
     private var lang: LanguageManager { model.lang }
+
+    private var searchGroups: [SettingsSearchGroup] {
+        SettingsSearch.results(
+            for: search.query,
+            entries: SettingsIndex.entries,
+            agentsEnabled: model.agentsEnabled,
+            lang: lang
+        )
+    }
+
+    private var showsSearchResults: Bool {
+        search.showsResults && !search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -155,6 +171,36 @@ struct SettingsView: View {
         // the Nook tab later must not scroll it again.
         .onChange(of: selectedTab) { _, tab in
             if tab != .nook { nookTodoRequest = nil }
+            // Picking a tab in the sidebar leaves the results for it.
+            search.showsResults = false
+        }
+        .onKeyPress(.downArrow) {
+            guard showsSearchResults else { return .ignored }
+            search.moveDown(groups: searchGroups)
+            return .handled
+        }
+        .onKeyPress(.upArrow) {
+            guard showsSearchResults else { return .ignored }
+            search.moveUp(groups: searchGroups)
+            return .handled
+        }
+        .onKeyPress(.return) {
+            guard showsSearchResults,
+                  let hit = SettingsSearchSelection.flat(searchGroups).first(where: { $0.id == search.selectedID })
+            else { return .ignored }
+            open(hit)
+            return .handled
+        }
+        .onKeyPress(.escape) {
+            guard !search.query.isEmpty || search.jump != nil else { return .ignored }
+            search.escape()
+            return .handled
+        }
+        .sheet(isPresented: Binding(
+            get: { model.feedback.isPresented },
+            set: { if !$0 { model.feedback.dismiss() } }
+        )) {
+            FeedbackSheet(presenter: model.feedback)
         }
         // A tab the agents switch hides gives way to General.
         .onChange(of: model.agentsEnabled) { _, isOn in
@@ -162,10 +208,59 @@ struct SettingsView: View {
         }
     }
 
+    /// Opening a hit shows its tab and starts the jump (F4).
+    private func open(_ hit: SettingsSearchHit) {
+        selectedTab = hit.entry.tab.landing(agentsEnabled: model.agentsEnabled)
+        search.open(hit, now: Date())
+    }
+
     // MARK: Sidebar
+
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField(lang.t("settings.search.placeholder"), text: Binding(
+                get: { search.query },
+                set: { newValue in
+                    var next = search
+                    next.queryChanged(newValue, groups: SettingsSearch.results(
+                        for: newValue,
+                        entries: SettingsIndex.entries,
+                        agentsEnabled: model.agentsEnabled,
+                        lang: lang
+                    ))
+                    search = next
+                }
+            ))
+            .textFieldStyle(.plain)
+            .focused($searchFocused)
+            // Command-F puts the cursor here.
+            .background {
+                Button("") { searchFocused = true }
+                    .keyboardShortcut("f", modifiers: .command)
+                    .opacity(0)
+                    .allowsHitTesting(false)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.07)))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.white.opacity(0.1), lineWidth: 1))
+        .padding(.horizontal, 10)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
+    }
 
     @ViewBuilder
     private var sidebar: some View {
+        VStack(spacing: 0) {
+            searchField
+            tabList
+        }
+    }
+
+    private var tabList: some View {
         List(selection: $selectedTab) {
             ForEach(SettingsSection.allCases, id: \.self) { section in
                 Section(section.header(lang)) {
@@ -189,6 +284,32 @@ struct SettingsView: View {
     @ViewBuilder
     private var detailView: some View {
         ZStack(alignment: .topTrailing) {
+            if showsSearchResults {
+                SettingsSearchResultsPane(
+                    query: search.query,
+                    groups: searchGroups,
+                    selectedID: search.selectedID,
+                    onOpen: { open($0) },
+                    onFeedback: { model.feedback.present(kind: .idea, text: $0) }
+                )
+            } else {
+                tabPane
+                    .environment(\.settingsJump, search.jump)
+            }
+
+            if model.updateChecker.hasUpdate, let version = model.updateChecker.latestVersion {
+                UpdateBanner(version: version, lang: lang) {
+                    model.updateChecker.checkForUpdates()
+                }
+                .padding(.top, 8)
+                .padding(.trailing, 16)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var tabPane: some View {
+        Group {
             switch selectedTab.landing(agentsEnabled: model.agentsEnabled) {
             case .general:
                 GeneralSettingsPane(model: model)
@@ -211,14 +332,6 @@ struct SettingsView: View {
             case .about:
                 AboutSettingsPane(model: model)
             }
-
-            if model.updateChecker.hasUpdate, let version = model.updateChecker.latestVersion {
-                UpdateBanner(version: version, lang: lang) {
-                    model.updateChecker.checkForUpdates()
-                }
-                .padding(.top, 8)
-                .padding(.trailing, 16)
-            }
         }
     }
 }
@@ -231,6 +344,7 @@ struct GeneralSettingsPane: View {
     private var lang: LanguageManager { model.lang }
 
     var body: some View {
+        ScrollViewReader { proxy in
         Form {
             // The agents switch (D41). It is first because it decides what
             // the rest of Settings has to offer.
@@ -240,6 +354,7 @@ struct GeneralSettingsPane: View {
                     set: { model.agentsEnabled = $0 }
                 ))
                 .accessibilityIdentifier("settings.general.agentsEnabled")
+                .settingsAnchor("general.agents")
                 Text(lang.t("settings.general.agents.note"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -251,6 +366,7 @@ struct GeneralSettingsPane: View {
                     get: { model.launchAtLoginEnabled },
                     set: { model.launchAtLoginEnabled = $0 }
                 ))
+                .settingsAnchor("general.launchAtLogin")
 
                 Picker(lang.t("settings.general.monitor"), selection: Binding(
                     get: { model.overlayDisplaySelectionID },
@@ -263,6 +379,7 @@ struct GeneralSettingsPane: View {
                             .disabled(!option.isAvailable)
                     }
                 }
+                .settingsAnchor("general.monitor")
             }
 
             Section(lang.t("settings.general.language")) {
@@ -275,6 +392,7 @@ struct GeneralSettingsPane: View {
                     Text(lang.t("settings.general.languageChinese")).tag(LanguageManager.AppLanguage.zhHans)
                     Text(lang.t("settings.general.languageTraditionalChinese")).tag(LanguageManager.AppLanguage.zhHant)
                 }
+                .settingsAnchor("general.language")
             }
 
             Section(lang.t("settings.general.behavior")) {
@@ -287,8 +405,10 @@ struct GeneralSettingsPane: View {
                 AgentHotkeySettingsSection(hotkeys: model.agentHotkeys, lang: lang)
             }
         }
+        .settingsScrollsToJump(proxy)
         .formStyle(.grouped)
         .navigationTitle(lang.t("settings.tab.general"))
+        }
     }
 
     @ViewBuilder
@@ -299,16 +419,19 @@ struct GeneralSettingsPane: View {
                 get: { model.keepNotchOpenUntilDecision },
                 set: { model.keepNotchOpenUntilDecision = $0 }
             ))
+            .settingsAnchor("general.keepOpenUntilDecision")
         case .showDockIcon:
             Toggle(lang.t("settings.general.showDockIcon"), isOn: Binding(
                 get: { model.showDockIcon },
                 set: { model.showDockIcon = $0 }
             ))
+            .settingsAnchor("general.showDockIcon")
         case .linksFromOtherApps:
             Toggle(lang.t("settings.general.linksFromOtherApps"), isOn: Binding(
                 get: { model.allowsLinksFromOtherApps },
                 set: { model.allowsLinksFromOtherApps = $0 }
             ))
+            .settingsAnchor("general.linksFromOtherApps")
             Text(lang.t("settings.general.linksFromOtherApps.note"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -318,6 +441,7 @@ struct GeneralSettingsPane: View {
                 get: { model.swipeGesturesEnabled },
                 set: { model.swipeGesturesEnabled = $0 }
             ))
+            .settingsAnchor("general.swipeGestures")
             Text(lang.t("onboarding.tips.swipeAway.text"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -331,6 +455,7 @@ struct GeneralSettingsPane: View {
                     Text(lang.t(trigger.titleKey)).tag(trigger)
                 }
             }
+            .settingsAnchor("general.openTrigger")
             VStack(alignment: .leading, spacing: 2) {
                 Text(lang.t(model.islandOpenTrigger.noteKey))
                 Text(lang.t(IslandOpenTrigger.filesNoteKey))
@@ -345,16 +470,19 @@ struct GeneralSettingsPane: View {
             ))
             // The haptic tap marks a hover-open, which click mode never does.
             .disabled(model.islandOpenTrigger == .click)
+            .settingsAnchor("general.hapticFeedback")
         case .completionReply:
             Toggle(lang.t("settings.general.completionReply"), isOn: Binding(
                 get: { model.completionReplyEnabled },
                 set: { model.completionReplyEnabled = $0 }
             ))
+            .settingsAnchor("general.completionReply")
         case .suppressFrontmostNotifications:
             Toggle(lang.t("settings.general.suppressFrontmostNotifications"), isOn: Binding(
                 get: { model.suppressFrontmostNotifications },
                 set: { model.suppressFrontmostNotifications = $0 }
             ))
+            .settingsAnchor("general.suppressFrontmostNotifications")
         }
     }
 }
@@ -393,6 +521,7 @@ struct DisplaySettingsPane: View {
     private var lang: LanguageManager { model.lang }
 
     var body: some View {
+        ScrollViewReader { proxy in
         Form {
             Section(lang.t("settings.display.monitor")) {
                 Picker(lang.t("settings.display.position"), selection: Binding(
@@ -406,6 +535,7 @@ struct DisplaySettingsPane: View {
                             .disabled(!option.isAvailable)
                     }
                 }
+                .settingsAnchor("display.position")
             }
 
             if let diag = model.overlayPlacementDiagnostics {
@@ -415,8 +545,10 @@ struct DisplaySettingsPane: View {
                 }
             }
         }
+        .settingsScrollsToJump(proxy)
         .formStyle(.grouped)
         .navigationTitle(lang.t("settings.tab.display"))
+        }
     }
 }
 
@@ -432,12 +564,14 @@ struct SoundSettingsPane: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
         Form {
             Section(lang.t("settings.sound.notifications")) {
                 Toggle(lang.t("settings.sound.mute"), isOn: Binding(
                     get: { model.isSoundMuted },
                     set: { _ in model.toggleSoundMuted() }
                 ))
+                .settingsAnchor("sound.mute")
             }
 
             // The picked sound is the one an agent's card plays. The Nook
@@ -463,11 +597,14 @@ struct SoundSettingsPane: View {
                         }
                         .buttonStyle(.plain)
                     }
+                    .settingsAnchor("sound.select")
                 }
             }
         }
+        .settingsScrollsToJump(proxy)
         .formStyle(.grouped)
         .navigationTitle(lang.t("settings.tab.sound"))
+        }
     }
 }
 
@@ -492,17 +629,17 @@ struct AboutSettingsPane: View {
                 Text(lang.t("app.description"))
                     .foregroundStyle(.secondary)
 
-                if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
-                    Text(lang.t("settings.about.version", version))
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
+                Text(lang.t("settings.about.version", AppBrand.currentVersion, AppBrand.currentBuild))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .accessibilityIdentifier("settings.about.version")
             }
             .padding(.top, 24)
             .padding(.bottom, 20)
 
             Divider()
 
+            ScrollViewReader { proxy in
             Form {
                 Section {
                     aboutActionRow(
@@ -516,12 +653,39 @@ struct AboutSettingsPane: View {
                     .disabled(!model.updateChecker.canCheckForUpdates)
                     .opacity(model.updateChecker.canCheckForUpdates ? 1 : 0.55)
                     .accessibilityIdentifier("settings.about.checkForUpdates")
+                    .settingsAnchor("about.checkForUpdates")
 
-                    Toggle(lang.t("settings.about.installAutomatically"), isOn: Binding(
-                        get: { model.updateChecker.installsAutomatically },
-                        set: { model.updateChecker.installsAutomatically = $0 }
-                    ))
-                    .disabled(!model.updateChecker.canCheckForUpdates)
+                    // The switch says what it does and what Off means, and
+                    // under it the downloaded version's state (K4, D82).
+                    VStack(alignment: .leading, spacing: 6) {
+                        Toggle(isOn: Binding(
+                            get: { model.updateChecker.installsAutomatically },
+                            set: { model.updateChecker.installsAutomatically = $0 }
+                        )) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(lang.t("settings.about.installAutomatically"))
+                                Text(lang.t("settings.about.installAutomatically.description"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        .disabled(!model.updateChecker.canCheckForUpdates)
+                        .accessibilityIdentifier("settings.about.installAutomatically")
+                        .settingsAnchor("about.installAutomatically")
+
+                        if let status = model.updateFlow.settingsStatus {
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(Color(red: 111 / 255, green: 185 / 255, blue: 130 / 255))
+                                    .frame(width: 6, height: 6)
+                                Text(status)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .accessibilityIdentifier("settings.about.updateStatus")
+                        }
+                    }
                 }
 
                 Section {
@@ -534,6 +698,7 @@ struct AboutSettingsPane: View {
                         }
                     )
                     .accessibilityIdentifier("settings.about.showWelcomeTour")
+                    .settingsAnchor("about.showWelcomeTour")
                 }
 
                 // The GNU GPL asks an app with a window to say what it is
@@ -547,24 +712,38 @@ struct AboutSettingsPane: View {
                         .padding(.vertical, 2)
                         .accessibilityIdentifier("settings.about.credit")
 
+                    aboutActionRow(
+                        title: lang.t("feedback.button"),
+                        systemImage: "envelope",
+                        tint: primaryInk,
+                        action: {
+                            model.feedback.present(kind: .bug, text: "")
+                        }
+                    )
+                    .accessibilityIdentifier("settings.about.sendFeedback")
+                    .settingsAnchor("about.sendFeedback")
+
                     aboutLinkRow(
                         title: lang.t("settings.about.sourceCode"),
                         systemImage: "chevron.left.forwardslash.chevron.right",
                         url: AppBrand.sourceCodeURL,
                         identifier: "settings.about.sourceCode"
                     )
+                    .settingsAnchor("about.sourceCode")
                     aboutLinkRow(
                         title: lang.t("settings.about.license"),
                         systemImage: "doc.text",
                         url: AppBrand.licenseURL(bundledCopy: AppBrand.bundledLicenseURL),
                         identifier: "settings.about.license"
                     )
+                    .settingsAnchor("about.license")
                     aboutLinkRow(
                         title: lang.t("settings.about.upstream"),
                         systemImage: "arrow.triangle.branch",
                         url: AppBrand.upstreamURL,
                         identifier: "settings.about.upstream"
                     )
+                    .settingsAnchor("about.upstream")
                 }
 
                 Section {
@@ -577,9 +756,12 @@ struct AboutSettingsPane: View {
                         }
                     )
                     .accessibilityIdentifier("settings.about.quitApp")
+                    .settingsAnchor("about.quitApp")
                 }
             }
+            .settingsScrollsToJump(proxy)
             .formStyle(.grouped)
+            }
 
             Spacer()
         }
@@ -649,6 +831,7 @@ struct SetupSettingsPane: View {
     private var lang: LanguageManager { model.lang }
 
     var body: some View {
+        ScrollViewReader { proxy in
         Form {
             if !model.hasAnyInstalledAgent {
                 emptyStateBanner
@@ -665,6 +848,7 @@ struct SetupSettingsPane: View {
                     installAction: { model.installClaudeHooks() },
                     uninstallAction: { confirmingUninstallClaude = true }
                 )
+                .settingsAnchor("setup.hooks")
                 .alert(lang.t("settings.general.uninstallConfirmTitle"), isPresented: $confirmingUninstallClaude) {
                     Button(lang.t("settings.general.uninstallConfirmAction"), role: .destructive) {
                         model.uninstallClaudeHooks()
@@ -906,6 +1090,7 @@ struct SetupSettingsPane: View {
                         }
                     }
                 }
+                .settingsAnchor("setup.usageBridge")
                 .alert(lang.t("settings.general.uninstallConfirmTitle"), isPresented: $confirmingUninstallClaudeUsage) {
                     Button(lang.t("settings.general.uninstallConfirmAction"), role: .destructive) {
                         model.uninstallClaudeUsageBridge()
@@ -919,6 +1104,7 @@ struct SetupSettingsPane: View {
                     get: { model.showCodexUsage },
                     set: { model.showCodexUsage = $0 }
                 ))
+                .settingsAnchor("setup.showCodexUsage")
             } header: {
                 HStack(spacing: 4) {
                     Text(lang.t("setup.section.usage"))
@@ -941,6 +1127,7 @@ struct SetupSettingsPane: View {
                     }
                     Spacer()
                 }
+                .settingsAnchor("setup.permissions")
             }
 
             hookDiagnosticsSection
@@ -966,10 +1153,13 @@ struct SetupSettingsPane: View {
                 }
                 .disabled(model.hooksBinaryURL == nil || allReady)
                 .frame(maxWidth: .infinity, alignment: .center)
+                .settingsAnchor("setup.installAll")
             }
         }
+        .settingsScrollsToJump(proxy)
         .formStyle(.grouped)
         .navigationTitle(lang.t("settings.tab.setup"))
+        }
     }
 
     @ViewBuilder
@@ -988,6 +1178,7 @@ struct SetupSettingsPane: View {
                 } icon: {
                     Image(systemName: "folder")
                 }
+                .settingsAnchor("setup.claudeConfigDir")
                 Spacer()
                 if ClaudeConfigDirectory.customDirectory != nil {
                     Button(lang.t("setup.claudeConfigDir.reset")) {
@@ -1115,7 +1306,11 @@ struct SetupSettingsPane: View {
             }
         } header: {
             HStack(spacing: 4) {
+                // On the header's text, not the Section: a Section hands
+                // its modifiers to every row, which would give each issue
+                // the same id.
                 Text(lang.t("setup.section.diagnostics"))
+                    .settingsAnchor("setup.diagnostics")
                 if hasErrors {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
@@ -1240,16 +1435,20 @@ struct WatchSettingsPane: View {
 
     @State private var pairingCode: String = "----"
 
+    private var lang: LanguageManager { model.lang }
+
     var body: some View {
+        ScrollViewReader { proxy in
         Form {
             Section {
-                Toggle("Watch Notifications", isOn: Binding(
+                Toggle(lang.t("settings.watch.notifications.title"), isOn: Binding(
                     get: { model.watchNotificationEnabled },
                     set: { model.watchNotificationEnabled = $0 }
                 ))
+                .settingsAnchor("watch.notifications")
 
                 if model.watchNotificationEnabled {
-                    Text("When enabled, the macOS app broadcasts a Bonjour service that your iPhone can discover on the same WiFi network.")
+                    Text(lang.t("settings.watch.notifications.note"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -1260,21 +1459,23 @@ struct WatchSettingsPane: View {
             if model.watchNotificationEnabled {
                 Section("Pairing") {
                     HStack {
-                        Text("Pairing Code")
+                        Text(lang.t("settings.watch.pairingCode.title"))
                         Spacer()
                         Text(pairingCode)
                             .font(.system(size: 24, weight: .bold, design: .monospaced))
                             .foregroundStyle(.blue)
                     }
+                    .settingsAnchor("watch.pairingCode")
 
-                    Text("Enter this code on your iPhone app to pair. Code expires after 2 minutes.")
+                    Text(lang.t("settings.watch.pairingCode.note"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    Button("Refresh Code") {
+                    Button(lang.t("settings.watch.refreshCode")) {
                         model.watchRelay?.endpoint.regeneratePairingCode()
                         pairingCode = model.watchPairingCode
                     }
+                    .settingsAnchor("watch.refreshCode")
                 }
 
                 Section("Paired Devices") {
@@ -1298,16 +1499,19 @@ struct WatchSettingsPane: View {
                         }
                     }
 
-                    Button("Revoke All Pairings", role: .destructive) {
+                    Button(lang.t("settings.watch.revoke"), role: .destructive) {
                         model.watchRelay?.endpoint.revokeAllTokens()
                     }
+                    .settingsAnchor("watch.revoke")
                 }
             }
         }
+        .settingsScrollsToJump(proxy)
         .formStyle(.grouped)
         .navigationTitle("Watch")
         .onAppear {
             pairingCode = model.watchPairingCode
+        }
         }
     }
 }
@@ -1340,6 +1544,8 @@ struct RemoteConnectionSection: View {
 
     @State private var copiedCommand: String?
 
+    private var lang: LanguageManager { model.lang }
+
     private var remoteSessionCount: Int {
         model.state.sessions.filter(\.isRemote).count
     }
@@ -1368,7 +1574,7 @@ struct RemoteConnectionSection: View {
             VStack(alignment: .leading, spacing: 12) {
                 // Status
                 HStack {
-                    Label("SSH Remote", systemImage: "network")
+                    Label(lang.t("setup.remote.title"), systemImage: "network")
                     Spacer()
                     if remoteSessionCount > 0 {
                         HStack(spacing: 4) {
@@ -1386,7 +1592,7 @@ struct RemoteConnectionSection: View {
                     }
                 }
 
-                Text("Monitor Claude Code running on remote servers via SSH.")
+                Text(lang.t("setup.remote.note"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -1426,6 +1632,7 @@ struct RemoteConnectionSection: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .settingsAnchor("setup.remote")
         } header: {
             HStack(spacing: 4) {
                 Text("Remote")

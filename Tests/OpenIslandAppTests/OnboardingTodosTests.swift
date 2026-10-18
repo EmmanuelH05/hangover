@@ -12,7 +12,7 @@ import Testing
 /// of that, and its choice is kept in a `MemoryDefaults`.
 @MainActor
 struct OnboardingTodosTests {
-    @Test(arguments: NookTodoSourceKind.allCases)
+    @Test(arguments: NookTodoSourceKind.offeredInTour)
     func pickingASourceWritesThePreferenceSettingsWrites(source: NookTodoSourceKind) {
         let defaults = MemoryDefaults()
         let hub = NookTodoHub(defaults: defaults)
@@ -85,7 +85,7 @@ struct OnboardingTodosTests {
         #expect(OnboardingTodoChecklist.kinds(for: .notion) == [.open, .connect, .share, .pick])
         #expect(OnboardingTodoChecklist.kinds(for: .tickTick) == [.open, .connect, .pick])
 
-        let all = NookTodoSourceKind.allCases.flatMap { source in
+        let all = NookTodoSourceKind.offeredInTour.flatMap { source in
             OnboardingTodoChecklist.kinds(for: source).map { OnboardingTodoGuide.stepKey($0, source: source) }
         }
         #expect(Set(all).count == all.count)
@@ -189,5 +189,27 @@ struct OnboardingTodosTests {
         #expect(OnboardingRecapRow.shown(agentsEnabled: true).contains(.notes))
         #expect(OnboardingRecapRow.shown(agentsEnabled: true, hasNotesWidget: false)
             == OnboardingRecapRow.standard.filter { $0 != .notes })
+    }
+}
+
+// MARK: - The allow step's line once it is done
+
+struct OnboardingTodoStepLineTests {
+    /// "Press the button, then choose Allow" has no button to press once macOS
+    /// has said yes: the done step reads its own line.
+    @Test func theAllowStepReadsItsOwnLineOnceItIsDone() {
+        #expect(OnboardingTodoGuide.stepKey(.allow, source: .reminders) == "onboarding.todos.reminders.allow")
+        #expect(OnboardingTodoGuide.stepKey(.allow, source: .reminders, isDone: true) == "onboarding.todos.reminders.allow.done")
+        // The other steps keep their one line: each is a fact that stays true.
+        #expect(OnboardingTodoGuide.stepKey(.connect, source: .notion, isDone: true) == "onboarding.todos.notion.connect")
+        #expect(OnboardingTodoGuide.stepKey(.pick, source: .tickTick, isDone: true) == "onboarding.todos.ticktick.pick")
+    }
+
+    @Test(arguments: HangoverBrandTests.languages)
+    func theDoneLineIsThereInEveryLanguageAndNamesNoButton(language: String) throws {
+        let table = try HangoverBrandTests.table(language)
+        let line = try #require(table["onboarding.todos.reminders.allow.done"])
+        #expect(!line.isEmpty)
+        #expect(!line.lowercased().contains("button") && !line.contains("按钮") && !line.contains("按鈕"))
     }
 }

@@ -562,6 +562,7 @@ struct NookMediaCard: View {
             let mode = nook.media.shuffle ?? .off
             transportButton("shuffle", size: size - 1, hit: hit, isOn: mode.isOn) { nook.media.toggleShuffle() }
                 .modifier(modeButtonChrome(mode.labelKey))
+                .demoTarget(.shuffle)
         }
     }
 
@@ -572,6 +573,7 @@ struct NookMediaCard: View {
             let mode = nook.media.repeating ?? .off
             transportButton(mode.symbol, size: size - 1, hit: hit, isOn: mode.isOn) { nook.media.cycleRepeat() }
                 .modifier(modeButtonChrome(mode.labelKey))
+                .demoTarget(.repeatMode)
         }
     }
 

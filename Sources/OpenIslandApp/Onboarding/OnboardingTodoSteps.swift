@@ -93,7 +93,7 @@ struct OnboardingTodoStepRow: View {
     /// among them, and Settings holds the rest.
     static let choiceLimit = 6
 
-    private var key: String { OnboardingTodoGuide.stepKey(step.kind, source: source) }
+    private var key: String { OnboardingTodoGuide.stepKey(step.kind, source: source, isDone: step.isDone) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {

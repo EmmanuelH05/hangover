@@ -25,9 +25,26 @@ extension NookTodoCard {
         }
     }
 
+    /// The small card with two or more apps on: the same header and add
+    /// field, with the sections in place of the one list (T13). The small
+    /// card has no "+N more" line, it stops where the budget ends.
+    @ViewBuilder
+    func groupedSmallList(
+        _ sections: [NookTodoSection], add: any NookTodoSource, layout: NookTodoCardSections, notice: String?
+    ) -> some View {
+        smallHeader(add, trailing: "\(layout.openCount)")
+        if isAdding, add.connection == .ready, add.canAdd {
+            smallAddField(add)
+        } else {
+            groupedBody(sections, layout: layout, notice: notice, fitsDue: true)
+        }
+    }
+
     // MARK: Header
 
-    private func smallHeader(_ source: any NookTodoSource) -> some View {
+    /// `trailing` replaces the source's name: with several apps on, the
+    /// header counts the open tasks instead.
+    private func smallHeader(_ source: any NookTodoSource, trailing: String? = nil) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "checklist")
                 .font(.system(size: 10, weight: .semibold))
@@ -40,7 +57,7 @@ extension NookTodoCard {
                 .fixedSize()
             Spacer(minLength: 0)
             // The source name gives way first when the header is tight.
-            Text(Self.headerTrailing(source))
+            Text(trailing ?? Self.headerTrailing(source))
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.35))
                 .lineLimit(1)

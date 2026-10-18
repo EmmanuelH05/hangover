@@ -12,6 +12,16 @@ enum AppBrand {
     /// by this title, which is why the scene and the lookup share one value.
     static let settingsWindowTitle = "\(name) Settings"
 
+    /// The running copy's version and build, as its bundle says them. A
+    /// test runner has neither and says "0".
+    static var currentVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+    }
+
+    static var currentBuild: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
+    }
+
     // MARK: Credit and license
 
     /// Where Hangover's source code is published. The GNU GPL requires that
@@ -31,6 +41,11 @@ enum AppBrand {
     /// private half stays in the owner's Keychain and is never in the
     /// repository. The release bundle carries this value as `SUPublicEDKey`.
     static let updatePublicKey = "G3dIlQPu+1pUh9IOtrMZB39d/ZxZWPnC5PfXMJ1OJaU="
+
+    /// Where Send Feedback writes to (F9): the developer's own address,
+    /// given by him on 2026-10-18. The app sends nothing itself; it opens
+    /// a draft in Mail.
+    static let feedbackAddress = "eahernandez1@ucla.edu"
 
     /// The project Hangover is based on, credited in the About pane.
     static let upstreamName = "Open Island"

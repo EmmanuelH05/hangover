@@ -13,7 +13,7 @@ struct OnboardingTipTests {
     @Test func aFullSetupWithAgentsFillsThePage() {
         let tips = OnboardingTip.shown(agentsEnabled: true, widgets: Self.everyWidget)
 
-        #expect(tips == [.keepOpen, .dropFiles, .convertFiles, .rearrange, .switchPages, .jump, .todoNotes, .settings])
+        #expect(tips == [.keepOpen, .dropFiles, .rearrange, .switchPages, .jump, .todoNotes, .quickNotes, .speaker, .volume, .settings])
         #expect(tips.count == OnboardingTip.pageLimit)
     }
 
@@ -21,7 +21,7 @@ struct OnboardingTipTests {
     /// it is on, second in the list.
     @Test func theSwipeTipShowsOnlyWhileTheSwipeIsOn() {
         let on = OnboardingTip.shown(agentsEnabled: true, widgets: Self.everyWidget, swipeEnabled: true)
-        #expect(on == [.keepOpen, .swipeAway, .dropFiles, .convertFiles, .rearrange, .switchPages, .jump, .settings])
+        #expect(on == [.keepOpen, .swipeAway, .dropFiles, .rearrange, .switchPages, .jump, .todoNotes, .quickNotes, .speaker, .settings])
 
         for agentsEnabled in [true, false] {
             let off = OnboardingTip.shown(agentsEnabled: agentsEnabled, widgets: Self.everyWidget)
@@ -32,7 +32,7 @@ struct OnboardingTipTests {
     @Test func withTheAgentsOffNoTipIsAboutAgents() {
         let tips = OnboardingTip.shown(agentsEnabled: false, widgets: Self.everyWidget)
 
-        #expect(tips == [.keepOpen, .dropFiles, .convertFiles, .rearrange, .todoNotes, .quickNotes, .speaker, .settings])
+        #expect(tips == [.keepOpen, .dropFiles, .rearrange, .todoNotes, .quickNotes, .speaker, .volume, .settings])
         #expect(tips.allSatisfy { !$0.needsAgents })
     }
 
@@ -71,10 +71,11 @@ struct OnboardingTipTests {
     }
 
     @MainActor
-    @Test func theTipsSitInRowsOfFour() {
-        let eight = OnboardingTip.shown(agentsEnabled: true, widgets: Self.everyWidget)
-        #expect(OnboardingTipsPage.rows(eight).map(\.count) == [4, 4])
-        #expect(OnboardingTipsPage.rows(Array(eight.prefix(5))).map(\.count) == [4, 1])
+    @Test func theTipsSitInRowsOfFive() {
+        let ten = OnboardingTip.shown(agentsEnabled: true, widgets: Self.everyWidget)
+        #expect(ten.count == 10)
+        #expect(OnboardingTipsPage.rows(ten).map(\.count) == [5, 5])
+        #expect(OnboardingTipsPage.rows(Array(ten.prefix(6))).map(\.count) == [5, 1])
         #expect(OnboardingTipsPage.rows([]).isEmpty)
     }
 
@@ -140,7 +141,8 @@ struct OnboardingStringsTests {
         keys += ["approval", "question", "completed", "running", "album", "music", "notice", "timer", "charger"]
             .map { OnboardingGlowLegendEntry(id: $0, color: .white).labelKey }
         keys += OnboardingRecapRow.allCases.map { "onboarding.done.recap.\($0.rawValue)" }
-        for source in NookTodoSourceKind.allCases {
+        // The tour offers three apps; the others are set up in Settings (D83).
+        for source in NookTodoSourceKind.offeredInTour {
             keys += OnboardingTodoChecklist.kinds(for: source).map { OnboardingTodoGuide.stepKey($0, source: source) }
             keys += [OnboardingTodoGuide.noteKey(for: source), OnboardingTodoGuide.nameKey(for: source)]
             if let link = OnboardingTodoGuide.linkKey(for: source) { keys.append(link) }

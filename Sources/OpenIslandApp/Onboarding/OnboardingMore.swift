@@ -178,7 +178,7 @@ enum OnboardingMore: String, CaseIterable, Identifiable, Sendable {
             .app("Resources/en.lproj/Localizable.strings", "05 · Status glow"),
         ]
         case .power: [
-            .widget("Power/NookPowerSettings.swift", "Show charger and headphone notices"),
+            .widget("Power/NookPowerSettings.swift", "nook.power.settings.notices"),
             .widget("Power/NookPowerMonitor.swift", "On battery"),
             .widget("Power/NookPowerMonitor.swift", "Self.isBluetooth(device)"),
         ]
@@ -198,23 +198,23 @@ enum OnboardingMore: String, CaseIterable, Identifiable, Sendable {
             // The pop-up is skipped, and nothing shows it later.
             .app("AppModel.swift", "!nook.shouldSuppressNotification(for: event)"),
             .nook("NookModel.swift", "var isFocusModeActive: Bool { timer.isRunning && !timer.isOnBreak }"),
-            .nook("Views/NookSettingsPane.swift", "Focus timer silences completion pop-ups"),
-            .nook("Views/NookSettingsPane.swift", "Meetings silence completion pop-ups"),
+            .nook("Views/NookSettingsPane.swift", "settings.nook.focusSuppresses.title"),
+            .nook("Views/NookSettingsPane.swift", "settings.nook.meetingSuppresses.title"),
         ]
         case .phone: [
-            .app("Views/SettingsView.swift", "Watch Notifications"),
+            .app("Views/SettingsView.swift", "settings.watch.notifications.title"),
             OnboardingProof(file: "Sources/OpenIslandCore/WatchNotificationRelay.swift", text: "onResolvePermission"),
             OnboardingProof(file: "Sources/OpenIslandCore/WatchNotificationRelay.swift", text: "onAnswerQuestion"),
             OnboardingProof(file: "README.md", text: "over your local network"),
         ]
         case .screens: [
             .app("Views/SettingsView.swift", "lang.t(\"settings.general.monitor\")"),
-            .nook("Views/NookSettingsPane.swift", "Each display keeps its own layout."),
+            .nook("Views/NookSettingsPane.swift", "settings.nook.arrange.note"),
         ]
         case .sounds: [
             .app("Views/SettingsView.swift", "lang.t(\"settings.sound.mute\")"),
             .nook("NookModel.swift", "guard !isSoundMuted() else { return }"),
-            .widget("Timer/NookTimerSettings.swift", "Play a sound when done"),
+            .widget("Timer/NookTimerSettings.swift", "nook.timer.settings.sound"),
         ]
         case .links: [
             .app("Island/IslandURLAction.swift", "static let scheme = \"hangover\""),
@@ -231,7 +231,7 @@ enum OnboardingMore: String, CaseIterable, Identifiable, Sendable {
             .app("AppModel.swift", "var showDockIcon: Bool = false"),
         ]
         case .updates: [
-            .app("UpdateChecker.swift", "var installsAutomatically = false"),
+            .app("UpdateChecker.swift", "var installsAutomatically: Bool"),
             .app("Views/SettingsView.swift", "lang.t(\"settings.about.checkForUpdates\")"),
             .app("Views/SettingsView.swift", "lang.t(\"settings.about.installAutomatically\")"),
             OnboardingProof(file: "README.md", text: "About once a day the app also asks GitHub"),

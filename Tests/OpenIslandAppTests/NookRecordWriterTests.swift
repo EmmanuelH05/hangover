@@ -8,9 +8,13 @@ import Testing
     struct FeedTimeout: Error {}
 
     /// A solid gray frame at `seconds` on the host clock's timescale.
-    static func frame(at seconds: Double, width: Int = 64, height: Int = 64) throws -> CMSampleBuffer {
+    /// `format` is the pixel format; one the encoder cannot take, such as
+    /// 16-bit gray, is how a test makes a real writer fail.
+    static func frame(
+        at seconds: Double, width: Int = 64, height: Int = 64, format: OSType = kCVPixelFormatType_32BGRA
+    ) throws -> CMSampleBuffer {
         var pixelBuffer: CVPixelBuffer?
-        CVPixelBufferCreate(nil, width, height, kCVPixelFormatType_32BGRA, nil, &pixelBuffer)
+        CVPixelBufferCreate(nil, width, height, format, nil, &pixelBuffer)
         let buffer = try #require(pixelBuffer)
         CVPixelBufferLockBaseAddress(buffer, [])
         memset(CVPixelBufferGetBaseAddress(buffer), 0x80, CVPixelBufferGetDataSize(buffer))
@@ -183,12 +187,13 @@ import Testing
         try await feedSeconds(writer, 25)
         #expect(log.all.isEmpty)
 
-        // A picture of another size: the encoder refuses it a moment later, and
-        // the writer is failed from then on.
+        // A picture in a format the encoder cannot take (16-bit gray): it
+        // refuses it a moment later, and the writer is failed from then on.
+        // Another size no longer does it with frame reordering off.
         // Offered until the writer takes it: a full encoder queue turns a sample
         // away, and a turned-away bad picture would prove nothing.
         let offerDeadline = Date().addingTimeInterval(10)
-        while !writer.append(try Self.frame(at: 25.05, width: 128, height: 128), to: .video) {
+        while !writer.append(try Self.frame(at: 25.05, format: kCVPixelFormatType_16Gray), to: .video) {
             guard Date() < offerDeadline else { throw FeedTimeout() }
             try await Task.sleep(for: .milliseconds(2))
         }
@@ -256,6 +261,30 @@ import Testing
         }
         defer { copy.map { try? FileManager.default.removeItem(at: $0) } }
         #expect(seconds > 15, "an abandoned fragmented .mp4 should play; got \(seconds) s")
+        #expect(await isPlayable(try #require(copy)))
+        try await writer.finish()
+    }
+
+    /// The first fragment closes two seconds in, which is what a recording cut
+    /// short soon after it began keeps. The interval was ten seconds, and a
+    /// crash before it lost the whole clip.
+    @Test func aWriteAbandonedAfterFourSecondsStillPlays() async throws {
+        #expect(NookRecordWriter.fragmentInterval.seconds == 2)
+        let url = tempURL(); defer { try? FileManager.default.removeItem(at: url) }
+        let writer = try NookRecordWriter(fileURL: url, width: 64, height: 64, framesPerSecond: 30, tracks: [.video])
+        try await feedSeconds(writer, 4)
+
+        var copy: URL?
+        var seconds = 0.0
+        let deadline = Date().addingTimeInterval(10)
+        while seconds < 2, Date() < deadline {
+            let candidate = try copyOfFileOnDisk(url, name: "short-abandoned-\(UUID().uuidString).mp4")
+            copy = candidate
+            seconds = (try? await duration(of: candidate)) ?? 0
+            if seconds < 2 { try await Task.sleep(for: .milliseconds(100)) }
+        }
+        defer { copy.map { try? FileManager.default.removeItem(at: $0) } }
+        #expect(seconds >= 2, "a clip abandoned at 4 s should play its first fragment; got \(seconds) s")
         #expect(await isPlayable(try #require(copy)))
         try await writer.finish()
     }

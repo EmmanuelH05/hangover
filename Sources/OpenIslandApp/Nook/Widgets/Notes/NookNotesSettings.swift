@@ -25,6 +25,7 @@ struct NookNotesSettings: View {
                     Text(lang.t(Self.titleKey(for: choice))).tag(choice)
                 }
             }
+            .settingsAnchor(SettingsIndex.entry("nook.notes.saveTo")!)
 
             if store.saveTo.usesFolder {
                 folderRows(store)
@@ -48,6 +49,7 @@ struct NookNotesSettings: View {
             }
 
             shortcutRow(store.hotkey)
+                .settingsAnchor(SettingsIndex.entry("nook.notes.hotkey")!)
             Text(lang.t("nook.notes.settings.hotkey.note"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -96,6 +98,7 @@ struct NookNotesSettings: View {
                     .truncationMode(.middle)
                     .textSelection(.enabled)
             }
+            .settingsAnchor(SettingsIndex.entry("nook.notes.folder")!)
             HStack {
                 Button(lang.t("nook.notes.settings.chooseFolder")) { chooseFolder(store) }
                 Button(lang.t("nook.notes.settings.reveal")) { store.revealFolder() }

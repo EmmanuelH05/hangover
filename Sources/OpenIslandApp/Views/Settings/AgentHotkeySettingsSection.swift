@@ -31,6 +31,20 @@ final class AgentHotkeyRecorder {
     }
 }
 
+/// Anchors one shortcut row. Each id is written out whole, because the
+/// index test finds anchors by reading the source for the literal id.
+private struct ActionAnchor: ViewModifier {
+    let action: AgentHotkeyAction
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        switch action {
+        case .approve: content.settingsAnchor("general.agentHotkeys.approve")
+        case .deny: content.settingsAnchor("general.agentHotkeys.deny")
+        }
+    }
+}
+
 /// Settings → General → Agent shortcuts: the keys that approve or deny the
 /// waiting agent from any app.
 struct AgentHotkeySettingsSection: View {
@@ -47,12 +61,14 @@ struct AgentHotkeySettingsSection: View {
         Section(lang.t("settings.general.agentHotkeys")) {
             ForEach(AgentHotkeyAction.allCases) { action in
                 row(for: action)
+                    .modifier(ActionAnchor(action: action))
             }
 
             Text(lang.t("settings.general.agentHotkeys.note"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .settingsAnchor("general.agentHotkeys")
 
             Button(lang.t("settings.general.agentHotkeys.reset")) {
                 stopRecording()
@@ -61,6 +77,7 @@ struct AgentHotkeySettingsSection: View {
                 hotkeys.resetToDefaults()
             }
             .disabled(hotkeys.settings == AgentHotkeySettings())
+            .settingsAnchor("general.agentHotkeys.reset")
         }
         .onDisappear(perform: stopRecording)
     }

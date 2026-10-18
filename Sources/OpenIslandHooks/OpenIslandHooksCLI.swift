@@ -55,6 +55,13 @@ struct OpenIslandHooksCLI {
                     .decode(CodexHookPayload.self, from: input)
                     .withRuntimeContext(environment: ProcessInfo.processInfo.environment)
 
+                // The same rule as the Claude hook below: a headless run waits
+                // on nobody.
+                if payload.hookEventName == .permissionRequest, payload.runsHeadless {
+                    logStderr("headless session, not waiting on the island for \(payload.hookEventName.rawValue)")
+                    return
+                }
+
                 let timeout = payload.hookEventName == .permissionRequest
                     ? interactiveCodexHookTimeout
                     : 45
@@ -72,6 +79,15 @@ struct OpenIslandHooksCLI {
                     .decode(ClaudeHookPayload.self, from: input)
                     .withRuntimeContext(environment: ProcessInfo.processInfo.environment)
                 payload.hookSource = sourceString
+
+                // A headless run (claude -p under launchd, say) has nobody at a
+                // terminal and nobody to approve on the island. A request left
+                // waiting here hung such a run for a day. The hook answers
+                // nothing, and Claude Code's own permission mode decides.
+                if payload.hookEventName == .permissionRequest, payload.runsHeadless {
+                    logStderr("headless session, not waiting on the island for \(payload.hookEventName.rawValue)")
+                    return
+                }
 
                 let timeout = payload.hookEventName == .permissionRequest
                     ? interactiveClaudeHookTimeout

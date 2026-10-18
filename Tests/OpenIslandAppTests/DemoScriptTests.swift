@@ -9,8 +9,8 @@ import OpenIslandCore
 
 @MainActor
 struct DemoScriptShapeTests {
-    @Test func thereAreFiveScriptsByName() {
-        #expect(DemoScripts.names == ["tour", "use", "closed", "looks", "kit"])
+    @Test func thereAreSixScriptsByName() {
+        #expect(DemoScripts.names == ["tour", "use", "closed", "looks", "kit", "check"])
         for name in DemoScripts.names {
             #expect(DemoScripts.named(name)?.name == name)
         }
@@ -18,7 +18,7 @@ struct DemoScriptShapeTests {
         #expect(DemoScripts.named("") == nil)
     }
 
-    @Test(arguments: ["tour", "use", "closed", "looks", "kit"])
+    @Test(arguments: ["tour", "use", "closed", "looks", "kit", "check"])
     func everyScriptIsUnderTwoMinutesAndEveryStepNamesADoor(name: String) throws {
         let script = try #require(DemoScripts.named(name))
 
@@ -245,7 +245,7 @@ struct DemoDoorsOnTheModelTests {
         let doors = AppDemoDoors(model: fixture.model, openTour: {}, currentTour: { nil })
 
         doors.perform(.showCalendarNotice)
-        #expect(fixture.nook.transient?.text.hasSuffix("in 10 min") == true)
+        #expect(fixture.nook.transient?.text == "10 min")
     }
 
     @Test func looksEndsWithTheWeatherOnThePageInWeekModeAndTheLastLayoutOn() async throws {

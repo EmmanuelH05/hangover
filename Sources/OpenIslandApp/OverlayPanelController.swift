@@ -1323,9 +1323,9 @@ final class OverlayPanelController {
                 calendarStyle: model.nookDisplay.calendarStyle,
                 isEditing: model.nook.isEditingLayout,
                 extras: model.nookPageExtras
-            ) + model.nookBarsHeight
+            ) + model.nookBarsHeight + model.updateCardHeight
         }
-        return agentsContentHeight(for: model) + model.nookBarsHeight
+        return agentsContentHeight(for: model) + model.nookBarsHeight + model.updateCardHeight
     }
 
     private func agentsContentHeight(for model: AppModel) -> CGFloat {

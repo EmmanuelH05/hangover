@@ -18,13 +18,16 @@ struct NookVolumeSettings: View {
         let keys = nook.volume.keys
         Section(lang.t("nook.volume.settings.title")) {
             Toggle(lang.t("nook.volume.settings.notice"), isOn: $showsNotice)
+                .settingsAnchor(SettingsIndex.entry("nook.volume.notice")!)
             Button(lang.t("nook.volume.settings.test")) {
                 nook.volume.showSample()
             }
+            .settingsAnchor(SettingsIndex.entry("nook.volume.test")!)
             Toggle(lang.t("nook.volume.settings.keys"), isOn: Binding(
                 get: { keys.status != .off },
                 set: { keys.setEnabled($0) }
             ))
+            .settingsAnchor(SettingsIndex.entry("nook.volume.keys")!)
             Text(lang.t("nook.volume.settings.keys.note"))
                 .font(.caption)
                 .foregroundStyle(.secondary)

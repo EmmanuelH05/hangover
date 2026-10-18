@@ -79,10 +79,15 @@ final class NookRecordWriter: @unchecked Sendable {
     /// or the writer fails midway, which a plain MP4 (its index is written at
     /// the end) never does. A real writer shows that `.mp4` honors it (see
     /// the writer tests), so the file stays an MP4. A clip that is cut short
-    /// before its first fragment (10 s) is lost. `initialMovieFragmentInterval`
-    /// would cover that, and with it a real writer fails at the second fragment
-    /// (AVFoundation -11800), so it is not used.
-    static let fragmentInterval = CMTime(seconds: 10, preferredTimescale: 600)
+    /// before its first fragment is lost, which is why the interval is short:
+    /// two seconds, the key frame interval, since a fragment can only close on
+    /// a key frame. Any interval under ten seconds failed a real writer at a
+    /// fragment boundary (AVFoundation -11800 over -16341) until frame
+    /// reordering was turned off: H.264 B-frames straddle a boundary, and the
+    /// MP4 fragment writer refuses them (probed on macOS 26, 2026-10-18). That
+    /// is also what made `initialMovieFragmentInterval` fail; it stays unused.
+    /// The cost is one small fragment header every two seconds.
+    static let fragmentInterval = CMTime(seconds: 2, preferredTimescale: 600)
 
     private let queue = DispatchQueue(label: "app.openisland.record.writer")
     private let writer: AVAssetWriter
@@ -118,6 +123,10 @@ final class NookRecordWriter: @unchecked Sendable {
             AVVideoCompressionPropertiesKey: [
                 AVVideoAverageBitRateKey: bitRate,
                 AVVideoMaxKeyFrameIntervalKey: framesPerSecond * 2,
+                // No B-frames: they break the short fragments (see
+                // `fragmentInterval`), and a screen recording gains little
+                // from them.
+                AVVideoAllowFrameReorderingKey: false,
             ],
         ])
         video.expectsMediaDataInRealTime = true

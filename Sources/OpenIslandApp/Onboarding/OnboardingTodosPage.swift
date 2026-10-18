@@ -27,23 +27,22 @@ enum OnboardingTodoGuide {
     /// Settings has the same link under the same words. Nil for Reminders.
     static func linkKey(for source: NookTodoSourceKind) -> String? {
         switch source {
-        case .reminders: nil
+        case .reminders, .asana, .monday, .canvas: nil
         case .notion: "nook.todo.notion.openIntegrations"
         case .tickTick: "nook.todo.ticktick.openWeb"
         }
     }
 
     static func symbol(for source: NookTodoSourceKind) -> String {
-        switch source {
-        case .reminders: "list.bullet"
-        case .notion: "tablecells"
-        case .tickTick: "checkmark.circle"
-        }
+        source.symbol
     }
 
-    /// The string key of a step's line.
-    static func stepKey(_ kind: OnboardingTodoStepKind, source: NookTodoSourceKind) -> String {
-        "onboarding.todos.\(source.rawValue).\(kind.rawValue)"
+    /// The string key of a step's line. The allow step tells the user to
+    /// press a button that is gone once macOS has said yes, so a done allow
+    /// step reads its own line instead.
+    static func stepKey(_ kind: OnboardingTodoStepKind, source: NookTodoSourceKind, isDone: Bool = false) -> String {
+        let key = "onboarding.todos.\(source.rawValue).\(kind.rawValue)"
+        return isDone && kind == .allow ? key + ".done" : key
     }
 }
 
@@ -71,7 +70,9 @@ struct OnboardingTodosPage: View {
                 OnboardingLiveLine(text: context.t("onboarding.live.line"))
 
                 VStack(spacing: 6) {
-                    ForEach(NookTodoSourceKind.allCases) { source in card(source) }
+                    // The three the page was drawn with; the others are
+                    // turned on in Settings (D83).
+                    ForEach(NookTodoSourceKind.offeredInTour) { source in card(source) }
                 }
                 Text(context.t(OnboardingTodoGuide.noteKey(for: state.todoSource)))
                     .font(.system(size: 11.5))

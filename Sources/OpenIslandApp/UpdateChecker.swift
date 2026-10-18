@@ -33,31 +33,46 @@ final class UpdateChecker: NSObject {
         checksAutomatically && lastCheck == nil
     }
 
-    /// Whether a new version is downloaded and installed without asking.
-    /// The release sets this on (`SUAutomaticallyUpdate`), and the switch
-    /// in Settings, About turns it off.
-    var installsAutomatically = false {
+    /// Whether the island asks to install a downloaded version the moment
+    /// it lands (on), or shows "Update ready" and waits for Restart now or
+    /// the next quit (off). The app's own preference (D82): Sparkle
+    /// downloads a new version either way. Before D82 the switch was
+    /// Sparkle's download setting; a copy that had it off keeps the ask
+    /// off, which `startIfNeeded` reads once.
+    var installsAutomatically: Bool {
         didSet {
-            // Only a real change is written. Copying Sparkle's own value in
-            // at launch must not save it as the user's choice, which would
-            // outlive a later change to the release's default.
-            guard cancellable != nil,
-                  updaterController.updater.automaticallyDownloadsUpdates != installsAutomatically else { return }
-            updaterController.updater.automaticallyDownloadsUpdates = installsAutomatically
+            guard installsAutomatically != oldValue else { return }
+            defaults.set(installsAutomatically, forKey: Self.installsAutomaticallyKey)
+            onInstallsAutomaticallyChanged?()
         }
     }
+
+    static let installsAutomaticallyKey = "update.installsAutomatically"
 
     private(set) var canCheckForUpdates = false
     private(set) var hasUpdate = false
     private(set) var latestVersion: String?
+
+    /// Sparkle downloaded a version and holds the block that installs it
+    /// and relaunches the app. The update flow takes it from here (D82).
+    @ObservationIgnored
+    var onDownloaded: ((_ version: String, _ install: @escaping () -> Void) -> Void)?
+    /// The About switch changed, by the user or by Sparkle's own value at
+    /// launch.
+    @ObservationIgnored
+    var onInstallsAutomaticallyChanged: (() -> Void)?
 
     @ObservationIgnored
     private var updaterController: SPUStandardUpdaterController!
 
     @ObservationIgnored
     private var cancellable: AnyCancellable?
+    @ObservationIgnored
+    private let defaults: UserDefaults
 
-    override init() {
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        installsAutomatically = defaults.object(forKey: Self.installsAutomaticallyKey) as? Bool ?? true
         super.init()
         updaterController = SPUStandardUpdaterController(
             startingUpdater: false,
@@ -68,8 +83,8 @@ final class UpdateChecker: NSObject {
 
     /// Called once after app launch. Starts Sparkle in a release bundle:
     /// it checks the feed at the first launch and once a day after that,
-    /// downloads a new version by itself and installs it the next time the
-    /// app starts. Everywhere else it starts nothing, and
+    /// and downloads a new version by itself; the island then asks before
+    /// it installs (D82). Everywhere else it starts nothing, and
     /// `canCheckForUpdates` stays false, which keeps the button in
     /// Settings off.
     func startIfNeeded() {
@@ -88,7 +103,15 @@ final class UpdateChecker: NSObject {
             }
         updaterController.startUpdater()
         let updater = updaterController.updater
-        installsAutomatically = updater.automaticallyDownloadsUpdates
+        // The switch before D82 was Sparkle's own download setting. A copy
+        // that had it off keeps the ask off; read once, before the
+        // preference exists.
+        if defaults.object(forKey: Self.installsAutomaticallyKey) == nil, !updater.automaticallyDownloadsUpdates {
+            installsAutomatically = false
+        }
+        // Sparkle downloads in every case now; the switch decides what the
+        // island does with the download.
+        updater.automaticallyDownloadsUpdates = true
         if Self.checksRightAway(
             lastCheck: updater.lastUpdateCheckDate,
             checksAutomatically: updater.automaticallyChecksForUpdates
@@ -129,5 +152,37 @@ extension UpdateChecker: SPUUpdaterDelegate {
             self.hasUpdate = false
             self.latestVersion = nil
         }
+    }
+
+    /// Sparkle has the new version downloaded and would install it when
+    /// the app quits, or show its own alert after a week. Returning true
+    /// takes that over: the island asks, and the held block installs and
+    /// relaunches when the user says so (D82). Sparkle still installs on
+    /// quit either way.
+    nonisolated func updater(
+        _ updater: SPUUpdater,
+        willInstallUpdateOnQuit item: SUAppcastItem,
+        immediateInstallationBlock immediateInstallHandler: @escaping () -> Void
+    ) -> Bool {
+        let version = item.displayVersionString
+        let install = UpdateInstallHandle(immediateInstallHandler)
+        Task { @MainActor in
+            self.onDownloaded?(version) { install.run() }
+        }
+        return true
+    }
+}
+
+/// Sparkle's install block, carried to the main actor. The block is called
+/// on the main thread only, which is what Sparkle expects.
+private final class UpdateInstallHandle: @unchecked Sendable {
+    private let block: () -> Void
+
+    init(_ block: @escaping () -> Void) {
+        self.block = block
+    }
+
+    func run() {
+        block()
     }
 }

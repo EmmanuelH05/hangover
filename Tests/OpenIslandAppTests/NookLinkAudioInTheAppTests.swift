@@ -215,7 +215,11 @@ import Testing
         let pattern = try NSRegularExpression(pattern: "\"(nook\\.linkAudio\\.[A-Za-z0-9.]+)\"")
         var keys = Set<String>()
         for file in try widgetSources() {
+            // A search anchor names a settings entry, not a string to show.
             let source = try String(contentsOf: file, encoding: .utf8)
+                .split(separator: "\n", omittingEmptySubsequences: false)
+                .filter { !$0.contains(".settingsAnchor(") && !$0.contains("SettingsIndex.entry(") }
+                .joined(separator: "\n")
             for match in pattern.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
                 guard let range = Range(match.range(at: 1), in: source) else { continue }
                 keys.insert(String(source[range]))

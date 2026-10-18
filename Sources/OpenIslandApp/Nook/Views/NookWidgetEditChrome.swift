@@ -1,9 +1,10 @@
 import SwiftUI
 
 /// What one tile shows in edit mode: an outline, a layer that takes every
-/// click so the card underneath stays inert, a remove button, S/M/L size
-/// buttons and a resize grip in the bottom-right corner. Dragging the
-/// body runs `reorder`.
+/// click so the card underneath stays inert, a remove button at the top left,
+/// S/M/L size buttons at the bottom left and a resize grip in the bottom-right
+/// corner. The top right stays clear for the card's own header controls.
+/// Dragging the body runs `reorder`.
 struct NookWidgetEditOverlay<Reorder: Gesture>: View {
     var placement: NookWidgetPlacement
     var isHighlighted: Bool
@@ -38,8 +39,11 @@ struct NookWidgetEditOverlay<Reorder: Gesture>: View {
             removeButton
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .padding(Self.controlInset)
+            // Bottom left, across from the grip: the top right is where a card
+            // keeps its header controls (the add button, the speaker, a time),
+            // and the chips covered them.
             sizeButtons
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 .padding(Self.controlInset)
             resizeGrip
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)

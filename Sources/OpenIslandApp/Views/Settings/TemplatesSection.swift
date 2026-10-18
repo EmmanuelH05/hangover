@@ -118,6 +118,7 @@ struct TemplateGallery: View {
             .foregroundStyle(Color.white.opacity(0.55))
             .fixedSize()
         }
+        .settingsAnchor(SettingsIndex.entry("appearance.templates")!)
     }
 
     /// Folded away, the header still says which template the display is on.

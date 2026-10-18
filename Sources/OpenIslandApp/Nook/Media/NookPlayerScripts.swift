@@ -25,49 +25,149 @@ enum NookScriptedPlayer: String, CaseIterable, Sendable {
     }
 
     /// One script per press: it makes the change and says where the player
-    /// stands after it, as `true,all,true`. Nothing is worked out from a state
-    /// that may be old. It names the player by its identifier and nothing
-    /// else. `tell` would open a player that is not running, which is why
-    /// the script looks first: a player that quit a moment ago stays quit.
-    func script(_ action: Action) -> String {
+    /// stands, as `true,all,true`. The mode a press changed is reported as
+    /// what the press asked for, not read back: Spotify answers a read right
+    /// after a set with the old value for about a second (seen on 2026-10-18,
+    /// playing a playlist), which made every press look like a no-op and,
+    /// with `set shuffling to not shuffling`, sent the next press the wrong
+    /// way. With the player's last report in hand (`known`) the script sets
+    /// the value outright and reads nothing the set could have made stale;
+    /// a quick second press inside that second still goes the right way.
+    /// Without one it reads first. The mode a press leaves alone is read
+    /// before the change, while the answer is fresh. It names the player by
+    /// its identifier and nothing else. `tell` would open a player that is
+    /// not running, which is why the script looks first: a player that quit
+    /// a moment ago stays quit.
+    func script(_ action: Action, knowing known: NookPlayerModes? = nil) -> String {
         let change: String
         let report: String
         switch self {
         case .spotify:
             // Spotify knows repeat as on or off, with no "one song".
-            switch action {
-            case .read: change = ""
-            case .toggleShuffle: change = "set shuffling to not shuffling"
-            case .cycleRepeat: change = "set repeating to not repeating"
-            }
             // Spotify's dictionary gives "shuffling enabled" the code of
             // "repeating enabled", which leaves one of the two to ask for.
-            report = """
-            set r to "off"
-            if repeating then set r to "all"
-            return (shuffling as text) & "," & r & "," & (repeating enabled as text)
-            """
+            switch action {
+            case .read:
+                change = ""
+                report = """
+                set r to "off"
+                if repeating then set r to "all"
+                return (shuffling as text) & "," & r & "," & (repeating enabled as text)
+                """
+            case .toggleShuffle:
+                if let known {
+                    let target = known.shuffle == .off
+                    change = """
+                    set r to "off"
+                    if repeating then set r to "all"
+                    set shuffling to \(target)
+                    """
+                    report = """
+                    return "\(target)" & "," & r & "," & (repeating enabled as text)
+                    """
+                } else {
+                    change = """
+                    set wasShuffling to shuffling
+                    set r to "off"
+                    if repeating then set r to "all"
+                    set shuffling to not wasShuffling
+                    """
+                    report = """
+                    return ((not wasShuffling) as text) & "," & r & "," & (repeating enabled as text)
+                    """
+                }
+            case .cycleRepeat:
+                if let known {
+                    let target = known.repeating == .off
+                    change = """
+                    set s to (shuffling as text)
+                    set repeating to \(target)
+                    """
+                    report = """
+                    return s & ",\(target ? "all" : "off")," & (repeating enabled as text)
+                    """
+                } else {
+                    change = """
+                    set wasRepeating to repeating
+                    set s to (shuffling as text)
+                    set repeating to not wasRepeating
+                    """
+                    report = """
+                    set r to "off"
+                    if not wasRepeating then set r to "all"
+                    return s & "," & r & "," & (repeating enabled as text)
+                    """
+                }
+            }
         case .music:
             switch action {
-            case .read: change = ""
-            case .toggleShuffle: change = "set shuffle enabled to not shuffle enabled"
-            case .cycleRepeat:
-                change = """
-                if song repeat is off then
-                set song repeat to all
-                else if song repeat is all then
-                set song repeat to one
-                else
-                set song repeat to off
-                end if
+            case .read:
+                change = ""
+                report = """
+                set r to "off"
+                if song repeat is one then set r to "one"
+                if song repeat is all then set r to "all"
+                return (shuffle enabled as text) & "," & r & ",true"
                 """
+            case .toggleShuffle:
+                if let known {
+                    let target = known.shuffle == .off
+                    change = """
+                    set r to "off"
+                    if song repeat is one then set r to "one"
+                    if song repeat is all then set r to "all"
+                    set shuffle enabled to \(target)
+                    """
+                    report = """
+                    return "\(target)" & "," & r & ",true"
+                    """
+                } else {
+                    change = """
+                    set wasShuffling to shuffle enabled
+                    set r to "off"
+                    if song repeat is one then set r to "one"
+                    if song repeat is all then set r to "all"
+                    set shuffle enabled to not wasShuffling
+                    """
+                    report = """
+                    return ((not wasShuffling) as text) & "," & r & ",true"
+                    """
+                }
+            case .cycleRepeat:
+                if let known {
+                    // Off, all, one, and round again.
+                    let next: String
+                    switch known.repeating {
+                    case .off: next = "all"
+                    case .playlist: next = "one"
+                    case .track: next = "off"
+                    }
+                    change = """
+                    set s to (shuffle enabled as text)
+                    set song repeat to \(next)
+                    """
+                    report = """
+                    return s & ",\(next),true"
+                    """
+                } else {
+                    change = """
+                    set s to (shuffle enabled as text)
+                    set r to "off"
+                    if song repeat is off then
+                    set song repeat to all
+                    set r to "all"
+                    else if song repeat is all then
+                    set song repeat to one
+                    set r to "one"
+                    else
+                    set song repeat to off
+                    end if
+                    """
+                    report = """
+                    return s & "," & r & ",true"
+                    """
+                }
             }
-            report = """
-            set r to "off"
-            if song repeat is one then set r to "one"
-            if song repeat is all then set r to "all"
-            return (shuffle enabled as text) & "," & r & ",true"
-            """
         }
         return [
             "if application id \"\(rawValue)\" is running then",
@@ -172,7 +272,7 @@ final class NookPlayerScripts {
 
     private func start(_ action: NookScriptedPlayer.Action, on player: NookScriptedPlayer) {
         isReading = action == .read
-        let source = player.script(action)
+        let source = player.script(action, knowing: modes[player.rawValue])
         inFlight = Task { @MainActor [weak self, runner] in
             let reply = await runner(source)
             self?.take(reply, from: player)

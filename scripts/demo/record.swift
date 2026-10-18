@@ -62,8 +62,18 @@ guard arguments.count == 4, let pid = pid_t(arguments[1]), let seconds = Double(
 let output = URL(fileURLWithPath: arguments[3])
 try? FileManager.default.removeItem(at: output)
 
-let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
-guard let app = content.applications.first(where: { $0.processID == pid }) else {
+// The app is given up to fifteen seconds to put its first window up: a copy
+// built a moment ago takes longer to launch than one that has run before.
+var content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+var found = content.applications.first(where: { $0.processID == pid })
+var waited = 0.0
+while found == nil, waited < 15 {
+    try await Task.sleep(for: .milliseconds(250))
+    waited += 0.25
+    content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+    found = content.applications.first(where: { $0.processID == pid })
+}
+guard let app = found else {
     FileHandle.standardError.write(Data("no app with pid \(pid)\n".utf8))
     exit(2)
 }

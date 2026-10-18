@@ -106,6 +106,8 @@ enum OnboardingTodoChecklist {
         case .reminders: [.allow]
         case .notion: [.open, .connect, .share, .pick]
         case .tickTick: [.open, .connect, .pick]
+        // Set up in Settings, not the tour (D83).
+        case .asana, .monday, .canvas: []
         }
     }
 

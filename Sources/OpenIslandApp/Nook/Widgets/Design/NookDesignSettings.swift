@@ -33,11 +33,13 @@ struct NookDesignSettings: View {
                     Text(lang.t(format.titleKey)).tag(format)
                 }
             }
+            .settingsAnchor(SettingsIndex.entry("nook.design.format")!)
 
             Toggle(lang.t("nook.design.settings.savePicks"), isOn: Binding(
                 get: { kit.savesPicksToPalette },
                 set: { kit.savesPicksToPalette = $0 }
             ))
+            .settingsAnchor(SettingsIndex.entry("nook.design.savePicks")!)
             Text(lang.t("nook.design.settings.savePicks.note"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -46,12 +48,14 @@ struct NookDesignSettings: View {
                 get: { kit.keepsPicking },
                 set: { kit.keepsPicking = $0 }
             ))
+            .settingsAnchor(SettingsIndex.entry("nook.design.keepPicking")!)
             Text(lang.t("nook.design.settings.keepPicking.note"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             shortcutRow(kit.hotkey)
+                .settingsAnchor(SettingsIndex.entry("nook.design.hotkey")!)
             Text(lang.t("nook.design.settings.hotkey.note"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -73,7 +77,9 @@ struct NookDesignSettings: View {
             }
             Button(lang.t("nook.design.settings.openEditor")) { kit.showPaletteEditor() }
                 .disabled(!isOn)
+                .settingsAnchor(SettingsIndex.entry("nook.design.openEditor")!)
             Button(lang.t("nook.design.settings.revealFolder")) { revealFolder(kit) }
+                .settingsAnchor(SettingsIndex.entry("nook.design.revealFolder")!)
             HStack {
                 Button(
                     clearAsk.isAsking
@@ -90,6 +96,7 @@ struct NookDesignSettings: View {
             }
             // The question does not outlast the pictures it asked about.
             .onChange(of: kit.references.items.isEmpty) { _, isEmpty in if isEmpty { clearAsk.cancel() } }
+            .settingsAnchor(SettingsIndex.entry("nook.design.clearReferences")!)
             Text(lang.t("nook.design.settings.local"))
                 .font(.caption)
                 .foregroundStyle(.secondary)

@@ -102,7 +102,7 @@ enum OnboardingIntegration: String, CaseIterable, Identifiable, Sendable {
             .nook("Views/NookMediaViews.swift", "nook.media.nextTrack()"),
         ]
         case .power: [
-            .widget("Power/NookPowerSettings.swift", "Show charger and headphone notices"),
+            .widget("Power/NookPowerSettings.swift", "nook.power.settings.notices"),
             .widget("Power/NookPowerMonitor.swift", "localizedCaseInsensitiveContains(\"AirPods\")"),
             .widget("Power/NookPowerMonitor.swift", "Charging"),
         ]

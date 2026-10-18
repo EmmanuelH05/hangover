@@ -24,6 +24,7 @@ struct NookWeatherSettings: View {
                     }
                 }
             }
+            .settingsAnchor(SettingsIndex.entry("nook.weather.city")!)
             HStack {
                 TextField(lang.t("nook.weather.settings.search.placeholder"), text: $query)
                     .textFieldStyle(.roundedBorder)
@@ -46,6 +47,7 @@ struct NookWeatherSettings: View {
                 Text(lang.t("nook.weather.settings.unit.celsius")).tag(NookTemperatureUnit.celsius)
             }
             .pickerStyle(.segmented)
+            .settingsAnchor(SettingsIndex.entry("nook.weather.unit")!)
             Link(lang.t("nook.weather.credit"), destination: NookWeatherClient.creditURL)
                 .font(.caption)
             Text(lang.t("nook.weather.settings.privacy"))

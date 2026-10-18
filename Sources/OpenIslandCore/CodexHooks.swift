@@ -541,6 +541,14 @@ public extension CodexHookPayload {
 }
 
 public extension CodexHookPayload {
+    /// True for a hook fired from a run with nobody at a terminal: no terminal
+    /// or desktop host could be named and the process has no TTY, which is how
+    /// `codex exec` under launchd or cron looks. Codex.app names itself and is
+    /// not headless. See `ClaudeHookPayload.runsHeadless`.
+    var runsHeadless: Bool {
+        (terminalApp ?? "").isEmpty && (terminalTTY ?? "").isEmpty
+    }
+
     func withRuntimeContext(environment: [String: String]) -> CodexHookPayload {
         withRuntimeContext(
             environment: environment,

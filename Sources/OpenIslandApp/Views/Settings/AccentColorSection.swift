@@ -76,6 +76,7 @@ extension AppearanceSettingsPane {
             withMotion(Motion.selection) { model.accent.choice = choice }
         }
         .equatable()
+        .settingsAnchor(SettingsIndex.entry("appearance.accent")!)
     }
 }
 

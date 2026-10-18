@@ -30,6 +30,7 @@ struct NookLinkAudioSettings: View {
                     }
                 }
             }
+            .settingsAnchor(SettingsIndex.entry("nook.linkAudio.folder")!)
             if let reason = service.folderProblem {
                 Text(lang.t(reason.messageKey))
                     .font(.caption)
@@ -60,6 +61,7 @@ struct NookLinkAudioSettings: View {
                 get: { service.findsKeyAndTempo },
                 set: { service.setFindsKeyAndTempo($0) }
             ))
+            .settingsAnchor(SettingsIndex.entry("nook.linkAudio.findKey")!)
             Text(lang.t("nook.linkAudio.settings.findKeyCaption"))
                 .font(.caption)
                 .foregroundStyle(.secondary)

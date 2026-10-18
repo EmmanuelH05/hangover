@@ -16,6 +16,8 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var tour: OnboardingTour?
     private var islandFootprint: () -> OnboardingIslandFootprint? = { nil }
+    private var hasPendingOutsideChange = false
+    private var defaultsObserver: NSObjectProtocol?
 
     var isShowing: Bool { window?.isVisible == true }
 
@@ -38,10 +40,29 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
                 self, selector: #selector(presenceDidChange), name: name, object: nil
             )
         }
+        // Posted on the thread that wrote, so it is taken on the main queue.
+        defaultsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.defaultsDidChange() }
+        }
     }
 
     @objc private func presenceDidChange() {
         refreshPresence()
+    }
+
+    /// A setting changed somewhere, in Settings or on the island. The Good to
+    /// know pages read settings the app keeps in its defaults, which SwiftUI
+    /// does not watch: the tour is told, and it redraws. One note per turn of
+    /// the run loop, however many keys were written.
+    private func defaultsDidChange() {
+        guard tour != nil, !hasPendingOutsideChange else { return }
+        hasPendingOutsideChange = true
+        Task { @MainActor [weak self] in
+            self?.hasPendingOutsideChange = false
+            self?.tour?.noteOutsideChange()
+        }
     }
 
     /// Reads whether Hangover is active and the window can be seen, and
@@ -154,6 +175,9 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
     // MARK: Placement
 
     private func place(_ window: NSWindow, for page: OnboardingPage, animated: Bool) {
+        // A live page floats beside the island; the others are plain windows.
+        let level = DemoMode.raised(OnboardingWindowTraits.level(isLivePage: page.isLive))
+        if window.level != level { window.level = level }
         guard let target = targetFrame(for: page) else {
             window.center()
             return
@@ -203,7 +227,8 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         window.standardWindowButton(.miniaturizeButton)?.isHidden = true
         window.standardWindowButton(.zoomButton)?.isHidden = true
         window.delegate = self
-        window.level = DemoMode.raised(window.level)
+        window.collectionBehavior = OnboardingWindowTraits.collectionBehavior
+        window.level = DemoMode.raised(OnboardingWindowTraits.level(isLivePage: false))
         return window
     }
 

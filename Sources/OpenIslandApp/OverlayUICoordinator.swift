@@ -231,6 +231,8 @@ final class OverlayUICoordinator {
             // The design kit looks at its files again, for a change the other
             // copy of the app made, and says once what it could not read.
             appModel?.nook.design.islandOpened()
+            // A What's new card on the open island counts as seen (D82).
+            appModel?.updateFlow.noteIslandOpened()
         }
         transitionOverlay(
             to: .opened,

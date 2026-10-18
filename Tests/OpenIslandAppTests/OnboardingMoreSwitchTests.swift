@@ -138,9 +138,10 @@ struct OnboardingMoreSwitchTests {
         #expect(!rig.reading.isEnabled(.autoUpdates))
         #expect(rig.reading.isEnabled(.mute))
 
-        rig.model.setTourMore(.autoUpdates, enabled: true)
+        let before = rig.model.updateChecker.installsAutomatically
+        rig.model.setTourMore(.autoUpdates, enabled: !before)
 
-        #expect(!rig.model.updateChecker.installsAutomatically)
+        #expect(rig.model.updateChecker.installsAutomatically == before, "the flip changes nothing")
         #expect(!rig.reading.isOn(.autoUpdates))
     }
 

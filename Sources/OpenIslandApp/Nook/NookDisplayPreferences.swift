@@ -378,7 +378,8 @@ extension NookClosedActivity {
         media: NookClosedMediaActivity?,
         preferences: NookDisplayPreferences,
         isHidden: Bool = false,
-        recording: (text: String, isPaused: Bool)? = nil
+        recording: (text: String, isPaused: Bool)? = nil,
+        ask: NookClosedActivity? = nil
     ) -> NookClosedActivity? {
         if let recording {
             return NookClosedActivity(
@@ -390,15 +391,18 @@ extension NookClosedActivity {
                 yieldsToAgents: false
             )
         }
+        if preferences.showsNotices, let transient {
+            return NookClosedActivity(
+                leading: transient.spins ? .spinner : .symbol(transient.symbol, transient.tint),
+                trailing: transient.level.map { .level(percent: $0, tint: transient.tint) }
+                    ?? .text(transient.text),
+                yieldsToAgents: false
+            )
+        }
+        // A question the island asks (D82) is not a notice: it shows on a
+        // display with notices off too, and over a hidden pill.
+        if let ask { return ask }
         if preferences.showsNotices {
-            if let transient {
-                return NookClosedActivity(
-                    leading: .symbol(transient.symbol, transient.tint),
-                    trailing: transient.level.map { .level(percent: $0, tint: transient.tint) }
-                        ?? .text(transient.text),
-                    yieldsToAgents: false
-                )
-            }
             if let timerText, !isHidden {
                 return NookClosedActivity(
                     leading: timerLeading,

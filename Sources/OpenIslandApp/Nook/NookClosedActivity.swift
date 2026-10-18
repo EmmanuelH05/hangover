@@ -12,6 +12,8 @@ struct NookClosedActivity: Equatable {
     enum Leading {
         case artwork(NSImage?)
         case symbol(String, Color)
+        /// A small spinner, for work under way (D82).
+        case spinner
     }
 
     enum Trailing: Equatable {
@@ -19,12 +21,27 @@ struct NookClosedActivity: Equatable {
         case text(String)
         /// A level from 0 to 100, drawn as a ring with the number in it.
         case level(percent: Int, tint: Color)
+        /// Two shortcut chips, for a question the pill asks (D82).
+        case chips(NookClosedChips)
+
+        /// Width the right wing needs for words or chips; nil for art and
+        /// the ring, which keep the wing's own width.
+        var contentWidth: CGFloat? {
+            switch self {
+            case .media, .level: nil
+            case let .text(text): NookWingText.width(of: text)
+            case let .chips(chips): chips.width
+            }
+        }
     }
 
     var leading: Leading
     /// Nil leaves the right side to the agents' own slot.
     var trailing: Trailing?
     var yieldsToAgents: Bool
+    /// Words after the glyph in the left wing, for a question the pill
+    /// asks (D82). Nil leaves the wing to the glyph.
+    var leadingText: String? = nil
 
     /// True while music, not a timer or a notice, is what is showing.
     var showsArtwork: Bool {
@@ -42,6 +59,8 @@ extension NookClosedActivity.Leading: Equatable {
             return a === b
         case let (.symbol(a, ca), .symbol(b, cb)):
             return a == b && ca == cb
+        case (.spinner, .spinner):
+            return true
         default:
             return false
         }
@@ -57,6 +76,44 @@ struct NookTransientActivity: Equatable {
     /// number in it and leaves the text out, for a notice whose words do
     /// not fit beside the notch, such as the charger's.
     var level: Int? = nil
+    /// True draws a spinner in place of the symbol, for work under way
+    /// such as "Updating to 1.0.14…" (D82).
+    var spins: Bool = false
+}
+
+/// One chip on the closed pill: the shortcut's keys, when the shortcut is
+/// ready, and what pressing it does.
+struct NookClosedChip: Equatable {
+    var keys: String?
+    var title: String
+    /// The paper style for the chip that goes ahead (K5), the plain one
+    /// for the chip that holds off.
+    var isPrimary: Bool = false
+
+    /// About what the chip measures: the keys box, the gap and the title.
+    var width: CGFloat {
+        let keysWidth = keys.map { CGFloat($0.count) * 7 + 12 } ?? 0
+        return keysWidth + (keys == nil ? 0 : 5) + NookWingText.width(of: title) - 2
+    }
+}
+
+/// The two chips of a question on the pill: the one that holds off first,
+/// then the one that goes ahead, the agent card's order (K6).
+struct NookClosedChips: Equatable {
+    var deny: NookClosedChip
+    var approve: NookClosedChip
+
+    static let gap: CGFloat = 10
+
+    var width: CGFloat { deny.width + Self.gap + approve.width }
+}
+
+/// About how wide words are in the wings' type (11.5pt rounded semibold),
+/// with a little room: the pill sizes itself before SwiftUI measures.
+enum NookWingText {
+    static func width(of text: String) -> CGFloat {
+        CGFloat(Double(text.count) * 6.6 + 8)
+    }
 }
 
 // MARK: - Wing renderers
@@ -85,7 +142,81 @@ struct NookLeadingWingView: View {
                 .font(.system(size: size * 0.7, weight: .semibold))
                 .foregroundStyle(tint)
                 .frame(width: size, height: size)
+        case .spinner:
+            NookWingSpinner(size: size * 0.7)
+                .frame(width: size, height: size)
         }
+    }
+}
+
+/// A small open ring that turns, for work under way (D82). Drawn by hand
+/// so the still render shows it; it stands still under Reduce Motion.
+struct NookWingSpinner: View {
+    var size: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.nookDrawsStill) private var drawsStill
+    @State private var turns = false
+
+    var body: some View {
+        Circle()
+            .trim(from: 0.2, to: 1)
+            .stroke(V6Palette.paper, style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
+            .frame(width: size, height: size)
+            .rotationEffect(.degrees(turns ? 360 : 0))
+            .onAppear {
+                guard !reduceMotion, !drawsStill else { return }
+                withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) { turns = true }
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+/// The words after the glyph in the left wing, in the wings' type.
+struct NookLeadingTextView: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+            .foregroundStyle(V6Palette.paper)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
+/// The two chips on the pill's right wing, the agent card's chips drawn
+/// small: keys in a box first, the title after (K6). The chip that goes
+/// ahead is paper, never amber (K5).
+struct NookClosedChipsView: View {
+    let chips: NookClosedChips
+
+    var body: some View {
+        HStack(spacing: NookClosedChips.gap) {
+            chip(chips.deny)
+            chip(chips.approve)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func chip(_ chip: NookClosedChip) -> some View {
+        HStack(spacing: 5) {
+            if let keys = chip.keys {
+                Text(keys)
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(chip.isPrimary ? V6Palette.ink : V6Palette.paper.opacity(0.66))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(chip.isPrimary ? V6Palette.paper : Color.white.opacity(0.1))
+                    )
+            }
+            Text(chip.title)
+                .font(.system(size: 11.5, weight: chip.isPrimary ? .bold : .medium, design: .rounded))
+                .foregroundStyle(chip.isPrimary ? V6Palette.paper : V6Palette.paper.opacity(0.55))
+                .lineLimit(1)
+        }
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 
@@ -110,6 +241,9 @@ struct NookTrailingWingView: View {
                 .frame(width: width, height: height, alignment: .trailing)
         case let .level(percent, tint):
             NookLevelRingView(percent: percent, tint: tint, size: min(height, NookLevelRingView.maxSize))
+                .frame(width: width, height: height, alignment: .trailing)
+        case let .chips(chips):
+            NookClosedChipsView(chips: chips)
                 .frame(width: width, height: height, alignment: .trailing)
         }
     }
@@ -181,6 +315,9 @@ enum NookSideSlotContent: Equatable {
     case timer(String)
     /// How many tasks are still open.
     case todos(Int)
+    /// A paper dot and a few words that stay up, such as "Update ready"
+    /// or "1.0.14 · what's new" (D82). The wing widens to fit them.
+    case notice(String)
     case hidden
 
     /// "42m", "3h" or "2d" until a moment; nil once it has passed.
@@ -226,7 +363,13 @@ enum NookSideSlotContent: Equatable {
     /// The open-task count, nil while the source is not connected or has
     /// nothing open.
     static func resolvedTodos(items: [NookTodoItem], connection: NookTodoConnection) -> NookSideSlotContent? {
-        guard connection == .ready else { return nil }
+        resolvedTodos(items: items, isReady: connection == .ready)
+    }
+
+    /// The same count for the merged list of every app that is on, ready
+    /// when any of them is connected.
+    static func resolvedTodos(items: [NookTodoItem], isReady: Bool) -> NookSideSlotContent? {
+        guard isReady else { return nil }
         let open = items.filter { !$0.isCompleted }.count
         return open > 0 ? .todos(open) : nil
     }
@@ -250,11 +393,18 @@ struct NookSideSlotView: View {
 
     /// Width the pill reserves; the grid and a long count can pass `size`.
     static func width(of content: NookSideSlotContent, size: CGFloat = 24) -> CGFloat {
-        if case let .agentSlot(slot) = content {
+        switch content {
+        case let .agentSlot(slot):
             return max(size, V6RightSlotView.intrinsicWidth(of: slot))
+        case let .notice(text):
+            return Self.noticeDot + Self.noticeGap + NookWingText.width(of: text)
+        default:
+            return size
         }
-        return size
     }
+
+    static let noticeDot: CGFloat = 6
+    static let noticeGap: CGFloat = 6
 
     var body: some View {
         switch content {
@@ -300,6 +450,18 @@ struct NookSideSlotView: View {
             stackedGlyph(symbol: "timer", text: text, tint: .orange)
         case let .todos(count):
             stackedGlyph(symbol: "checkmark.circle", text: NookSideSlotContent.todosText(count), tint: V6Palette.paper)
+        case let .notice(text):
+            HStack(spacing: Self.noticeGap) {
+                Circle()
+                    .fill(V6Palette.paper)
+                    .frame(width: Self.noticeDot, height: Self.noticeDot)
+                Text(text)
+                    .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                    .foregroundStyle(V6Palette.paper)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .frame(width: Self.width(of: content, size: size), height: size, alignment: .trailing)
         case .hidden:
             Color.clear.frame(width: size, height: size)
         }

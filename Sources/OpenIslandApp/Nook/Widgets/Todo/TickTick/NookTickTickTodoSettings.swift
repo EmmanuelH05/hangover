@@ -30,6 +30,7 @@ struct NookTickTickTodoSettings: View {
                 SecureField(lang.t("nook.todo.ticktick.token.placeholder"), text: $draftToken)
                     .textContentType(.password)
                     .onSubmit(connect)
+                    .settingsAnchor(SettingsIndex.entry("nook.todo.ticktick.token")!)
                 Text(lang.t("nook.todo.ticktick.token.help"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -144,6 +145,7 @@ struct NookTickTickTodoSettings: View {
                     Text(choice.name).tag(choice.id)
                 }
             }
+            .settingsAnchor(SettingsIndex.entry("nook.todo.ticktick.list")!)
             HStack {
                 Button(lang.t("nook.todo.ticktick.list.reload")) {
                     Task { await service.loadLists() }
