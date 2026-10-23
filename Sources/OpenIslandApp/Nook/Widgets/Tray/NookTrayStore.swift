@@ -95,10 +95,16 @@ final class NookProgressReporter: @unchecked Sendable {
 @Observable
 final class NookTrayStore {
     nonisolated static let tabKey = "nook.tray.tab"
+    nonisolated static let overflowKey = "nook.tray.overflow"
 
     @ObservationIgnored private(set) weak var nook: NookModel?
 
-    private(set) var items: [NookTrayItem] = []
+    private(set) var items: [NookTrayItem] = [] {
+        didSet {
+            // With no files there is nothing to list.
+            if items.isEmpty, isShowingAllFiles { isShowingAllFiles = false }
+        }
+    }
 
     /// True while files are being dragged over the island. The tray card
     /// lights up as the place they will land.
@@ -114,6 +120,35 @@ final class NookTrayStore {
             // Picking a file means looking at the files.
             if tab == .clipboard { isPickingToConvert = false }
         }
+    }
+
+    /// What the small and medium cards do with files that do not fit.
+    var overflow: NookTrayOverflow {
+        didSet {
+            guard overflow != oldValue else { return }
+            defaults.set(overflow.rawValue, forKey: Self.overflowKey)
+        }
+    }
+
+    /// True while the strip that lists every file shows above the cards. It
+    /// changes the island's height, like the GIF options do.
+    private(set) var isShowingAllFiles = false {
+        didSet {
+            if isShowingAllFiles != oldValue { nook?.onDisplayPreferencesChanged?() }
+        }
+    }
+
+    /// Opens the strip with every file. It takes the place of the GIF and
+    /// Convert strips, and does nothing while the tray is empty.
+    func showAllFiles() {
+        guard !items.isEmpty else { return }
+        gifSourceItem = nil
+        convertSourceItem = nil
+        isShowingAllFiles = true
+    }
+
+    func hideAllFiles() {
+        isShowingAllFiles = false
     }
 
     /// True while the system share picker hangs off a tray file. The
@@ -139,6 +174,7 @@ final class NookTrayStore {
         didSet {
             // Only one strip shows at a time.
             if gifSourceItem != nil, convertSourceItem != nil { convertSourceItem = nil }
+            if gifSourceItem != nil { isShowingAllFiles = false }
             if gifSourceItem?.id != oldValue?.id { nook?.onDisplayPreferencesChanged?() }
         }
     }
@@ -155,6 +191,7 @@ final class NookTrayStore {
         didSet {
             // Only one strip shows at a time.
             if convertSourceItem != nil, gifSourceItem != nil { gifSourceItem = nil }
+            if convertSourceItem != nil { isShowingAllFiles = false }
             if convertSourceItem?.id != oldValue?.id { nook?.onDisplayPreferencesChanged?() }
         }
     }
@@ -185,6 +222,7 @@ final class NookTrayStore {
         self.clipboard = clipboard ?? NookClipboardMonitor(defaults: defaults)
         self.defaults = defaults
         tab = defaults.string(forKey: Self.tabKey).flatMap(NookTrayTab.init(rawValue:)) ?? .files
+        overflow = defaults.string(forKey: Self.overflowKey).flatMap(NookTrayOverflow.init(rawValue:)) ?? .scroll
     }
 
     func start(nook: NookModel) {

@@ -774,6 +774,13 @@
 "nook.tray.settings.clipboard.note" = "Keeps your last 20 copies in the tray card, in memory only. Nothing is read from the clipboard while this is off. Copies a password manager marks as private are left out.";
 "nook.tray.settings.clipboard.count" = "Copies kept";
 "nook.tray.settings.clipboard.clear" = "Clear clipboard history";
+"nook.tray.settings.overflow" = "Files that don't fit";
+"nook.tray.settings.overflow.note" = "Scroll: one row you swipe through. Count them: the row fills, and a \"+N\" tile opens every file.";
+"nook.tray.overflow.scroll" = "Scroll";
+"nook.tray.overflow.count" = "Count them";
+"nook.tray.allFiles.title" = "All files";
+"nook.tray.allFiles.done" = "Done";
+"nook.tray.more.help" = "Show every file";
 
 /* Nook: todo notes */
 "nook.todo.notes.placeholder" = "Write a note";

@@ -131,6 +131,15 @@ struct NookPanelView: View {
                     .padding(.bottom, NookWidgetLayout.rowSpacing - Self.verticalPadding)
                     .transition(Motion.transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity), reduceMotion: reduceMotion))
             }
+            if extras.showsAllFiles {
+                // Every tray file, opened from a "+N" tile, in the same slot
+                // as the GIF options and never with them.
+                NookTrayAllFilesStrip(tray: nook.tray)
+                    .frame(height: NookTrayAllFilesLayout.height)
+                    .padding(.top, Self.verticalPadding)
+                    .padding(.bottom, NookWidgetLayout.rowSpacing - Self.verticalPadding)
+                    .transition(Motion.transition(.scale(scale: 0.96, anchor: .top).combined(with: .opacity), reduceMotion: reduceMotion))
+            }
             if let mirrorHeight = extras.mirrorHeight {
                 // Above the scroll area, which keeps the mirror in view while
                 // the widgets scroll. The grid pads its own top, and the gap

@@ -1853,6 +1853,7 @@ final class AppModel {
             showsEventEditor: nook.isEventEditorOpen && !placements.isEmpty,
             showsGIFOptions: nook.tray.gifSourceItem != nil && !placements.isEmpty,
             showsConvertOptions: nook.tray.convertSourceItem != nil && !placements.isEmpty,
+            showsAllFiles: nook.tray.isShowingAllFiles && !placements.isEmpty,
             calendarExtraRows: calendarGrows ? nook.calendarExtraRows : 0,
             showsJoinBar: nook.meetingPrompt != nil,
             showsMirrorDecorationPicker: NookMirrorDecorationLayout.isPickerShown(

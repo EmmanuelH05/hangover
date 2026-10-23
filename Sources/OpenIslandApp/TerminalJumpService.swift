@@ -15,6 +15,10 @@ struct TerminalJumpService {
     /// `NSWorkspace.shared.frontmostApplication`; tests inject `{ true }`
     /// to skip the polling loop entirely.
     typealias WarpFrontmostChecker = @Sendable () -> Bool
+    /// Asks cmux's socket to focus a surface, by id, and returns true only
+    /// when cmux answered that it did. Tests inject a stub, which keeps them
+    /// off the live socket.
+    typealias CmuxSocketFocus = @Sendable (String) -> Bool
 
     private struct TerminalAppDescriptor {
         let displayName: String
@@ -202,6 +206,7 @@ struct TerminalJumpService {
     private static let ghosttyFocusSettleDelay = 0.08
     private static let ghosttyWindowActivationDelay = 0.04
     private static let ghosttyFocusAttempts = 3
+    private static let cmuxAppleScriptTimeout = 3
 
     /// Maximum time to wait for Warp to become the system frontmost app after
     /// an activation request. macOS app activation is async at the WindowServer
@@ -231,6 +236,7 @@ struct TerminalJumpService {
     private let warpTabCountReader: WarpTabCountReader
     private let warpKeystroker: KeystrokeInjector
     private let warpFrontmostChecker: WarpFrontmostChecker
+    private let cmuxSocketFocus: CmuxSocketFocus
 
     init(
         applicationResolver: @escaping ApplicationResolver = { bundleIdentifier in
@@ -251,7 +257,8 @@ struct TerminalJumpService {
             // updated via KVO that can lag the real frontmost transition).
             NSWorkspace.shared.frontmostApplication?.bundleIdentifier
                 == "dev.warp.Warp-Stable"
-        }
+        },
+        cmuxSocketFocus: @escaping CmuxSocketFocus = Self.defaultCmuxSocketFocus(surfaceID:)
     ) {
         self.applicationResolver = applicationResolver
         self.appRunningChecker = appRunningChecker
@@ -262,6 +269,7 @@ struct TerminalJumpService {
         self.warpTabCountReader = warpTabCountReader
         self.warpKeystroker = warpKeystroker
         self.warpFrontmostChecker = warpFrontmostChecker
+        self.cmuxSocketFocus = cmuxSocketFocus
     }
 
     func jump(to target: JumpTarget) throws -> String {
@@ -374,8 +382,16 @@ struct TerminalJumpService {
                     return "Focused the matching iTerm session."
                 }
             case "com.cmuxterm.app":
-                if jumpToCmuxTerminal(target) {
+                switch jumpToCmuxTerminal(target) {
+                case .focused:
                     return "Focused the matching cmux terminal."
+                case .missed(let appleScriptError?) where appIsRunning:
+                    // Automation turned off for cmux is remembered by macOS and
+                    // never asked again; the result names it instead of a miss.
+                    try openAction(["-b", "com.cmuxterm.app"])
+                    return "Activated cmux. AppleScript could not reach it: \(appleScriptError)"
+                case .missed:
+                    break
                 }
             case "com.mitchellh.ghostty":
                 if try jumpToGhosttyTerminal(target) {
@@ -519,14 +535,84 @@ struct TerminalJumpService {
         return processRunner(cli, [projectPath])
     }
 
-    private func jumpToCmuxTerminal(_ target: JumpTarget) -> Bool {
-        // Try the cmux Unix socket API to focus a specific surface.
-        guard let surfaceID = target.terminalSessionID,
-              !surfaceID.isEmpty else {
-            // No surface ID — fall back to generic app activation.
-            return false
+    /// cmux answers its socket only for processes it started, which this app
+    /// is not under cmux's default setting: the socket says "Access denied".
+    /// AppleScript reaches cmux either way, and its `focus` brings the
+    /// terminal's own window to the front with its workspace and pane
+    /// selected. The socket stays as the way in for a cmux with AppleScript
+    /// turned off. When both miss, the caller brings cmux forward on its own.
+    private func jumpToCmuxTerminal(_ target: JumpTarget) -> CmuxJumpOutcome {
+        // A failed osascript (Automation off for cmux) falls through to the
+        // socket instead of ending the jump, and its error rides along.
+        var appleScriptError: String?
+        do {
+            if try runAppleScript(cmuxJumpScript(for: target)) == "matched" {
+                return .focused
+            }
+        } catch {
+            appleScriptError = error.localizedDescription
         }
 
+        guard let surfaceID = target.terminalSessionID,
+              !surfaceID.isEmpty,
+              cmuxSocketFocus(surfaceID) else {
+            return .missed(appleScriptError: appleScriptError)
+        }
+
+        // Best-effort: activate the cmux app window.
+        try? openAction(["-b", "com.cmuxterm.app"])
+
+        return .focused
+    }
+
+    private enum CmuxJumpOutcome {
+        case focused
+        /// Nil when AppleScript ran and found no such terminal.
+        case missed(appleScriptError: String?)
+    }
+
+    /// Finds the terminal by the surface id the hook recorded, which is the
+    /// id cmux's AppleScript gives it. A folder is used only when no id was
+    /// recorded, and only when one terminal is in it: an id that matches
+    /// nothing belongs to a closed terminal, and the folder would name some
+    /// other session's. cmux's own `focus` brings cmux forward; `activate`
+    /// is there in case it did not. The timeout keeps a stuck cmux from
+    /// holding osascript for the two minute default.
+    func cmuxJumpScript(for target: JumpTarget) -> String {
+        let terminalSessionID = escapeAppleScript(target.terminalSessionID)
+        let workingDirectory = escapeAppleScript(target.workingDirectory)
+
+        return """
+        with timeout of \(Self.cmuxAppleScriptTimeout) seconds
+            tell application id "com.cmuxterm.app"
+                if not (it is running) then return ""
+                set matches to {}
+                if "\(terminalSessionID)" is not "" then
+                    set matches to (every terminal whose id is "\(terminalSessionID)")
+                else if "\(workingDirectory)" is not "" then
+                    set sameFolder to (every terminal whose working directory is "\(workingDirectory)")
+                    if (count of sameFolder) is 1 then set matches to sameFolder
+                end if
+                if (count of matches) is 0 then return ""
+                focus (item 1 of matches)
+                activate
+                return "matched"
+            end tell
+        end timeout
+        """
+    }
+
+    /// True when a reply from cmux's socket says the request went through.
+    /// A refusal comes back as a line of plain text, not JSON.
+    static func cmuxReplySaysOK(_ reply: String) -> Bool {
+        guard let line = reply.split(separator: "\n").first,
+              let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else {
+            return false
+        }
+        return object["ok"] as? Bool == true
+    }
+
+    private static func defaultCmuxSocketFocus(surfaceID: String) -> Bool {
         guard let socketPath = Self.resolveCmuxSocketPath() else {
             return false
         }
@@ -534,6 +620,12 @@ struct TerminalJumpService {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { return false }
         defer { close(fd) }
+        // cmux can close a refused connection before the request is written,
+        // and a write to it must fail instead of ending this app.
+        var noSigPipe: Int32 = 1
+        guard setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size)) != -1 else {
+            return false
+        }
 
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
@@ -559,10 +651,17 @@ struct TerminalJumpService {
         }
         guard sent > 0 else { return false }
 
-        // Best-effort: activate the cmux app window.
-        try? openAction(["-b", "com.cmuxterm.app"])
-
-        return true
+        // A sent request is not a focused surface: cmux may have refused it.
+        var timeout = timeval(tv_sec: 1, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        var reply = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while !reply.contains(UInt8(ascii: "\n")) {
+            let count = Darwin.recv(fd, &buffer, buffer.count, 0)
+            guard count > 0 else { break }
+            reply.append(contentsOf: buffer[0..<count])
+        }
+        return cmuxReplySaysOK(String(decoding: reply, as: UTF8.self))
     }
 
     private static func resolveCmuxSocketPath() -> String? {

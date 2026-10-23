@@ -470,7 +470,7 @@ struct OnboardingConvertTests {
     @Test func theConvertPageIsAboutTheRulesTheTrayHolds() {
         let proofs = OnboardingMore.convert.proofs
         #expect(proofs.contains { $0.file.hasSuffix("NookConvertRules.swift") })
-        #expect(proofs.contains { $0.file.hasSuffix("NookTrayCard.swift") })
+        #expect(proofs.contains { $0.file.hasSuffix("NookTrayTile.swift") })
     }
 }
 

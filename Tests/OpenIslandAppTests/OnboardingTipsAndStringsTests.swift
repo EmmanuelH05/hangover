@@ -88,7 +88,7 @@ struct OnboardingTipTests {
         ("Sources/OpenIslandApp/Island/IslandOpenTrigger.swift", "? .toggleClosedContent : .none"),
         ("Sources/OpenIslandApp/Views/IslandPanelView.swift", "model.nook.tray.handleDrop(providers)"),
         ("Sources/OpenIslandApp/Nook/Widgets/Tray/NookConvertRules.swift", "static func actions(forFileNamed name: String) -> [NookConvertAction]"),
-        ("Sources/OpenIslandApp/Nook/Widgets/Tray/NookTrayCard.swift", "Menu(LanguageManager.shared.t(\"nook.tray.convert.menu\"))"),
+        ("Sources/OpenIslandApp/Nook/Widgets/Tray/NookTrayTile.swift", "Menu(LanguageManager.shared.t(\"nook.tray.convert.menu\"))"),
         ("Sources/OpenIslandApp/Nook/Views/NookWidgetGrid.swift", "LongPressGesture(minimumDuration: Self.longPressDuration).onEnded { _ in onBeginEditing() }"),
         ("Sources/OpenIslandApp/Nook/Views/NookWidgetGrid.swift", "Button(\"Edit Widgets\") { onBeginEditing() }"),
         ("Sources/OpenIslandApp/Views/IslandPanelView.swift", "model.toggleNookPage()"),

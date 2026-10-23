@@ -94,7 +94,7 @@ struct DemoGlideTests {
         #expect(DemoGlide.lead(for: .click(.playPause), glide: glide)
             == glide + DemoGlide.settle + DemoGlide.pressDown + DemoGlide.pressUp)
         #expect(DemoGlide.lead(for: .hold(.widgetPage), glide: glide) == glide + DemoGlide.settle + DemoGlide.hold)
-        #expect(DemoGlide.hold > 0.4, "longer than the long press that begins edit mode")
+        #expect(DemoGlide.hold > NookWidgetLayout.editLongPress, "longer than the long press that begins edit mode")
         #expect(DemoGlide.lead(for: .enter(.notch), glide: glide) == glide + DemoGlide.hover)
         #expect(DemoGlide.lead(for: .leave, glide: glide) == glide)
     }

@@ -159,7 +159,7 @@ enum OnboardingMore: String, CaseIterable, Identifiable, Sendable {
             ]
         case .convert: OnboardingAbility.trayConvert.proofs + [
             .widget("Tray/NookConvertRules.swift", "static func combineActions(forFilesNamed names: [String])"),
-            .widget("Tray/NookTrayCard.swift", "if flags.contains(.command) {"),
+            .widget("Tray/NookTrayTile.swift", "if flags.contains(.command) {"),
             .widget("Tray/NookTraySettings.swift", "Section(lang.t(\"nook.tray.settings.section\"))"),
         ]
         case .accent: [

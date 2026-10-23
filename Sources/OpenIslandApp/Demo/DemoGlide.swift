@@ -95,8 +95,9 @@ enum DemoGlide {
     /// The button down, then up.
     static let pressDown: TimeInterval = 0.07
     static let pressUp: TimeInterval = 0.09
-    /// The long press that begins edit mode, which asks for 0.4 seconds.
-    static let hold: TimeInterval = 0.5
+    /// The long press that begins edit mode, a little past what the grid
+    /// asks for.
+    static let hold: TimeInterval = NookWidgetLayout.editLongPress + 0.1
     /// The rest on the closed island before it opens.
     static let hover: TimeInterval = 0.15
     /// How long the ring of a click takes to fade.

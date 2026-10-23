@@ -10,6 +10,12 @@ import Testing
 
     private static func makeDefaults() -> UserDefaults { MemoryDefaults() }
 
+    /// The owner found 0.4 s too quick and asked for 2 s more (2026-10-21):
+    /// a press meant for a widget's control kept starting a rearrange.
+    @Test func editModeAsksForAHoldTwoSecondsLongerThanItWas() {
+        #expect(NookWidgetLayout.editLongPress == 2.4)
+    }
+
     // MARK: Rows
 
     @Test func twoSmallWidgetsShareARow() {

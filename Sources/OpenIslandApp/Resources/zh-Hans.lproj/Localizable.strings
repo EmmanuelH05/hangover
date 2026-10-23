@@ -773,6 +773,13 @@
 "nook.tray.settings.clipboard.note" = "在托盘卡片中保留最近 20 次拷贝，仅存于内存。关闭时不会读取剪贴板。密码管理器标记为私密的拷贝不会保留。";
 "nook.tray.settings.clipboard.count" = "已保留的拷贝";
 "nook.tray.settings.clipboard.clear" = "清除剪贴板历史";
+"nook.tray.settings.overflow" = "放不下的文件";
+"nook.tray.settings.overflow.note" = "滚动：一行文件，可滑动浏览。计数：这一行放满，其余的在「+N」图块上计数，点按即可打开所有文件。";
+"nook.tray.overflow.scroll" = "滚动";
+"nook.tray.overflow.count" = "计数";
+"nook.tray.allFiles.title" = "所有文件";
+"nook.tray.allFiles.done" = "完成";
+"nook.tray.more.help" = "显示所有文件";
 
 /* Nook: todo notes */
 "nook.todo.notes.placeholder" = "写一条备注";

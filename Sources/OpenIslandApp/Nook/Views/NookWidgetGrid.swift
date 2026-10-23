@@ -122,7 +122,7 @@ struct NookWidgetGrid<Tile: View>: View {
 
     static var reflowAnimation: Animation { Motion.reflow }
     private static var liftAnimation: Animation { Motion.lift }
-    private static var longPressDuration: Double { 0.4 }
+    private static var longPressDuration: Double { NookWidgetLayout.editLongPress }
     private static var liftScale: CGFloat { 1.03 }
     private static var editingContentOpacity: Double { 0.55 }
 

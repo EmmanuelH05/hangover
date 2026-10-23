@@ -16,6 +16,9 @@ struct NookPageExtras: Equatable, Sendable {
     /// True while the tray's Convert strip is open for a file. Never at the
     /// same time as the GIF options.
     var showsConvertOptions = false
+    /// True while the strip that lists every tray file is open. Never at
+    /// the same time as the GIF options or the Convert strip.
+    var showsAllFiles = false
     /// Rows the calendar card adds under its look after "+N more".
     var calendarExtraRows = 0
     /// True while a meeting is about to start or has just started.
@@ -35,6 +38,7 @@ struct NookPageExtras: Equatable, Sendable {
             + (showsEventEditor ? NookEventEditorLayout.pageHeight : 0)
             + (showsGIFOptions ? NookGIFStripLayout.pageHeight : 0)
             + (showsConvertOptions ? NookConvertStripLayout.pageHeight : 0)
+            + (showsAllFiles ? NookTrayAllFilesLayout.pageHeight : 0)
             + (showsJoinBar ? NookJoinBarLayout.pageHeight : 0)
             + (showsMirrorDecorationPicker ? NookMirrorDecorationLayout.pickerPageHeight : 0)
             + (showsNoteEditor ? NookNoteSizes.pinnedEditorPageHeight : 0)

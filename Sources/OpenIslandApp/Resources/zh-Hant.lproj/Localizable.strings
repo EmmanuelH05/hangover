@@ -772,6 +772,13 @@
 "nook.tray.settings.clipboard.note" = "在托盤卡片中保留最近 20 次拷貝，僅存於記憶體。關閉時不會讀取剪貼板。密碼管理程式標記為私密的拷貝不會保留。";
 "nook.tray.settings.clipboard.count" = "已保留的拷貝";
 "nook.tray.settings.clipboard.clear" = "清除剪貼板歷史";
+"nook.tray.settings.overflow" = "放不下的檔案";
+"nook.tray.settings.overflow.note" = "捲動：一行檔案，可滑動瀏覽。計數：這一行放滿，其餘的在「+N」圖塊上計數，點按即可打開所有檔案。";
+"nook.tray.overflow.scroll" = "捲動";
+"nook.tray.overflow.count" = "計數";
+"nook.tray.allFiles.title" = "所有檔案";
+"nook.tray.allFiles.done" = "完成";
+"nook.tray.more.help" = "顯示所有檔案";
 
 /* Nook: todo notes */
 "nook.todo.notes.placeholder" = "寫一則備註";

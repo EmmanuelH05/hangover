@@ -63,6 +63,10 @@ enum NookWidgetLayout {
     static let smallHeight: CGFloat = 120
     /// Drag distance on a resize grip that moves one size step.
     static let resizeStep: CGFloat = 60
+    /// How long a press on a widget lasts before edit mode begins. Long
+    /// enough that a press meant for a widget's own control never starts
+    /// a rearrange.
+    static let editLongPress: TimeInterval = 2.4
 
     /// Packs widgets into rows in order. Two small widgets in a row share
     /// it; a small widget followed by a wide one sits alone, left aligned.

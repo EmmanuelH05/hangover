@@ -515,6 +515,139 @@ struct TerminalJumpServiceTests {
         #expect(processInvocations.values.first?.0 == "trae")
         #expect(processInvocations.values.first?.1 == ["-r", "/Users/test/open-vibe-island"])
     }
+
+    // MARK: cmux
+
+    private static let cmuxSurfaceID = "CE5736ED-C997-4575-B477-F78A9E144F54"
+
+    private static func cmuxTarget(surfaceID: String? = cmuxSurfaceID) -> JumpTarget {
+        JumpTarget(
+            terminalApp: "cmux",
+            workspaceName: "hangover",
+            paneTitle: "claude hangover",
+            workingDirectory: "/Users/test/hangover",
+            terminalSessionID: surfaceID
+        )
+    }
+
+    private static func cmuxService(
+        openedArguments: OpenedArgumentsBox,
+        socketCalls: OpenedArgumentsBox = OpenedArgumentsBox(),
+        socketSaysOK: Bool = false,
+        appleScript: @escaping TerminalJumpService.AppleScriptRunner
+    ) -> TerminalJumpService {
+        TerminalJumpService(
+            applicationResolver: { $0 == "com.cmuxterm.app" ? URL(fileURLWithPath: "/Applications/cmux.app") : nil },
+            appRunningChecker: { $0 == "com.cmuxterm.app" },
+            openAction: { openedArguments.values.append($0) },
+            appleScriptRunner: appleScript,
+            cmuxSocketFocus: { surfaceID in
+                socketCalls.values.append([surfaceID])
+                return socketSaysOK
+            }
+        )
+    }
+
+    /// cmux turns away a socket request from a process it did not start,
+    /// which this app is. AppleScript reaches the one terminal, and nothing
+    /// asks Launch Services to open cmux after it, which would bring every
+    /// cmux window up with whichever was last in front on top.
+    @Test
+    func cmuxJumpFocusesTheSessionsOwnTerminalAndOpensNothing() throws {
+        let opened = OpenedArgumentsBox()
+        let socketCalls = OpenedArgumentsBox()
+        let service = Self.cmuxService(openedArguments: opened, socketCalls: socketCalls) { script in
+            script.contains(Self.cmuxSurfaceID) ? "matched" : ""
+        }
+
+        let result = try service.jump(to: Self.cmuxTarget())
+
+        #expect(result == "Focused the matching cmux terminal.")
+        #expect(opened.values.isEmpty)
+        #expect(socketCalls.values.isEmpty)
+    }
+
+    @Test
+    func cmuxJumpScriptFocusesTheTerminalByIDBeforeBringingCmuxForward() throws {
+        let script = TerminalJumpService().cmuxJumpScript(for: Self.cmuxTarget())
+
+        #expect(script.contains("with timeout of 3 seconds"))
+        #expect(script.contains("tell application id \"com.cmuxterm.app\""))
+        #expect(script.contains("every terminal whose id is \"\(Self.cmuxSurfaceID)\""))
+        let focus = try #require(script.range(of: "focus (item 1 of matches)"))
+        let activate = try #require(script.range(of: "activate", range: focus.upperBound..<script.endIndex))
+        #expect(focus.upperBound <= activate.lowerBound)
+    }
+
+    /// Two sessions often run in one folder: a folder with two terminals in
+    /// it names no window, and a guess there is the wrong window half the time.
+    @Test
+    func cmuxJumpScriptUsesTheFolderOnlyWhenOneTerminalIsInIt() {
+        let script = TerminalJumpService().cmuxJumpScript(for: Self.cmuxTarget(surfaceID: nil))
+
+        #expect(script.contains("every terminal whose working directory is \"/Users/test/hangover\""))
+        #expect(script.contains("if (count of sameFolder) is 1 then set matches to sameFolder"))
+    }
+
+    /// An id that matches nothing is a terminal since closed; the one left
+    /// in its folder is some other session's.
+    @Test
+    func cmuxJumpScriptNeverTriesTheFolderForARecordedID() throws {
+        let lines = TerminalJumpService().cmuxJumpScript(for: Self.cmuxTarget())
+            .split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        let idLookup = try #require(lines.firstIndex { $0.contains("whose id is") })
+
+        #expect(lines[idLookup + 1].hasPrefix("else if"))
+    }
+
+    @Test
+    func cmuxJumpFallsBackWhenTheScriptFindsNoTerminal() throws {
+        let opened = OpenedArgumentsBox()
+        let service = Self.cmuxService(openedArguments: opened) { _ in "" }
+
+        let result = try service.jump(to: Self.cmuxTarget())
+
+        #expect(result == "Activated cmux. Exact pane targeting could not find the live terminal.")
+        #expect(opened.values == [["-b", "com.cmuxterm.app"]])
+    }
+
+    /// Automation turned off for cmux makes osascript fail, and macOS never
+    /// asks again. The jump still brings cmux forward, and says why.
+    @Test
+    func cmuxJumpFallsBackWhenAppleScriptFailsAndTheSocketSaysNo() throws {
+        let opened = OpenedArgumentsBox()
+        let socketCalls = OpenedArgumentsBox()
+        let service = Self.cmuxService(openedArguments: opened, socketCalls: socketCalls) { _ in
+            throw TerminalJumpError.appleScriptFailed("Not authorized to send Apple events to cmux. (-1743)")
+        }
+
+        let result = try service.jump(to: Self.cmuxTarget())
+
+        #expect(socketCalls.values == [[Self.cmuxSurfaceID]])
+        #expect(result == "Activated cmux. AppleScript could not reach it: Terminal automation failed: Not authorized to send Apple events to cmux. (-1743)")
+        #expect(opened.values == [["-b", "com.cmuxterm.app"]])
+    }
+
+    @Test
+    func cmuxJumpTakesTheSocketWhenCmuxAllowsIt() throws {
+        let opened = OpenedArgumentsBox()
+        let service = Self.cmuxService(openedArguments: opened, socketSaysOK: true) { _ in "" }
+
+        let result = try service.jump(to: Self.cmuxTarget())
+
+        #expect(result == "Focused the matching cmux terminal.")
+    }
+
+    /// The two answers cmux gave on 2026-10-21: the refusal is a line of
+    /// text, the success is JSON with ok set.
+    @Test
+    func aCmuxReplyCountsOnlyWhenItSaysOK() {
+        #expect(TerminalJumpService.cmuxReplySaysOK("{\"id\":1,\"ok\":true,\"result\":{}}\n"))
+        #expect(!TerminalJumpService.cmuxReplySaysOK("ERROR: Access denied - only processes started inside cmux can connect\n"))
+        #expect(!TerminalJumpService.cmuxReplySaysOK("{\"id\":1,\"ok\":false,\"error\":{\"message\":\"no such surface\"}}\n"))
+        #expect(!TerminalJumpService.cmuxReplySaysOK(""))
+    }
 }
 
 final class ReadSequenceBox: @unchecked Sendable {

@@ -618,8 +618,9 @@ private enum TrayTestFiles {
             }
         }
         // Defaults keys are not strings to show.
-        keys.subtract([NookClipboardMonitor.enabledKey, NookTrayStore.tabKey])
+        keys.subtract([NookClipboardMonitor.enabledKey, NookTrayStore.tabKey, NookTrayStore.overflowKey])
         keys.formUnion(NookTrayTab.allCases.map(\.titleKey))
+        keys.formUnion(NookTrayOverflow.allCases.map(\.titleKey))
         // The Convert menu and the combine bar build theirs from the actions.
         let everyAction = ["a.png", "a.mov", "a.mp4", "a.m4v", "a.pdf"].flatMap(NookConvertRules.actions(forFileNamed:))
         keys.formUnion(everyAction.map(\.titleKey))

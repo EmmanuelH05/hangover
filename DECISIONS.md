@@ -89,3 +89,6 @@ D81: No emoji anywhere in the app, and the tour's art is SF Symbols on a plate
 D82: An update installs the moment it lands, and the island asks first
 D83: To-dos come from every app that is on, and Asana, monday and Canvas join
 D84: Settings has a search, and feedback is an email the user sends
+D85: Hangover 1.0.14 is out, and recordings run past a minute
+D86: Edit mode asks for a 2.4 second hold, and a session click focuses its own cmux terminal
+D87: The tray scrolls by default, and Count them fills the row and opens every file

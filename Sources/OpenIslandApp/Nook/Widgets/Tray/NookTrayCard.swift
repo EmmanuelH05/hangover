@@ -3,9 +3,12 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// File tray card. Its header holds two tabs (`NookTrayHeader`): the files,
-/// and the clipboard history. For the files, small shows the count and up to
-/// three icons, medium the original row of six tiles, large a two row grid
-/// with names. The whole card is a drop target at every size, on either tab,
+/// and the clipboard history. For the files, small shows icons only and
+/// medium a row with names, and both follow the tray's overflow choice: in
+/// Scroll every file sits in one row that swipes sideways, in Count them the
+/// row fills by width and ends in a "+N" tile. Large keeps a two row grid
+/// with names and a "+N" tile in both modes. A click on any "+N" tile opens
+/// every file in a strip above the cards. The whole card is a drop target at every size, on either tab,
 /// and every tile drags out. A tile's right click lists what the tray can do
 /// with it, Convert included. On the medium and large card the Convert chip
 /// after FILES does the same: it turns on picking, and a click on a tile
@@ -41,7 +44,6 @@ struct NookTrayCard: View {
         case .large: 170
         }
     }
-    private static let maxTiles = 6
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -55,7 +57,7 @@ struct NookTrayCard: View {
                 } else {
                     switch size {
                     case .small: NookTraySmallRow(store: store)
-                    case .medium: mediumRow(store)
+                    case .medium: NookTrayMediumRow(store: store)
                     case .large: NookTrayGrid(store: store)
                     }
                 }
@@ -133,15 +135,6 @@ struct NookTrayCard: View {
             .frame(maxWidth: .infinity, alignment: .center)
         }
         Spacer(minLength: 0)
-    }
-
-    private func mediumRow(_ store: NookTrayStore) -> some View {
-        HStack(alignment: .top, spacing: 6) {
-            ForEach(store.items.prefix(Self.maxTiles)) { item in
-                NookTrayTile(store: store, item: item, metrics: .regular)
-            }
-            Spacer(minLength: 0)
-        }
     }
 }
 
@@ -283,35 +276,226 @@ private struct NookTrayDropHighlight: View {
     }
 }
 
-// MARK: - Small
+// MARK: - Small and medium rows
 
-/// Up to three icons in a row, then a "+N" badge for the rest. Names are
-/// dropped (they would need text under 10pt); hover shows them instead.
+/// Small: icons only, at compact metrics.
 private struct NookTraySmallRow: View {
     var store: NookTrayStore
-    private static let maxIcons = 3
 
     var body: some View {
-        let metrics = NookTrayTileMetrics.compact
-        let shown = Array(store.items.prefix(Self.maxIcons))
-        let hidden = store.items.count - shown.count
-        HStack(spacing: 6) {
-            ForEach(shown) { item in
+        NookTrayOverflowRow(store: store, metrics: .compact, isCentered: true, moreCaption: nil)
+    }
+}
+
+/// Medium: a row with names, at regular metrics. Its "+N" tile carries the
+/// "more" caption, like the large card's.
+private struct NookTrayMediumRow: View {
+    var store: NookTrayStore
+
+    var body: some View {
+        NookTrayOverflowRow(
+            store: store,
+            metrics: .regular,
+            isCentered: false,
+            moreCaption: LanguageManager.shared.t("nook.tray.more")
+        )
+    }
+}
+
+/// One row of tiles that follows the tray's overflow choice.
+private struct NookTrayOverflowRow: View {
+    var store: NookTrayStore
+    let metrics: NookTrayTileMetrics
+    /// Small centers its icons in the space under the header, medium sits
+    /// them at the top.
+    let isCentered: Bool
+    let moreCaption: String?
+
+    var body: some View {
+        switch store.overflow {
+        case .scroll:
+            NookTrayScrollRow(store: store, metrics: metrics, isCentered: isCentered)
+        case .count:
+            NookTrayFillRow(store: store, metrics: metrics, isCentered: isCentered, moreCaption: moreCaption)
+        }
+    }
+}
+
+/// Count them: as many tiles as the width holds, the last slot a "+N" tile
+/// when the files do not all fit.
+private struct NookTrayFillRow: View {
+    var store: NookTrayStore
+    let metrics: NookTrayTileMetrics
+    let isCentered: Bool
+    let moreCaption: String?
+
+    var body: some View {
+        GeometryReader { proxy in
+            let items = store.items
+            let slots = NookTrayRowLayout.slots(width: proxy.size.width, tileWidth: metrics.width)
+            let shown = NookTrayRowLayout.shown(count: items.count, slots: slots)
+            let hidden = items.count - shown
+            HStack(alignment: .top, spacing: NookTrayRowLayout.spacing) {
+                ForEach(items.prefix(shown)) { item in
+                    NookTrayTile(store: store, item: item, metrics: metrics)
+                }
+                if hidden > 0 {
+                    NookTrayMoreTile(store: store, count: hidden, side: metrics.icon, caption: moreCaption)
+                        .frame(width: metrics.width)
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxHeight: .infinity, alignment: isCentered ? .center : .top)
+        }
+    }
+}
+
+/// How far a scroll view has moved, for the tray's scroll bars. SwiftUI's
+/// scroll view on macOS moves its content through AppKit, which never
+/// measures the content again: a GeometryReader inside it stays at the start
+/// however far the row goes. The scroll view reports its own offset from
+/// macOS 15. macOS 14 has no way to ask, and its bars stay hidden.
+enum NookScrollOffset {
+    static var isTracked: Bool {
+        if #available(macOS 15.0, *) { return true }
+        return false
+    }
+}
+
+extension View {
+    func nookScrollOffset(_ axis: Axis, into offset: Binding<CGFloat>) -> some View {
+        modifier(NookScrollOffsetReader(axis: axis, offset: offset))
+    }
+}
+
+private struct NookScrollOffsetReader: ViewModifier {
+    let axis: Axis
+    @Binding var offset: CGFloat
+
+    func body(content: Content) -> some View {
+        if #available(macOS 15.0, *) {
+            content.onScrollGeometryChange(for: CGFloat.self) { geometry in
+                axis == .horizontal ? geometry.contentOffset.x : geometry.contentOffset.y
+            } action: { _, new in
+                offset = new
+            }
+        } else {
+            content
+        }
+    }
+}
+
+/// Scroll: every file in one row that swipes sideways. The row runs past
+/// the card's right padding to the card's edge under a fade, and a thin bar
+/// shows the position. Small puts the bar under the icons; medium puts it
+/// 5 points above the card's bottom.
+private struct NookTrayScrollRow: View {
+    var store: NookTrayStore
+    let metrics: NookTrayTileMetrics
+    let isCentered: Bool
+
+    @State private var offset: CGFloat = 0
+    /// A still picture (the render tests) cannot draw a `ScrollView`, which
+    /// is AppKit-backed. It gets the row at its start, clipped the same way.
+    @Environment(\.nookDrawsStill) private var drawsStill
+
+    /// The card's right padding, which the row runs through.
+    private static let overrun: CGFloat = 14
+    private static let fadeWidth: CGFloat = 44
+    private static let barHeight: CGFloat = 3
+
+    /// The content's width, which the tile metrics fix: every tile, the gaps
+    /// and the room kept at the end. Only the scroll position is measured.
+    private var contentWidth: CGFloat {
+        let count = CGFloat(store.items.count)
+        guard count > 0 else { return 0 }
+        return count * metrics.width + (count - 1) * NookTrayRowLayout.spacing + Self.fadeWidth
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let frame = proxy.size.width
+            let viewport = frame + Self.overrun
+            let showsBar = contentWidth > viewport + 0.5 && NookScrollOffset.isTracked
+            VStack(spacing: 6) {
+                scrolled(width: viewport)
+                .frame(width: viewport)
+                .frame(maxHeight: .infinity)
+                .mask(alignment: .leading) { fadeMask(width: viewport) }
+                .frame(width: frame, alignment: .leading)
+                .overlay(alignment: .bottomLeading) {
+                    if showsBar, !isCentered {
+                        bar(frame: frame, viewport: viewport)
+                            .offset(y: 7)
+                    }
+                }
+                if showsBar, isCentered {
+                    bar(frame: frame, viewport: viewport)
+                }
+            }
+            .frame(width: frame, height: proxy.size.height, alignment: .top)
+        }
+    }
+
+    @ViewBuilder
+    private func scrolled(width: CGFloat) -> some View {
+        if drawsStill {
+            tiles.fixedSize().frame(width: width, alignment: .leading).clipped()
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) { tiles }
+                .nookScrollOffset(.horizontal, into: $offset)
+        }
+    }
+
+    /// Lazy: a tray of a hundred files builds only the tiles in view, and a
+    /// conversion's progress redraws only those.
+    private var tiles: some View {
+        LazyHStack(alignment: .top, spacing: NookTrayRowLayout.spacing) {
+            ForEach(store.items) { item in
                 NookTrayTile(store: store, item: item, metrics: metrics)
             }
-            if hidden > 0 {
-                NookTrayMoreTile(count: hidden, side: metrics.icon, caption: nil)
-            }
-            Spacer(minLength: 0)
         }
-        .frame(maxHeight: .infinity)
+        // Room at the end, which lets the last file scroll out from under
+        // the fade.
+        .padding(.trailing, Self.fadeWidth)
+        .frame(maxHeight: .infinity, alignment: isCentered ? .center : .top)
+    }
+
+    /// Opaque everywhere but the last 44 points, which fall to clear.
+    private func fadeMask(width: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            Rectangle().fill(Color.black)
+            LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                .frame(width: Self.fadeWidth)
+        }
+        .frame(width: width)
+    }
+
+    /// The thumb's width is the share of the content in view, and its
+    /// offset follows how far the content has moved.
+    private func bar(frame: CGFloat, viewport: CGFloat) -> some View {
+        let total = max(contentWidth, 1)
+        let fraction = min(1, viewport / total)
+        let thumb = max(12, frame * fraction)
+        let travel = max(1, total - viewport)
+        let progress = min(1, max(0, offset / travel))
+        return ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 2).fill(Color.white.opacity(0.08))
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.white.opacity(0.35))
+                .frame(width: thumb)
+                .offset(x: (frame - thumb) * progress)
+        }
+        .frame(width: frame, height: Self.barHeight)
+        .accessibilityHidden(true)
     }
 }
 
 // MARK: - Large
 
-/// Up to two rows of tiles with names. The column count follows the width;
-/// when the files do not fit, the last slot becomes a "+N" tile.
+/// Up to two rows of tiles with names, in both overflow modes. The column
+/// count follows the width; when the files do not fit, the last slot becomes
+/// a "+N" tile that opens every file.
 private struct NookTrayGrid: View {
     var store: NookTrayStore
 
@@ -346,6 +530,7 @@ private struct NookTrayGrid: View {
                 }
                 if hidden > 0 {
                     NookTrayMoreTile(
+                        store: store,
                         count: hidden,
                         side: Self.metrics.icon,
                         caption: LanguageManager.shared.t("nook.tray.more")
@@ -356,272 +541,5 @@ private struct NookTrayGrid: View {
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
-    }
-}
-
-// MARK: - Shared pieces
-
-/// Sizes for one tile. A nil `nameSize` means icon only.
-private struct NookTrayTileMetrics {
-    let width: CGFloat
-    let icon: CGFloat
-    let nameSize: CGFloat?
-    let gap: CGFloat
-
-    static let compact = NookTrayTileMetrics(width: 40, icon: 36, nameSize: nil, gap: 0)
-    static let regular = NookTrayTileMetrics(width: 52, icon: 32, nameSize: 9, gap: 2)
-    static let roomy = NookTrayTileMetrics(width: 64, icon: 40, nameSize: 10, gap: 3)
-}
-
-/// One file. Hovering shows a share button and a remove button on its
-/// corners. A right click lists everything the tray can do with it.
-private struct NookTrayTile: View {
-    var store: NookTrayStore
-    let item: NookTrayItem
-    let metrics: NookTrayTileMetrics
-    @State private var isHovering = false
-    /// The view the share picker hangs off.
-    @State private var anchor = NookTrayAnchorBox()
-    @Environment(\.hangoverAccent) private var accent
-    @Environment(\.nookWidgetSize) private var size
-
-    /// True while the Convert chip waits for a file, on every card size.
-    private var takesPicks: Bool {
-        store.isPickingToConvert
-    }
-
-    /// While picking, a click chooses this file to convert, or does nothing
-    /// when it has no conversions. Otherwise Command-click chooses or drops
-    /// this file, Shift-click chooses a range, and a plain click lets go of
-    /// a choice already made.
-    private func handleTap() {
-        if takesPicks {
-            store.pickToConvert(item)
-            return
-        }
-        let flags = NSEvent.modifierFlags
-        if flags.contains(.command) {
-            store.toggleSelection(of: item)
-        } else if flags.contains(.shift) {
-            store.extendSelection(to: item)
-        } else if !store.selection.isEmpty {
-            store.clearSelection()
-        }
-    }
-
-    var body: some View {
-        let url = store.storedURL(for: item)
-        let isWorking = store.workingIDs.contains(item.id)
-        let job = store.jobs[item.id]
-        let isSelected = store.selection.contains(item.id)
-        let isPicking = takesPicks
-        let isPickable = isPicking && store.canPickToConvert(item)
-        VStack(spacing: metrics.gap) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
-                .resizable()
-                .frame(width: metrics.icon, height: metrics.icon)
-                .opacity(isWorking || job != nil ? 0.4 : 1)
-                .overlay {
-                    if isWorking {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                }
-                .overlay(alignment: .bottom) {
-                    if let job {
-                        NookTrayJobBar(fraction: job.fraction)
-                            .frame(width: max(12, metrics.icon - 8))
-                            .padding(.bottom, 2)
-                    }
-                }
-                .overlay(alignment: .bottom) {
-                    let actions = NookTrayRecordingAction.offered(for: item, size: size)
-                    if isHovering, !isPicking, job == nil, !isWorking, !actions.isEmpty {
-                        NookTrayRecordingButtons(store: store, item: item, actions: actions)
-                            .padding(.bottom, 1)
-                    }
-                }
-            if let nameSize = metrics.nameSize {
-                Text(item.originalName)
-                    .font(.system(size: nameSize))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .foregroundStyle(.white.opacity(0.6))
-            }
-        }
-        .frame(width: metrics.width)
-        // A file with nothing to convert steps back while picking.
-        .opacity(isPicking && !isPickable ? 0.3 : 1)
-        .background {
-            // The files that can be picked are outlined in the accent.
-            if isPickable {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(accent.highlight(.orange), lineWidth: 1.5)
-                    .padding(-3)
-            }
-        }
-        .background {
-            if isSelected {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(accent.highlight(.orange).opacity(0.22))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(accent.highlight(.orange).opacity(0.8), lineWidth: 1)
-                    )
-                    .padding(-3)
-            }
-        }
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityAddTraits(isPickable ? .isButton : [])
-        // The anchor is only a place to hang the picker. It takes no clicks,
-        // which leaves dragging the tile as it was.
-        .background(NookTrayShareAnchor(box: anchor).allowsHitTesting(false).accessibilityHidden(true))
-        .overlay(alignment: .topLeading) {
-            if isHovering, !isPicking {
-                Button {
-                    store.share(item, from: anchor.view)
-                } label: {
-                    Image(systemName: "square.and.arrow.up.circle.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.85), .black.opacity(0.6))
-                }
-                .buttonStyle(.plain)
-                .help(LanguageManager.shared.t("nook.tray.action.share"))
-                .accessibilityLabel(LanguageManager.shared.t("nook.tray.action.share"))
-            }
-        }
-        .overlay(alignment: .topTrailing) {
-            if job != nil {
-                // A running conversion shows its stop button without a
-                // hover, because it is what the tile is doing right now.
-                Button {
-                    store.cancelJob(for: item)
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.85), .black.opacity(0.6))
-                }
-                .buttonStyle(.plain)
-                .help(LanguageManager.shared.t("nook.tray.convert.cancel"))
-                .accessibilityLabel(LanguageManager.shared.t("nook.tray.convert.cancel"))
-            } else if isHovering, !isPicking {
-                Button {
-                    store.remove(item)
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.85), .black.opacity(0.6))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(LanguageManager.shared.t("nook.tray.action.remove"))
-            }
-        }
-        .contentShape(Rectangle())
-        .onTapGesture { handleTap() }
-        .onHover { isHovering = $0 }
-        .help(metrics.nameSize == nil ? item.originalName : "")
-        .onDrag {
-            NSItemProvider(contentsOf: url) ?? NSItemProvider(object: url as NSURL)
-        }
-        .contextMenu {
-            Button(LanguageManager.shared.t("nook.tray.action.share")) { store.share(item, from: anchor.view) }
-            Button(LanguageManager.shared.t("nook.tray.action.airDrop")) { store.airDrop(item) }
-            Divider()
-            Button(LanguageManager.shared.t("nook.tray.action.compress")) { store.compress(item) }
-            if !NookConvertRules.actions(forFileNamed: item.originalName).isEmpty {
-                NookTrayConvertMenu(store: store, item: item, url: url)
-            }
-            Button(LanguageManager.shared.t("nook.tray.action.copyPath")) { store.copyPath(of: item) }
-            // A picture can go to the design kit's references while that
-            // widget is on. The tray keeps its own copy.
-            if let design = store.nook?.design, store.nook?.isWidgetEnabled(.design) == true,
-               NookDesignReferenceRules.isPictureFileName(item.originalName) {
-                Button(LanguageManager.shared.t("nook.design.action.addFromTray")) {
-                    design.addReference(fileAt: url)
-                }
-            }
-            Divider()
-            Button(LanguageManager.shared.t("nook.tray.action.reveal")) { store.revealInFinder(item) }
-            Button(LanguageManager.shared.t("nook.tray.action.remove")) { store.remove(item) }
-        }
-    }
-}
-
-/// A thin bar on a tile whose file is being converted. A conversion that
-/// cannot say how far it has got shows a bar that keeps moving.
-private struct NookTrayJobBar: View {
-    let fraction: Double?
-
-    var body: some View {
-        Group {
-            if let fraction {
-                ProgressView(value: fraction)
-            } else {
-                ProgressView()
-            }
-        }
-        .progressViewStyle(.linear)
-        .controlSize(.mini)
-        .tint(.white)
-    }
-}
-
-/// The Convert submenu of a file's right click: only what fits the file,
-/// in groups. A GIF with several pictures says that only the first one is
-/// converted.
-private struct NookTrayConvertMenu: View {
-    var store: NookTrayStore
-    let item: NookTrayItem
-    let url: URL
-
-    var body: some View {
-        let actions = NookConvertRules.actions(forFileNamed: item.originalName, at: url)
-        Menu(LanguageManager.shared.t("nook.tray.convert.menu")) {
-            if NookConvertRules.isAnimatedGIF(at: url) {
-                Button(LanguageManager.shared.t("nook.tray.convert.firstFrameOnly")) {}
-                    .disabled(true)
-            }
-            ForEach(NookConvertGroup.allCases, id: \.self) { group in
-                let inGroup = actions.filter { $0.group == group }
-                if !inGroup.isEmpty {
-                    Section {
-                        ForEach(inGroup, id: \.self) { action in
-                            Button(action.menuTitle) { store.convert(item, action: action) }
-                        }
-                    } header: {
-                        Text(LanguageManager.shared.t(group.titleKey))
-                    }
-                }
-            }
-        }
-        .disabled(store.jobs[item.id] != nil)
-    }
-}
-
-/// "+N" stand-in for the files that do not fit. A caption keeps it the
-/// same height as a named tile.
-private struct NookTrayMoreTile: View {
-    let count: Int
-    let side: CGFloat
-    let caption: String?
-
-    var body: some View {
-        VStack(spacing: 3) {
-            Text("+\(count)")
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-                .foregroundStyle(.white.opacity(0.6))
-                .frame(width: side, height: side)
-                .background(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color.white.opacity(0.08))
-                )
-            if let caption {
-                Text(caption)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.white.opacity(0.35))
-            }
-        }
     }
 }

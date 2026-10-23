@@ -9,6 +9,19 @@ struct NookTraySettings: View {
         let clipboard = nook.tray.clipboard
         Section(lang.t("nook.tray.settings.section")) {
             LabeledContent(lang.t("nook.tray.settings.count"), value: "\(nook.tray.items.count)")
+            Picker(lang.t("nook.tray.settings.overflow"), selection: Binding(
+                get: { nook.tray.overflow },
+                set: { nook.tray.overflow = $0 }
+            )) {
+                ForEach(NookTrayOverflow.allCases) { option in
+                    Text(lang.t(option.titleKey)).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+            .settingsAnchor(SettingsIndex.entry("nook.tray.overflow")!)
+            Text(lang.t("nook.tray.settings.overflow.note"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Button(lang.t("nook.tray.settings.revealFolder")) { nook.tray.revealFolder() }
                 .settingsAnchor(SettingsIndex.entry("nook.tray.revealFolder")!)
             Button(lang.t("nook.tray.settings.clear"), role: .destructive) { nook.tray.clear() }

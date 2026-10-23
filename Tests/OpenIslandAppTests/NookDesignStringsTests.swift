@@ -21,13 +21,14 @@ import Testing
     }
 
     /// Every "nook.design." key written out in the design kit's source
-    /// files and in the tray card, plus the ones built from an enum.
+    /// files and in the tray card and its tiles, plus the ones built from an
+    /// enum.
     private static func usedKeys() throws -> Set<String> {
         let sources = repoRoot.appendingPathComponent("Sources/OpenIslandApp/Nook/Widgets")
         let design = try FileManager.default.contentsOfDirectory(
             at: sources.appendingPathComponent("Design"), includingPropertiesForKeys: nil
         ).filter { $0.pathExtension == "swift" }
-        let files = design + [sources.appendingPathComponent("Tray/NookTrayCard.swift")]
+        let files = design + ["Tray/NookTrayCard.swift", "Tray/NookTrayTile.swift"].map(sources.appendingPathComponent)
         let pattern = try NSRegularExpression(pattern: "\"(nook\\.design\\.[A-Za-z0-9.]+)\"")
         var keys = Set<String>()
         for file in files {

@@ -101,7 +101,7 @@ enum DemoScripts {
             DemoStep(2.0, .typeNote("Pick up groceries on the way back")),
             DemoStep(3.0, .applyTemplate(.focus)),
             DemoStep(3.5, .undoTemplate),
-            DemoStep(3.0, .beginEditing),
+            DemoStep(3.5, .beginEditing),
             DemoStep(2.0, .moveWidget(.timer, to: 1)),
             DemoStep(2.0, .resizeWidget(.todo, .large)),
             DemoStep(2.2, .endEditing),
@@ -201,7 +201,7 @@ extension DemoScripts {
             DemoStep(2.0, .cycleRepeat),
             DemoStep(2.0, .cycleRepeat),
             // Edit mode: the chips at the bottom left, across from the grip.
-            DemoStep(2.0, .beginEditing),
+            DemoStep(3.5, .beginEditing),
             DemoStep(2.5, .resizeWidget(.calendar, .large)),
             DemoStep(2.5, .endEditing),
             DemoStep(1.5, .closeIsland),

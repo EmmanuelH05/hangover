@@ -175,16 +175,16 @@ enum OnboardingAbility: String, CaseIterable, Identifiable, Sendable {
         ]
         case .trayDrag: [
             .app("Views/IslandPanelView.swift", "model.nook.tray.handleDrop(providers)"),
-            .widget("Tray/NookTrayCard.swift", ".onDrag {"),
+            .widget("Tray/NookTrayTile.swift", ".onDrag {"),
         ]
         case .trayActions: [
-            .widget("Tray/NookTrayCard.swift", "store.share(item, from: anchor.view)"),
-            .widget("Tray/NookTrayCard.swift", "store.airDrop(item)"),
-            .widget("Tray/NookTrayCard.swift", "store.compress(item)"),
-            .widget("Tray/NookTrayCard.swift", "store.copyPath(of: item)"),
+            .widget("Tray/NookTrayTile.swift", "store.share(item, from: anchor.view)"),
+            .widget("Tray/NookTrayTile.swift", "store.airDrop(item)"),
+            .widget("Tray/NookTrayTile.swift", "store.compress(item)"),
+            .widget("Tray/NookTrayTile.swift", "store.copyPath(of: item)"),
         ]
         case .trayConvert: [
-            .widget("Tray/NookTrayCard.swift", "Menu(LanguageManager.shared.t(\"nook.tray.convert.menu\"))"),
+            .widget("Tray/NookTrayTile.swift", "Menu(LanguageManager.shared.t(\"nook.tray.convert.menu\"))"),
             .widget("Tray/NookConvertRules.swift", "case \"mov\": return [.video(.mp4), .smallerVideo(.p1080)"),
             .widget("Tray/NookConvertRules.swift", "case \"pdf\": return [.pdfPages(.png), .pdfPages(.jpeg)]"),
             .widget("Tray/NookConvertRules.swift", "return formats + resizes + [.smallerImage]"),

@@ -29,7 +29,7 @@ struct WhatsNewTests {
         #expect(catalog.releases == catalog.releases.sorted {
             AppVersion.compare($0.version, $1.version) == .orderedDescending
         }, "newest first")
-        #expect(newest.version == "1.0.14")
+        #expect(newest.version == "1.0.15")
     }
 
     @Test

@@ -1,6 +1,24 @@
 {
   "releases": [
     {
+      "version": "1.0.15",
+      "items": [
+        {
+          "title": "The tray scrolls now",
+          "detail": "Prefer a +N count? Switch it in Settings.",
+          "symbol": "tray.full"
+        },
+        {
+          "title": "Hold longer to rearrange",
+          "symbol": "hand.tap"
+        },
+        {
+          "title": "Sessions open their own window",
+          "symbol": "macwindow"
+        }
+      ]
+    },
+    {
       "version": "1.0.14",
       "items": [
         {
